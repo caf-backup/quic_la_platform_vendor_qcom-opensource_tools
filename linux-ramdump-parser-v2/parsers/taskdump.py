@@ -1,4 +1,4 @@
-# Copyright (c) 2012-2013, 2015, 2017-2018 The Linux Foundation. All rights reserved.
+# Copyright (c) 2012-2013, 2015, 2017-2019 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -14,6 +14,7 @@ from print_out import print_out_str
 from parser_util import register_parser, RamParser, cleanupString
 taskhighlight_out = None
 highlight_tasks = "\n=====List of all runing and uninterruptable sleep process====\n"
+import ctypes
 
 def find_panic(ramdump, addr_stack, thread_task_name):
     if ramdump.arm64:
@@ -81,6 +82,8 @@ def dump_thread_group(ramdump, thread_group, task_out, taskhighlight_out, check_
         thread_task_prio = ramdump.read_int(next_thread_prio)
         if thread_task_prio is None:
             return
+        # Task prio is an integer and it can be -1 for DL tasks.
+        thread_task_prio = ctypes.c_int(thread_task_prio).value
         thread_task_pid = ramdump.read_int(next_thread_pid)
         if thread_task_pid is None:
             return
@@ -186,7 +189,7 @@ def do_dump_stacks(ramdump, check_for_panic=0):
                                 + offset_thread_group
             while True:
                 dump_thread_group(ramdump, init_thread_group,
-                                  task_out, check_for_panic)
+                                  task_out, taskhighlight_out, check_for_panic)
                 init_next_task = init_next_task + prev_offset
                 orig_init_next_task = init_next_task
                 next_task = ramdump.read_word(init_next_task)
