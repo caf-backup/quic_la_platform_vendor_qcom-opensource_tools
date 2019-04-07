@@ -1,4 +1,4 @@
-# Copyright (c) 2015, 2017, The Linux Foundation. All rights reserved.
+# Copyright (c) 2015, 2017, 2019 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -22,6 +22,14 @@ count = 0
 address = []
 data = []
 
+def bm(msb, lsb):
+    'Creates a bitmask from msb to lsb'
+    return int(('1' * (msb - lsb + 1)) + ('0' * lsb), 2)
+
+
+def bvalsel(msb, lsb, val):
+    'Masks and returns the bits from msb to lsb in val'
+    return ((val & bm(msb, lsb)) >> lsb)
 
 def log_init(name, path, filename):
     # Set up logger
@@ -91,9 +99,16 @@ def read_config(config_pt):
         on_zero_link_len = -1
         #word size
         track_len = 4
+        #empty SRAM is filled with 0xdededede
+        empty_ind = 0xdededede
 
     if options.config_offset is not None:
         config_pt.seek(int(options.config_offset, 16), 1)
+
+    if options.config_loopoffset is not None:
+        config_loopoffset = int(options.config_loopoffset)
+    else:
+        config_loopoffset = 13
 
     while True:
         word = config_pt.read(4)
@@ -108,12 +123,15 @@ def read_config(config_pt):
         descriptor = val & (0x3 << 30)
 	read_write_ind = val & (0x1 << 28)
 
-	if read_write_ind == dcc_write_ind:
+        if val == empty_ind:
             config_pt.seek(8, 1)
         elif descriptor == address_descriptor:
-            base = ((val & 0x0FFFFFFF) << 4)
-            offset = 0
-            length = 1
+            if read_write_ind == dcc_write_ind:
+                config_pt.seek(8, 1)
+            else:
+                base = ((val & 0x0FFFFFFF) << 4)
+                offset = 0
+                length = 1
         elif descriptor == link_descriptor:
             for i in range(0, 2):
                 offset = offset + (val & 0xFF) * 4 + (length - 1) * track_len
@@ -131,8 +149,8 @@ def read_config(config_pt):
                     else:
                         offset = 0
         elif descriptor == loop_descriptor:
-            loop_offset = val & 0x1FFF
-            loop_count = (val & 0xFFFE000) >> 13
+            loop_offset = val & bm(config_loopoffset - 1, 0)
+            loop_count = bvalsel(27, config_loopoffset, val)
 
             if loop_offset == 0:
                 continue
@@ -228,6 +246,8 @@ if __name__ == '__main__':
                       help='DCC driver version 2')
     parser.add_option('--config-offset', dest='config_offset',
                       help='Start offset for DCC configuration')
+    parser.add_option('--config-loopoffset', dest='config_loopoffset',
+                      help='Offset of loop value')
 
     (options, args) = parser.parse_args()
 
