@@ -14,6 +14,7 @@ from print_out import print_out_str
 from parser_util import register_parser, RamParser, cleanupString
 taskhighlight_out = None
 highlight_tasks = "\n=====List of all runing and uninterruptable sleep process====\n"
+import ctypes
 
 def find_panic(ramdump, addr_stack, thread_task_name):
     if ramdump.arm64:
@@ -60,6 +61,7 @@ def dump_thread_group(ramdump, thread_group, task_out, taskhighlight_out, check_
     offset_stack = ramdump.field_offset('struct task_struct', 'stack')
     offset_state = ramdump.field_offset('struct task_struct', 'state')
     offset_prio = ramdump.field_offset('struct task_struct', 'prio')
+    offset_affine = ramdump.field_offset('struct task_struct', 'cpus_allowed')
     offset_exit_state = ramdump.field_offset(
         'struct task_struct', 'exit_state')
     orig_thread_group = thread_group
@@ -73,6 +75,7 @@ def dump_thread_group(ramdump, thread_group, task_out, taskhighlight_out, check_
         next_thread_stack = next_thread_start + offset_stack
         next_thread_state = next_thread_start + offset_state
         next_thread_exit_state = next_thread_start + offset_exit_state
+        next_thread_affine = next_thread_start + offset_affine
         next_thread_info = ramdump.get_thread_info_addr(next_thread_start)
         thread_task_name = cleanupString(
             ramdump.read_cstring(next_thread_comm, 16))
@@ -81,8 +84,13 @@ def dump_thread_group(ramdump, thread_group, task_out, taskhighlight_out, check_
         thread_task_prio = ramdump.read_int(next_thread_prio)
         if thread_task_prio is None:
             return
+        # Task prio is an integer and it can be -1 for DL tasks.
+        thread_task_prio = ctypes.c_int(thread_task_prio).value
         thread_task_pid = ramdump.read_int(next_thread_pid)
         if thread_task_pid is None:
+            return
+        thread_task_affine = ramdump.read_u64(next_thread_affine)
+        if thread_task_affine is None:
             return
         task_state = ramdump.read_word(next_thread_state)
         if task_state is None:
@@ -121,8 +129,8 @@ def dump_thread_group(ramdump, thread_group, task_out, taskhighlight_out, check_
                 thread_line = ' ' + thread_line
 
             if not first:
-                task_out.write('Process: {0}, cpu: {1} pid: {2} start: 0x{3:x}\n'.format(
-                    thread_task_name, task_cpu, thread_task_pid, next_thread_start))
+                task_out.write('Process: {0}, [affinity: 0x{1:x}] cpu: {2} pid: {3} start: 0x{4:x}\n'.format(
+                    thread_task_name, thread_task_affine, task_cpu, thread_task_pid, next_thread_start))
                 task_out.write(
                     '=====================================================\n')
                 first = 1
