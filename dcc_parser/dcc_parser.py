@@ -15,12 +15,14 @@ import logging.handlers
 import os
 import struct
 import sys
+import re
 
 from optparse import OptionParser
 
 count = 0
 address = []
 data = []
+dcc_sink = []
 
 def bm(msb, lsb):
     'Creates a bitmask from msb to lsb'
@@ -72,12 +74,12 @@ def read_data(data_pt):
     return nr
 
 
+list_nr = []
+
 def read_config(config_pt):
-    list_nr = []
-    list_nr.append(0)
     offset = 0
     base = 0
-
+    list_nr.append(0)
     if options.version is None:
         address_descriptor = 0x1 << 31
         link_descriptor = 0
@@ -101,9 +103,6 @@ def read_config(config_pt):
         track_len = 4
         #empty SRAM is filled with 0xdededede
         empty_ind = 0xdededede
-
-    if options.config_offset is not None:
-        config_pt.seek(int(options.config_offset, 16), 1)
 
     if options.config_loopoffset is not None:
         config_loopoffset = int(options.config_loopoffset)
@@ -139,7 +138,6 @@ def read_config(config_pt):
 
                 length = (val & 0x7f)
                 val = val >> link_second_arg
-
                 if length != 0:
                     list_nr.append(length + list_nr[- 1])
                     add_addr(base, offset, length)
@@ -227,6 +225,23 @@ def dump_regs(options):
         dump_regs_xml(options)
 
 
+def read_data_atb(atb_data_pt):
+    for line in atb_data_pt:
+        if "ATID\" : 65, \"OpCode\" : \"D8\"" in line:
+            data1 = ""
+            for i in range(4):
+                data_byte_re = re.match(
+                    "\{\"ATID\" : 65, \"OpCode\" : \"D8\", \"Payload\" : "
+                    "\"0x([0-9A-Fa-f][0-9A-Fa-f])\"\}", line)
+                if data_byte_re:
+                    data1 = (data_byte_re.group(1))+data1
+                else:
+                    log.error("ATB file format wrong")
+                    exit(1)
+                if i < 3:
+                    line = atb_data_pt.next()
+            data.append(int(data1, 16))
+
 if __name__ == '__main__':
     usage = 'usage: %prog [options to print]. Run with --help for more details'
     parser = OptionParser(usage)
@@ -248,6 +263,8 @@ if __name__ == '__main__':
                       help='Start offset for DCC configuration')
     parser.add_option('--config-loopoffset', dest='config_loopoffset',
                       help='Offset of loop value')
+    parser.add_option('--dcc_sink', dest='dcc_sink',
+                      help='DCC sink(SRAM/ATB).Comma seperated list if more than one list used')
 
     (options, args) = parser.parse_args()
 
@@ -271,6 +288,12 @@ if __name__ == '__main__':
     else:
         ext = '.xml'
 
+    if options.dcc_sink is None:
+        dcc_sink.append('SRAM')
+    else:
+        dcc_sink = options.dcc_sink.split(',')
+        print dcc_sink
+
     if options.outfile is None:
         options.outfile = 'dcc_captured_data{0}'.format(ext)
 
@@ -290,33 +313,36 @@ if __name__ == '__main__':
         log.error("Do you have read permissions on the path?")
         sys.exit(1)
 
-    if options.atbfile is not None:
-        try:
-            atb_file = open(options.atbfile, 'rb')
-        except:
-            log.error("could not open path {0}".format(options.atbfile))
-            log.error("Do you have read permissions on the path?")
-            sys.exit(1)
-
     count = 0
-    while True:
+
+    if options.config_offset is not None:
+        sram_file.seek(int(options.config_offset, 16), 1)
+    parsed_data = log_init('PARSED_DATA', options.outdir, options.outfile)
+    for sink in dcc_sink:
         count = read_config(sram_file)
-
-        if options.atbfile is None:
-            atb_file = sram_file
-
-        if read_data(sram_file):
-            log.error('Couldn\'t read complete data.')
+        print sink
+        if sink == 'SRAM':
+            print 'Read data from SRAM'
+            if read_data(sram_file):
+                log.error('Couldn\'t read complete data.')
+                sys.exit(1)
+        elif sink == 'ATB':
+            print 'Read data from ATB file'
+            if options.atbfile is not None:
+                try:
+                    atb_file = open(options.atbfile, 'rb')
+                    read_data_atb(atb_file)
+                    atb_file.close()
+                except:
+                    log.error("could not open path {0}".format(options.atbfile))
+                    log.error("Do you have read permissions on the path?")
+                    dump_regs(options)
+                    sys.exit(1)
+            else:
+                log.error('ATB file not given')
+        if not new_linked_list(sram_file):
             break
 
-        if new_linked_list(sram_file) is False:
-            parsed_data = log_init('PARSED_DATA', options.outdir, options.outfile)
-            dump_regs(options)
-            break
-
+    dump_regs(options)
     sram_file.close()
-
-    if options.atbfile is not None:
-        atb_file.close()
-
     sys.stderr.flush()
