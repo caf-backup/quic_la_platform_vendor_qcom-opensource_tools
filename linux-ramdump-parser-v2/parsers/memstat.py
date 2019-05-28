@@ -1,4 +1,4 @@
-# Copyright (c) 2016-2018 The Linux Foundation. All rights reserved.
+# Copyright (c) 2016-2019 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -180,23 +180,35 @@ class MemStats(RamParser):
             kgsl_memory = 0
 
         # zcompressed ram
-        if self.ramdump.kernel_version >= (4, 14):
-            stat_val = 0
-        elif self.ramdump.kernel_version >= (4, 4):
-            zram_index_idr = self.ramdump.read_word('zram_index_idr')
+        if self.ramdump.kernel_version >= (4, 4):
+            if self.ramdump.kernel_version >= (4, 14):
+                zram_index_idr = self.ramdump.address_of('zram_index_idr')
+            else:
+                zram_index_idr = self.ramdump.read_word('zram_index_idr')
             if zram_index_idr is None:
                 stat_val = 0
             else:
-                idr_layer_ary_offset = self.ramdump.field_offset(
-                            'struct idr_layer', 'ary')
-                idr_layer_ary = self.ramdump.read_word(zram_index_idr +
+                if self.ramdump.kernel_version >= (4, 14):
+                    idr_layer_ary_offset = self.ramdump.field_offset(
+                            'struct radix_tree_root', 'rnode')
+                    idr_layer_ary = self.ramdump.read_word(zram_index_idr +
                                                    idr_layer_ary_offset)
-                zram_meta = idr_layer_ary + self.ramdump.field_offset(
-                                'struct zram', 'meta')
-                zram_meta = self.ramdump.read_word(zram_meta)
-                mem_pool = zram_meta + self.ramdump.field_offset(
+                else:
+                    idr_layer_ary_offset = self.ramdump.field_offset(
+                                'struct idr_layer', 'ary')
+                    idr_layer_ary = self.ramdump.read_word(zram_index_idr +
+                                                       idr_layer_ary_offset)
+                try:
+                    zram_meta = idr_layer_ary + self.ramdump.field_offset(
+                                    'struct zram', 'meta')
+                    zram_meta = self.ramdump.read_word(zram_meta)
+                    mem_pool = zram_meta + self.ramdump.field_offset(
                             'struct zram_meta', 'mem_pool')
-                mem_pool = self.ramdump.read_word(mem_pool)
+                    mem_pool = self.ramdump.read_word(mem_pool)
+                except TypeError:
+                    mem_pool = idr_layer_ary + self.ramdump.field_offset(
+                                'struct zram', 'mem_pool')
+                    mem_pool = self.ramdump.read_word(mem_pool)
                 if mem_pool is None:
                     stat_val = 0
                 else:
