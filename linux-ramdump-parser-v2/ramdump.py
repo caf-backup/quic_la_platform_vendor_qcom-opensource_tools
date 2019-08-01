@@ -802,8 +802,7 @@ class RamDump():
         return self.config_dict.get(config)
 
     def is_config_defined(self, config):
-        s = config + '=y'
-        return s in self.config
+        return config in self.config_dict
 
     def kernel_virt_to_phys(self, addr):
         if self.minidump:
