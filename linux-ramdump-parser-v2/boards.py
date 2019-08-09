@@ -659,7 +659,7 @@ class BoardLito(Board):
         self.wdog_addr = 0x146ab658
         self.imem_file_name = 'OCIMEM.BIN'
 
-class BoardLito(Board):
+class BoardAtoll(Board):
     def __init__(self, socid):
         super(BoardAtoll, self).__init__()
         self.socid = socid
