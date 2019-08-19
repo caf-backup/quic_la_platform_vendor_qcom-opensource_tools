@@ -1357,9 +1357,13 @@ class RamDump():
                 # FORMAT of record:
                 # sym_addr, syn_name[mod_name], sym_type, idx_elf_sym, st_name, st_shndx, st_size
                 ###
-                mod_tbl_ent.kallsyms_table.append(
-                    (sym_addr, sym_name + '[' + mod_tbl_ent.name + ']', sym_type, i,
-                     st_name, st_shndx, st_size))
+                if sym_addr:
+                    # when sym_addr is 0, it means the symbol is undefined
+                    # will not add undefined symbols here to avoid address 0x0
+                    # being treated as belonging to a particular kernel module
+                    mod_tbl_ent.kallsyms_table.append(
+                        (sym_addr, sym_name + '[' + mod_tbl_ent.name + ']', sym_type, i,
+                         st_name, st_shndx, st_size))
             mod_tbl_ent.kallsyms_table.sort()
             if self.dump_module_kallsyms:
                 self.dump_mod_kallsyms_sym_table(mod_tbl_ent.name, mod_tbl_ent.kallsyms_table)
