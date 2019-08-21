@@ -1018,9 +1018,9 @@ class RamDump():
                 if self.mmu is None:
                     mmu_enabled = 0
                 startup_script.write(
-                    'PER.S.F C15:0x1 %L 0x{0:x}\n'.format(mmu_enabled).encode('ascii', 'ignore'))
+                    'PER.S.simple C15:0x1 %L 0x{0:x}\n'.format(mmu_enabled).encode('ascii', 'ignore'))
                 startup_script.write(
-                    'PER.S.F C15:0x2 %L 0x{0:x}\n'.format(self.mmu.ttbr).encode('ascii', 'ignore'))
+                    'PER.S.simple C15:0x2 %L 0x{0:x}\n'.format(self.mmu.ttbr).encode('ascii', 'ignore'))
                 if isinstance(self.mmu, Armv7LPAEMMU):
                     # TTBR1. This gets setup once and never change again even if TTBR0
                     # changes
