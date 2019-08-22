@@ -1341,6 +1341,9 @@ class RamDump():
             num_symtab = self.read_pointer(mod_tbl_ent.kallsyms_addr + num_symtab_offset)
             strtab = self.read_pointer(mod_tbl_ent.kallsyms_addr + strtab_offset)
 
+            if symtab is None or num_symtab is None or strtab is None:
+                return
+
             KSYM_NAME_LEN = 128
             for i in range(0, num_symtab):
                 elf_sym = symtab + self.sizeof(sym_struct_name) * i
