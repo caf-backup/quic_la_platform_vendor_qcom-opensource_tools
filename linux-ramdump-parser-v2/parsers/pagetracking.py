@@ -148,6 +148,8 @@ class PageTracking(RamParser):
 
                 slab = self.ramdump.read_word(
                     self.stack_slabs + (self.stack_slabs_size * slabindex))
+                if slab is None:
+                    return -1, -1
                 stack = slab + handle_offset
 
                 nr_trace_entries = self.ramdump.read_structure_field(
