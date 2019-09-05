@@ -1219,7 +1219,10 @@ class RamDump():
                 print_out_str(
                     '!!! A bogus hardware id was specified: {0}'.format(self.hw_id))
                 print_out_str('!!! Supported ids:')
-                for b in get_supported_ids():
+                ids = get_supported_ids()
+                if not len(ids):
+                    print_out_str('!!! No registered Boards found - check extensions/board_def.py')
+                for b in ids:
                     print_out_str('    {0}'.format(b))
                 sys.exit(1)
 
