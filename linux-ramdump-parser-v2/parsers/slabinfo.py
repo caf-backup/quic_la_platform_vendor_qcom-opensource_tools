@@ -1,4 +1,4 @@
-# Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
+# Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -84,6 +84,9 @@ class kmem_cache(object):
         self.addr = addr
         self.valid = True
 
+        if ramdump.is_config_defined('CONFIG_SLAB_FREELIST_HARDENED'):
+            self.random = ramdump.read_structure_field(
+                                addr, 'struct kmem_cache', 'random')
 
 class struct_member_offset(object):
     def __init__(self, ramdump):
@@ -105,8 +108,10 @@ class struct_member_offset(object):
                             'struct page', 'lru')
         self.page_flags = ramdump.field_offset(
                             'struct page', 'flags')
-        self.page_mapcount = ramdump.field_offset(
-                            'struct page', '_mapcount')
+
+        self.page_objects = ramdump.field_offset(
+                            'struct page', 'objects')
+
         self.track_addrs = ramdump.field_offset(
                             'struct track', 'addrs')
         self.page_freelist = ramdump.field_offset(
@@ -129,7 +134,12 @@ class Slabinfo(RamParser):
 
     def get_free_pointer(self, ramdump, s, obj):
         # just like validate_slab_slab!
-        return self.ramdump.read_word(obj + s.offset)
+        ptr = obj + s.offset
+        val = self.ramdump.read_word(ptr)
+        if self.ramdump.is_config_defined('CONFIG_SLAB_FREELIST_HARDENED'):
+            return ptr ^ s.random ^ val
+        else:
+            return val
 
     def slab_index(self, ramdump, p, addr, slab):
         return (p - addr) / slab.size
@@ -205,7 +215,7 @@ class Slabinfo(RamParser):
         p = page_addr
         if page is None:
             return
-        n_objects = self.ramdump.read_word(page + g_offsetof.page_mapcount)
+        n_objects = self.ramdump.read_word(page + g_offsetof.page_objects)
         n_objects = (n_objects >> 16) & 0x00007FFF
         if n_objects is None:
             return
