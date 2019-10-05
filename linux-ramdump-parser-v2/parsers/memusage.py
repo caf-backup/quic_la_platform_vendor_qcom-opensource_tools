@@ -1,4 +1,4 @@
-# Copyright (c) 2016-2018 The Linux Foundation. All rights reserved.
+# Copyright (c) 2016-2019 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -11,6 +11,27 @@
 
 from print_out import print_out_str
 from parser_util import register_parser, RamParser, cleanupString
+from linux_list import ListWalker
+
+
+""" Returns number of pages """
+def get_shmem_swap_usage(ramdump):
+    shmem_swaplist = ramdump.address_of("shmem_swaplist")
+    if not shmem_swaplist:
+        return 0
+
+    offset = ramdump.field_offset('struct shmem_inode_info', 'swaplist')
+    if not offset:
+        return 0
+
+    iter = ListWalker(ramdump, shmem_swaplist, offset)
+
+    total = 0
+    for shmem_inode_info in iter:
+        total += ramdump.read_structure_field(
+                    shmem_inode_info, 'struct shmem_inode_info', 'swapped')
+
+    return total
 
 
 def do_dump_process_memory(ramdump):
@@ -32,6 +53,7 @@ def do_dump_process_memory(ramdump):
                             'vm_zone_stat[NR_SLAB_UNRECLAIMABLE]')
         total_shmem = ramdump.read_word('vm_node_stat[NR_SHMEM]')
 
+    total_shmem_swap = get_shmem_swap_usage(ramdump)
     total_slab = slab_rec + slab_unrec
     total_mem = ramdump.read_word('totalram_pages') * 4
     offset_comm = ramdump.field_offset('struct task_struct', 'comm')
@@ -49,8 +71,10 @@ def do_dump_process_memory(ramdump):
             slab_unrec * 4, (100.0 * slab_unrec * 4) / total_mem))
     memory_file.write('Total Slab memory: {0:,}kB({1:.1f}%)\n'.format(
             total_slab * 4, (100.0 * total_slab * 4) / total_mem))
-    memory_file.write('Total SHMEM: {0:,}kB({1:.1f}%)\n\n'.format(
+    memory_file.write('Total SHMEM (PAGECACHE): {0:,}kB({1:.1f}%)\n'.format(
         total_shmem * 4, (100.0 * total_shmem * 4) / total_mem))
+    memory_file.write('Total SHMEM (SWAP): {0:,}kB({1:.1f}%)\n\n'.format(
+        total_shmem_swap * 4, (100.0 * total_shmem_swap * 4) / total_mem))
 
     for task in ramdump.for_each_process():
         next_thread_comm = task + offset_comm
