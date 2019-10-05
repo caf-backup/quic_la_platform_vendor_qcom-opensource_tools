@@ -94,12 +94,15 @@ def do_dump_process_memory(ramdump):
             task_info.append([thread_task_name, thread_task_pid, rss, swap, rss + swap, adj])
 
     task_info = sorted(task_info, key=lambda l: l[4], reverse=True)
-    str = '{0:<17s}{1:>8s}{2:>19s}{3:>12s}{4:>8}\n'.format(
+    str = '{0:<17s}{1:>8s}{2:>19s}{3:>19s}{4:>6}\n'.format(
         'Task name', 'PID', 'RSS in kB', 'SWAP in kB', 'ADJ')
     memory_file.write(str)
     for item in task_info:
-        str = '{0:<17s}{1:8d}{2:13,d}({4:2.1f}%){3:13,d} {5:6}\n'.format(
-            item[0], item[1], item[2], item[3], (100.0 * item[2]) / total_mem, item[5])
+        str = '{taskname:<17s}{pid:8d}{rss:13,d}({rss_pct:2.1f}%){swap:13,d}({swap_pct:2.1f}%){adj:6}\n'.format(
+            taskname = item[0], pid = item[1],
+            rss = item[2], rss_pct = (100.0 * item[2]) / total_mem,
+            swap = item[3], swap_pct = (100.0 * item[3]) / total_mem,
+            adj = item[5])
         memory_file.write(str)
     memory_file.close()
     print_out_str('---wrote meminfo to memory.txt')
