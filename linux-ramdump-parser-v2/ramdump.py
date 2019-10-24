@@ -43,24 +43,12 @@ PC = 15
 SMEM_HW_SW_BUILD_ID = 0x89
 BUILD_ID_LENGTH = 32
 
-first_mem_file_names = ['EBICS0.BIN',
-                        'EBI1.BIN', 'DDRCS0.BIN', 'ebi1_cs0.bin', 'DDRCS0_0.BIN']
-extra_mem_file_names = ['EBI1CS1.BIN', 'DDRCS1.BIN', 'ebi1_cs1.bin',
-                        'DDRCS0_1.BIN', 'DDRCS1_0.BIN', 'DDRCS1_1.BIN',
-                        'DDRCS1_2.BIN', 'DDRCS1_3.BIN', 'DDRCS1_4.BIN',
-                        'DDRCS1_5.BIN']
-
-DDR_FILE_NAMES = ['DDRCS0.BIN', 'DDRCS1.BIN', 'DDRCS0_0.BIN',
-                  'DDRCS1_0.BIN', 'DDRCS0_1.BIN', 'DDRCS1_1.BIN',
-                  'DDR_0.BIN', 'DDR_1.BIN', 'DDR_2.BIN', 'DDR_3.BIN',
-                  'RESET_INFO.BIN']
-OTHER_DUMP_FILE_NAMES = ['PIMEM.BIN', 'OCIMEM.BIN','md_shared_imem.BIN',
-                         'md_smem_info.BIN']
-RAM_FILE_NAMES = set(DDR_FILE_NAMES +
-                     OTHER_DUMP_FILE_NAMES +
-                     first_mem_file_names +
-                     extra_mem_file_names)
-
+def is_ramdump_file(val):
+    ddr = re.compile(r'(DDR|EBI)[0-9_CS]+[.]BIN', re.IGNORECASE)
+    imem = re.compile(r'.*IMEM.BIN', re.IGNORECASE)
+    if ddr.match(val) or imem.match(val):
+        return True
+    return False
 
 class AutoDumpInfo(object):
     priority = 0
@@ -78,9 +66,7 @@ class AutoDumpInfo(object):
             self.ebi_files.append((open(fullpath, 'rb'), base_addr, end, fullpath))
             # sort by addr, DDR files first. The goal is for
             # self.ebi_files[0] to be the DDR file with the lowest address.
-            self.ebi_files.sort(
-                key=lambda x: (os.path.basename(x[-1]) not in DDR_FILE_NAMES,
-                               x[1]))
+            self.ebi_files.sort(key=lambda x: (x[1]))
 
     def _parse(self):
         # Implementations should return an interable of (filename, base_addr)
@@ -98,7 +84,7 @@ class AutoDumpInfoCMM(AutoDumpInfo):
         with open(os.path.join(self.autodumpdir, filename)) as f:
             for line in f.readlines():
                 words = line.split()
-                if len(words) == 4 and words[1] in RAM_FILE_NAMES:
+                if len(words) == 4 and is_ramdump_file(words[1]):
                     fname = words[1]
                     start = int(words[2], 16)
                     yield fname, start
@@ -117,7 +103,7 @@ class AutoDumpInfoDumpInfoTXT(AutoDumpInfo):
         with open(os.path.join(self.autodumpdir, filename)) as f:
             for line in f.readlines():
                 words = line.split()
-                if not words or words[-1] not in RAM_FILE_NAMES:
+                if not words or not is_ramdump_file(words[-1]):
                     continue
                 fname = words[-1]
                 start = int(words[1], 16)
@@ -1018,9 +1004,9 @@ class RamDump():
                 if self.mmu is None:
                     mmu_enabled = 0
                 startup_script.write(
-                    'PER.S.F C15:0x1 %L 0x{0:x}\n'.format(mmu_enabled).encode('ascii', 'ignore'))
+                    'PER.S.simple C15:0x1 %L 0x{0:x}\n'.format(mmu_enabled).encode('ascii', 'ignore'))
                 startup_script.write(
-                    'PER.S.F C15:0x2 %L 0x{0:x}\n'.format(self.mmu.ttbr).encode('ascii', 'ignore'))
+                    'PER.S.simple C15:0x2 %L 0x{0:x}\n'.format(self.mmu.ttbr).encode('ascii', 'ignore'))
                 if isinstance(self.mmu, Armv7LPAEMMU):
                     # TTBR1. This gets setup once and never change again even if TTBR0
                     # changes
@@ -1219,7 +1205,10 @@ class RamDump():
                 print_out_str(
                     '!!! A bogus hardware id was specified: {0}'.format(self.hw_id))
                 print_out_str('!!! Supported ids:')
-                for b in get_supported_ids():
+                ids = get_supported_ids()
+                if not len(ids):
+                    print_out_str('!!! No registered Boards found - check extensions/board_def.py')
+                for b in ids:
                     print_out_str('    {0}'.format(b))
                 sys.exit(1)
 
@@ -1341,6 +1330,9 @@ class RamDump():
             num_symtab = self.read_pointer(mod_tbl_ent.kallsyms_addr + num_symtab_offset)
             strtab = self.read_pointer(mod_tbl_ent.kallsyms_addr + strtab_offset)
 
+            if symtab is None or num_symtab is None or strtab is None:
+                return
+
             KSYM_NAME_LEN = 128
             for i in range(0, num_symtab):
                 elf_sym = symtab + self.sizeof(sym_struct_name) * i
@@ -1357,9 +1349,13 @@ class RamDump():
                 # FORMAT of record:
                 # sym_addr, syn_name[mod_name], sym_type, idx_elf_sym, st_name, st_shndx, st_size
                 ###
-                mod_tbl_ent.kallsyms_table.append(
-                    (sym_addr, sym_name + '[' + mod_tbl_ent.name + ']', sym_type, i,
-                     st_name, st_shndx, st_size))
+                if sym_addr:
+                    # when sym_addr is 0, it means the symbol is undefined
+                    # will not add undefined symbols here to avoid address 0x0
+                    # being treated as belonging to a particular kernel module
+                    mod_tbl_ent.kallsyms_table.append(
+                        (sym_addr, sym_name + '[' + mod_tbl_ent.name + ']', sym_type, i,
+                         st_name, st_shndx, st_size))
             mod_tbl_ent.kallsyms_table.sort()
             if self.dump_module_kallsyms:
                 self.dump_mod_kallsyms_sym_table(mod_tbl_ent.name, mod_tbl_ent.kallsyms_table)

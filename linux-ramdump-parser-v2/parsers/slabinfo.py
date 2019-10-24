@@ -1,4 +1,4 @@
-# Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
+# Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -31,6 +31,7 @@ FREQUENCY = 0
 CALLSTACK_INDEX = 1
 CALL_STACK = 2
 TRACK_TYPE = 3
+TRACK_PIDS = 4
 
 # g_Optimization - if false will print :
 # 1. Free objects callstacks
@@ -45,6 +46,7 @@ g_Optimization = True
 # value(CALLSTACK_FREQ_IN_SLAB)
 
 MAX_NO_OF_CALLSTACK_TO_PRINT = 5
+MAX_NO_OF_PID_TO_PRINT = 5
 CALLSTACK_FREQ_IN_SLAB = 10
 
 
@@ -84,6 +86,9 @@ class kmem_cache(object):
         self.addr = addr
         self.valid = True
 
+        if ramdump.is_config_defined('CONFIG_SLAB_FREELIST_HARDENED'):
+            self.random = ramdump.read_structure_field(
+                                addr, 'struct kmem_cache', 'random')
 
 class struct_member_offset(object):
     def __init__(self, ramdump):
@@ -105,10 +110,14 @@ class struct_member_offset(object):
                             'struct page', 'lru')
         self.page_flags = ramdump.field_offset(
                             'struct page', 'flags')
-        self.page_mapcount = ramdump.field_offset(
-                            'struct page', '_mapcount')
+
+        self.page_objects = ramdump.field_offset(
+                            'struct page', 'objects')
+
         self.track_addrs = ramdump.field_offset(
                             'struct track', 'addrs')
+        self.track_pid = ramdump.field_offset(
+                            'struct track', 'pid')
         self.page_freelist = ramdump.field_offset(
                             'struct page', 'freelist')
         self.sizeof_struct_track = ramdump.sizeof(
@@ -129,7 +138,12 @@ class Slabinfo(RamParser):
 
     def get_free_pointer(self, ramdump, s, obj):
         # just like validate_slab_slab!
-        return self.ramdump.read_word(obj + s.offset)
+        ptr = obj + s.offset
+        val = self.ramdump.read_word(ptr)
+        if self.ramdump.is_config_defined('CONFIG_SLAB_FREELIST_HARDENED'):
+            return ptr ^ s.random ^ val
+        else:
+            return val
 
     def slab_index(self, ramdump, p, addr, slab):
         return (p - addr) / slab.size
@@ -161,7 +175,7 @@ class Slabinfo(RamParser):
         for a in stack:
             look = ramdump.unwind_lookup(a)
             if look is None:
-                out_file.write("look is None")
+                out_file.write("Unknown symbol\n")
                 continue
             symname, offset = look
             out_file.write(
@@ -184,8 +198,19 @@ class Slabinfo(RamParser):
         stackstr_len = len(stackstr)
         if stackstr_len == 0:
             return
+
+        pid = self.ramdump.read_int(p + g_offsetof.track_pid)
+        if pid is None:
+            pid = -1
+
         try:
             self.g_allstacks[stackstr][FREQUENCY] += 1
+            pids = self.g_allstacks[stackstr][TRACK_PIDS]
+            if pid in pids:
+                pids[pid] += 1
+            else:
+                pids[pid] = 1
+
             if self.g_allstacks[stackstr][FREQUENCY] > 1:
                 return
         except KeyError:
@@ -194,7 +219,9 @@ class Slabinfo(RamParser):
                     # if free object and g_Optimization is True,
                     # ignore it for printing its call stack
                     return
-            self.g_allstacks[stackstr] = [1, self.g_index, stack, track_type]
+            pids = dict()
+            pids[pid] = 1
+            self.g_allstacks[stackstr] = [1, self.g_index, stack, track_type, pids]
             self.g_index += 1
 
     def print_slab(
@@ -205,7 +232,7 @@ class Slabinfo(RamParser):
         p = page_addr
         if page is None:
             return
-        n_objects = self.ramdump.read_word(page + g_offsetof.page_mapcount)
+        n_objects = self.ramdump.read_word(page + g_offsetof.page_objects)
         n_objects = (n_objects >> 16) & 0x00007FFF
         if n_objects is None:
             return
@@ -220,6 +247,16 @@ class Slabinfo(RamParser):
                         ramdump, p, bitarray[bitidx], slab,
                         page, out_file, out_slabs_addrs)
             p = p + slab.size
+
+    def printpidsummary(self, track_pids, slab_out):
+        track_pids = sorted(
+                            track_pids.items(),
+                            key=operator.itemgetter(1), reverse=True)
+
+        nr = min(len(track_pids), MAX_NO_OF_PID_TO_PRINT)
+        for i in range(0, nr):
+            slab_out.write(" pid:{0} frequency:{1}\n".format(
+                        track_pids[i][0], track_pids[i][1]))
 
     def printsummary(self, slabs_output_summary, slab_out):
         nCounter = 0
@@ -253,6 +290,7 @@ class Slabinfo(RamParser):
                         "\nALLOCATED" + str.format(
                                 val[CALLSTACK_INDEX], val[FREQUENCY]))
                 self.extract_callstack(self.ramdump, val[CALL_STACK], slab_out)
+                self.printpidsummary(val[TRACK_PIDS], slab_out)
             slabs_output_summary.write(
                 " stack index:{0} frequency:{1}\n".format(
                         val[CALLSTACK_INDEX], val[FREQUENCY]))
