@@ -659,6 +659,21 @@ class BoardLito(Board):
         self.wdog_addr = 0x146ab658
         self.imem_file_name = 'OCIMEM.BIN'
 
+class BoardLito(Board):
+    def __init__(self, socid):
+        super(BoardAtoll, self).__init__()
+        self.socid = socid
+        self.board_num = "atoll"
+        self.cpu = 'CORTEXA53'
+        self.ram_start = 0x80000000
+        self.smem_addr = 0x900000
+        self.smem_addr_buildinfo = 0x907210
+        self.phys_offset = 0xA1200000
+        self.imem_start = 0x14680000
+        self.kaslr_addr = 0x146aa6d0
+        self.wdog_addr = 0x146aa658
+        self.imem_file_name = 'OCIMEM.BIN'
+
 class BoardPoorwills(Board):
     def __init__(self, socid):
         super(BoardPoorwills, self).__init__()
@@ -925,6 +940,8 @@ boards.append(BoardSteppe(socid=365))
 boards.append(BoardSteppe(socid=366))
 
 boards.append(BoardLito(socid=400))
+
+boards.append(BoardAtoll(socid=407))
 
 boards.append(BoardSDM710(socid=336))
 boards.append(BoardSDM710(socid=337))
