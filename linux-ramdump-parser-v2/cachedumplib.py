@@ -1118,6 +1118,32 @@ lookuptable[("lito", 0x141, 0x10)] = LLC_SYSTEM_CACHE_KRYO3XX()
 lookuptable[("lito", 0xc6, 0x10)] = L2_Cache_KRYO4XX_GOLD(numsets=0x200)
 lookuptable[("lito", 0xc7, 0x10)] = L2_Cache_KRYO4XX_GOLD(numsets=0x200)
 
+# "atoll"
+lookuptable[("atoll", 0x80, 0x14)] = L1_DCache_KRYO4XX_SILVER()
+lookuptable[("atoll", 0x81, 0x14)] = L1_DCache_KRYO4XX_SILVER()
+lookuptable[("atoll", 0x82, 0x14)] = L1_DCache_KRYO4XX_SILVER()
+lookuptable[("atoll", 0x83, 0x14)] = L1_DCache_KRYO4XX_SILVER()
+lookuptable[("atoll", 0x84, 0x14)] = L1_DCache_KRYO4XX_SILVER()
+lookuptable[("atoll", 0x85, 0x14)] = L1_DCache_KRYO4XX_SILVER()
+lookuptable[("atoll", 0x86, 0x14)] = L1_DCache_KRYO4XX_GOLD()
+lookuptable[("atoll", 0x87, 0x14)] = L1_DCache_KRYO4XX_GOLD()
+
+
+lookuptable[("atoll", 0x60, 0x14)] = L1_ICache_KRYO4XX_SILVER()
+lookuptable[("atoll", 0x61, 0x14)] = L1_ICache_KRYO4XX_SILVER()
+lookuptable[("atoll", 0x62, 0x14)] = L1_ICache_KRYO4XX_SILVER()
+lookuptable[("atoll", 0x63, 0x14)] = L1_ICache_KRYO4XX_SILVER()
+lookuptable[("atoll", 0x64, 0x14)] = L1_ICache_KRYO4XX_SILVER()
+lookuptable[("atoll", 0x65, 0x14)] = L1_ICache_KRYO4XX_SILVER()
+lookuptable[("atoll", 0x66, 0x14)] = L1_ICache_KRYO4XX_GOLD()
+lookuptable[("atoll", 0x67, 0x14)] = L1_ICache_KRYO4XX_GOLD()
+
+lookuptable[("atoll", 0x140, 0x10)] = LLC_SYSTEM_CACHE_KRYO3XX()
+lookuptable[("atoll", 0x141, 0x10)] = LLC_SYSTEM_CACHE_KRYO3XX()
+
+lookuptable[("atoll", 0xc6, 0x10)] = L2_Cache_KRYO4XX_GOLD(numsets=0x200)
+lookuptable[("atoll", 0xc7, 0x10)] = L2_Cache_KRYO4XX_GOLD(numsets=0x200)
+
 # "trinket"
 lookuptable[("trinket", 0x80, 0x14)] = L1_DCache_KRYO2XX_SILVER()
 lookuptable[("trinket", 0x81, 0x14)] = L1_DCache_KRYO2XX_SILVER()
