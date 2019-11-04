@@ -91,6 +91,7 @@ def read_config(config_pt):
         # We return zero and fail
         on_zero_link_len = 0
         track_len = 0
+        empty_ind = 0x0
     else:
         address_descriptor = 0
         link_descriptor = 0x3 << 30
@@ -123,7 +124,7 @@ def read_config(config_pt):
 	read_write_ind = val & (0x1 << 28)
 
         if val == empty_ind:
-            config_pt.seek(8, 1)
+            continue
         elif descriptor == address_descriptor:
             if read_write_ind == dcc_write_ind:
                 config_pt.seek(8, 1)
@@ -131,6 +132,7 @@ def read_config(config_pt):
                 base = ((val & 0x0FFFFFFF) << 4)
                 offset = 0
                 length = 1
+                tmp_count = 0
         elif descriptor == link_descriptor:
             for i in range(0, 2):
                 offset = offset + (val & 0xFF) * 4 + (length - 1) * track_len
@@ -141,6 +143,7 @@ def read_config(config_pt):
                 if length != 0:
                     list_nr.append(length + list_nr[- 1])
                     count = count + 1
+                    tmp_count = tmp_count + 1
                     add_addr(base, offset, length)
                 else:
                     if (i == 0 ):
@@ -164,7 +167,16 @@ def read_config(config_pt):
             Skip over mask and value of rd_mod_wr.
             There is no gaurantee of this being actually written
             and we never read the value back to confirm.
+            Remove address added by previous entry since
+            that's for rd_mod_wr instead of read operation.
             '''
+            for i in range(0, tmp_count):
+                last_length = list_nr[-1] - list_nr[-2]
+                list_nr.pop()
+                count = count - 1
+                for j in range(0, last_length):
+                   address.pop()
+
             config_pt.seek(8, 1)
 
     return count
@@ -242,13 +254,25 @@ def read_data_atb(atb_data_pt, count):
                     i += 1
                 else:
                     log.error("ATB file format wrong")
-                    exit(1)
+                    return atb_count
                 if i < 4:
                     line = atb_data_pt.next()
             data.append(int(data1, 16))
             atb_count = atb_count + 1
             if atb_count >= count:
                 break
+        elif "ATID\" : 65, \"OpCode\" : \"D32\"" in line:
+            #print line
+            data_byte_re = re.match(
+                "\{\"ATID\" : 65, \"OpCode\" : \"D32\", \"Payload\" : "
+                "\"0x([0-9A-Fa-f]+)\"}", line)
+            if data_byte_re:
+                data1 = (data_byte_re.group(1))
+                #print data1
+                data.append(int(data1, 16))
+                atb_count = atb_count + 1
+                if atb_count >= count:
+                    break
     return atb_count
 
 if __name__ == '__main__':
@@ -345,14 +369,16 @@ if __name__ == '__main__':
                 try:
                     atb_count = read_data_atb(atb_file, count)
                     if atb_count < count:
+                        del address[-count:]
+                        del data[-atb_count:]
                         log.error("ATB file don't have complete DCC data")
                 except:
                     log.error("could not open path {0}".format(options.atbfile))
                     log.error("Do you have read permissions on the path?")
-                    dump_regs(options)
-                    sys.exit(1)
+                    del address[-count:]
             else:
                 log.error('ATB file not given')
+                del address[-count:]
         if not new_linked_list(sram_file):
             log.error("Next list not available")
             break
