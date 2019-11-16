@@ -1,4 +1,4 @@
-# Copyright (c) 2017, The Linux Foundation. All rights reserved.
+# Copyright (c) 2017, 2019, The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -19,6 +19,8 @@ class module_table_entry():
         self.module_offset = 0
         self.sym_lookup_table = []
         self.sym_path = ''
+        self.kallsyms_addr = 0
+        self.kallsyms_table = []
 
     def num_symbols(self):
         return len(self.sym_lookup_table)
