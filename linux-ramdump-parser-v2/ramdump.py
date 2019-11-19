@@ -885,6 +885,8 @@ class RamDump():
         return False
 
     def print_socinfo(self):
+        if self.read_pointer('socinfo') is None:
+          return None
         content_socinfo = hex(self.read_pointer('socinfo'))
         content_socinfo = content_socinfo.strip('L')
 
