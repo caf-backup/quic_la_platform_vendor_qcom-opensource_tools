@@ -768,9 +768,19 @@ class RamDump():
         kconfig_addr = self.address_of('kernel_config_data')
         if kconfig_addr is None:
             return
-        kconfig_size = self.sizeof('kernel_config_data')
-        # size includes magic, offset from it
-        kconfig_size = kconfig_size - 16 - 1
+        if self.kernel_version > (5, 0, 0):
+            kconfig_addr_end = self.address_of('kernel_config_data_end')
+            if kconfig_addr_end is None:
+                return
+            kconfig_size = kconfig_addr_end - kconfig_addr
+            # magic is 8 bytes before kconfig_addr and data
+            # starts at kconfig_addr for kernel > 5.0.0
+            kconfig_addr = kconfig_addr - 8
+        else:
+            kconfig_size = self.sizeof('kernel_config_data')
+            # size includes magic, offset from it
+            kconfig_size = kconfig_size - 16 - 1
+
         zconfig = NamedTemporaryFile(mode='wb', delete=False)
         # kconfig data starts with magic 8 byte string, go past that
         s = self.read_cstring(kconfig_addr, 8)
