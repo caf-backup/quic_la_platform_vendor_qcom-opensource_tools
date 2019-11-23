@@ -43,24 +43,12 @@ PC = 15
 SMEM_HW_SW_BUILD_ID = 0x89
 BUILD_ID_LENGTH = 32
 
-first_mem_file_names = ['EBICS0.BIN',
-                        'EBI1.BIN', 'DDRCS0.BIN', 'ebi1_cs0.bin', 'DDRCS0_0.BIN']
-extra_mem_file_names = ['EBI1CS1.BIN', 'DDRCS1.BIN', 'ebi1_cs1.bin',
-                        'DDRCS0_1.BIN', 'DDRCS1_0.BIN', 'DDRCS1_1.BIN',
-                        'DDRCS1_2.BIN', 'DDRCS1_3.BIN', 'DDRCS1_4.BIN',
-                        'DDRCS1_5.BIN']
-
-DDR_FILE_NAMES = ['DDRCS0.BIN', 'DDRCS1.BIN', 'DDRCS0_0.BIN',
-                  'DDRCS1_0.BIN', 'DDRCS0_1.BIN', 'DDRCS1_1.BIN',
-                  'DDR_0.BIN', 'DDR_1.BIN', 'DDR_2.BIN', 'DDR_3.BIN',
-                  'RESET_INFO.BIN']
-OTHER_DUMP_FILE_NAMES = ['PIMEM.BIN', 'OCIMEM.BIN','md_shared_imem.BIN',
-                         'md_smem_info.BIN']
-RAM_FILE_NAMES = set(DDR_FILE_NAMES +
-                     OTHER_DUMP_FILE_NAMES +
-                     first_mem_file_names +
-                     extra_mem_file_names)
-
+def is_ramdump_file(val):
+    ddr = re.compile(r'(DDR|EBI)[0-9_CS]+[.]BIN', re.IGNORECASE)
+    imem = re.compile(r'.*IMEM.BIN', re.IGNORECASE)
+    if ddr.match(val) or imem.match(val):
+        return True
+    return False
 
 class AutoDumpInfo(object):
     priority = 0
@@ -78,9 +66,7 @@ class AutoDumpInfo(object):
             self.ebi_files.append((open(fullpath, 'rb'), base_addr, end, fullpath))
             # sort by addr, DDR files first. The goal is for
             # self.ebi_files[0] to be the DDR file with the lowest address.
-            self.ebi_files.sort(
-                key=lambda x: (os.path.basename(x[-1]) not in DDR_FILE_NAMES,
-                               x[1]))
+            self.ebi_files.sort(key=lambda x: (x[1]))
 
     def _parse(self):
         # Implementations should return an interable of (filename, base_addr)
@@ -98,7 +84,7 @@ class AutoDumpInfoCMM(AutoDumpInfo):
         with open(os.path.join(self.autodumpdir, filename)) as f:
             for line in f.readlines():
                 words = line.split()
-                if len(words) == 4 and words[1] in RAM_FILE_NAMES:
+                if len(words) == 4 and is_ramdump_file(words[1]):
                     fname = words[1]
                     start = int(words[2], 16)
                     yield fname, start
@@ -117,7 +103,7 @@ class AutoDumpInfoDumpInfoTXT(AutoDumpInfo):
         with open(os.path.join(self.autodumpdir, filename)) as f:
             for line in f.readlines():
                 words = line.split()
-                if not words or words[-1] not in RAM_FILE_NAMES:
+                if not words or not is_ramdump_file(words[-1]):
                     continue
                 fname = words[-1]
                 start = int(words[1], 16)
@@ -543,6 +529,10 @@ class RamDump():
         self.autodump = options.autodump
         self.module_table = module_table.module_table_class()
         self.module_table.setup_sym_path(options.sym_path)
+        self.dump_module_symbol_table = options.dump_module_symbol_table
+        self.dump_kernel_symbol_table = options.dump_kernel_symbol_table
+        self.dump_module_kallsyms = options.dump_module_kallsyms
+        self.dump_global_symbol_table = options.dump_global_symbol_table
         self.currentEL = options.currentEL or None
         if self.minidump:
             try:
@@ -722,6 +712,8 @@ class RamDump():
         if self.module_table.sym_path_exists():
             self.setup_module_symbols()
             self.gdbmi.setup_module_table(self.module_table)
+            if self.dump_global_symbol_table:
+                self.dump_global_symbol_lookup_table()
 
     def __del__(self):
         self.gdbmi.close()
@@ -802,8 +794,7 @@ class RamDump():
         return self.config_dict.get(config)
 
     def is_config_defined(self, config):
-        s = config + '=y'
-        return s in self.config
+        return config in self.config_dict
 
     def kernel_virt_to_phys(self, addr):
         if self.minidump:
@@ -1013,9 +1004,9 @@ class RamDump():
                 if self.mmu is None:
                     mmu_enabled = 0
                 startup_script.write(
-                    'PER.S.F C15:0x1 %L 0x{0:x}\n'.format(mmu_enabled).encode('ascii', 'ignore'))
+                    'PER.S.simple C15:0x1 %L 0x{0:x}\n'.format(mmu_enabled).encode('ascii', 'ignore'))
                 startup_script.write(
-                    'PER.S.F C15:0x2 %L 0x{0:x}\n'.format(self.mmu.ttbr).encode('ascii', 'ignore'))
+                    'PER.S.simple C15:0x2 %L 0x{0:x}\n'.format(self.mmu.ttbr).encode('ascii', 'ignore'))
                 if isinstance(self.mmu, Armv7LPAEMMU):
                     # TTBR1. This gets setup once and never change again even if TTBR0
                     # changes
@@ -1214,7 +1205,10 @@ class RamDump():
                 print_out_str(
                     '!!! A bogus hardware id was specified: {0}'.format(self.hw_id))
                 print_out_str('!!! Supported ids:')
-                for b in get_supported_ids():
+                ids = get_supported_ids()
+                if not len(ids):
+                    print_out_str('!!! No registered Boards found - check extensions/board_def.py')
+                for b in ids:
                     print_out_str('    {0}'.format(b))
                 sys.exit(1)
 
@@ -1290,6 +1284,9 @@ class RamDump():
             print_out_str('!!! Unable to retrieve symbols... Exiting')
             sys.exit(1)
 
+        if self.dump_kernel_symbol_table:
+            self.dump_mod_sym_table('vmlinux', self.lookup_table)
+
     def retrieve_modules(self):
         mod_list = self.address_of('modules')
         next_offset = self.field_offset('struct list_head', 'next')
@@ -1301,6 +1298,8 @@ class RamDump():
         else:
             module_core_offset = self.field_offset('struct module', 'module_core')
 
+        kallsyms_offset = self.field_offset('struct module', 'kallsyms')
+
         next_list_ent = self.read_pointer(mod_list + next_offset)
         while next_list_ent != mod_list:
             mod_tbl_ent = module_table.module_table_entry()
@@ -1308,37 +1307,120 @@ class RamDump():
             name_ptr = module + name_offset
             mod_tbl_ent.name = self.read_cstring(name_ptr)
             mod_tbl_ent.module_offset = self.read_pointer(module + module_core_offset)
+            mod_tbl_ent.kallsyms_addr = self.read_pointer(module + kallsyms_offset)
             self.module_table.add_entry(mod_tbl_ent)
             next_list_ent = self.read_pointer(next_list_ent + next_offset)
 
     def parse_symbols_of_one_module(self, mod_tbl_ent, sym_path):
         if not mod_tbl_ent.set_sym_path( os.path.join(sym_path, mod_tbl_ent.name + '.ko') ):
             return
-        stream = os.popen(self.nm_path + ' -n ' + mod_tbl_ent.get_sym_path())
-        symbols = stream.readlines()
 
-        for line in symbols:
-            s = line.split(' ')
-            if len(s) == 3:
-                mod_tbl_ent.sym_lookup_table.append(
-                    (int(s[0], 16) + mod_tbl_ent.module_offset,
-                    s[2].rstrip() + '[' + mod_tbl_ent.name + ']'))
-        stream.close()
+        if self.is_config_defined("CONFIG_KALLSYMS"):
+            symtab_offset = self.field_offset('struct mod_kallsyms', 'symtab')
+            num_symtab_offset = self.field_offset('struct mod_kallsyms', 'num_symtab')
+            strtab_offset = self.field_offset('struct mod_kallsyms', 'strtab')
+
+            if self.arm64:
+                sym_struct_name = 'struct elf64_sym'
+            else:
+                sym_struct_name = 'struct elf32_sym'
+
+            st_info_offset = self.field_offset(sym_struct_name, 'st_info')
+            symtab = self.read_pointer(mod_tbl_ent.kallsyms_addr + symtab_offset)
+            num_symtab = self.read_pointer(mod_tbl_ent.kallsyms_addr + num_symtab_offset)
+            strtab = self.read_pointer(mod_tbl_ent.kallsyms_addr + strtab_offset)
+
+            if symtab is None or num_symtab is None or strtab is None:
+                return
+
+            KSYM_NAME_LEN = 128
+            for i in range(0, num_symtab):
+                elf_sym = symtab + self.sizeof(sym_struct_name) * i
+                st_value = self.read_structure_field(elf_sym, sym_struct_name, 'st_value')
+                st_info = self.read_byte(elf_sym + st_info_offset)
+                sym_type = chr(st_info)
+                st_name = self.read_structure_field(elf_sym, sym_struct_name, 'st_name')
+                sym_addr = st_value
+                sym_name = self.read_cstring(strtab + st_name, KSYM_NAME_LEN)
+                st_shndx = self.read_structure_field(elf_sym, sym_struct_name, 'st_shndx')
+                st_size = self.read_structure_field(elf_sym, sym_struct_name, 'st_size')
+
+                ###
+                # FORMAT of record:
+                # sym_addr, syn_name[mod_name], sym_type, idx_elf_sym, st_name, st_shndx, st_size
+                ###
+                if sym_addr:
+                    # when sym_addr is 0, it means the symbol is undefined
+                    # will not add undefined symbols here to avoid address 0x0
+                    # being treated as belonging to a particular kernel module
+                    mod_tbl_ent.kallsyms_table.append(
+                        (sym_addr, sym_name + '[' + mod_tbl_ent.name + ']', sym_type, i,
+                         st_name, st_shndx, st_size))
+            mod_tbl_ent.kallsyms_table.sort()
+            if self.dump_module_kallsyms:
+                self.dump_mod_kallsyms_sym_table(mod_tbl_ent.name, mod_tbl_ent.kallsyms_table)
+        else:
+            stream = os.popen(self.nm_path + ' -n ' + mod_tbl_ent.get_sym_path())
+            symbols = stream.readlines()
+
+            for line in symbols:
+                s = line.split(' ')
+                if len(s) == 3:
+                    mod_tbl_ent.sym_lookup_table.append(
+                        (int(s[0], 16) + mod_tbl_ent.module_offset,
+                        s[2].rstrip() + '[' + mod_tbl_ent.name + ']'))
+            stream.close()
+            mod_tbl_ent.sym_lookup_table.sort()
+            if self.dump_module_symbol_table:
+                self.dump_mod_sym_table(mod_tbl_ent.name, mod_tbl_ent.sym_lookup_table)
 
     def parse_module_symbols(self):
         for mod_tbl_ent in self.module_table.module_table:
             self.parse_symbols_of_one_module(mod_tbl_ent, self.module_table.sym_path)
 
     def add_symbols_to_global_lookup_table(self):
-        for mod_tbl_ent in self.module_table.module_table:
-            for sym in mod_tbl_ent.sym_lookup_table:
-                self.lookup_table.append(sym)
+        if self.is_config_defined("CONFIG_KALLSYMS"):
+            for mod_tbl_ent in self.module_table.module_table:
+                for sym in mod_tbl_ent.kallsyms_table:
+                    self.lookup_table.append((sym[0], sym[1]))
+        else:
+            for mod_tbl_ent in self.module_table.module_table:
+                for sym in mod_tbl_ent.sym_lookup_table:
+                    self.lookup_table.append(sym)
         self.lookup_table.sort()
 
     def setup_module_symbols(self):
         self.retrieve_modules()
         self.parse_module_symbols();
         self.add_symbols_to_global_lookup_table()
+
+    def dump_mod_sym_table(self, mod_name, sym_lookup_tbl):
+        sym_dump_file = self.open_file('sym_tbl_'+mod_name+'.txt')
+        for line in sym_lookup_tbl:
+            sym_dump_file.write('0x{0:x} {1}\n'.format(line[0], line[1]))
+        sym_dump_file.close()
+
+    def dump_mod_kallsyms_sym_table(self, mod_name, mod_kallsyms_table):
+        kallsyms_header_format = '{0: >18} {1} {2: >64} {3} {4} {5} {6}\n'
+        kallsyms_record_format = '0x{0:0>16x} {1: >8} {2: >64} {3: >11} {4: >7} {5: >8} {6: >7}\n'
+        kallsyms_file = self.open_file('sym_tbl_kallsyms_'+mod_name+'.txt')
+        kallsyms_file.write('KALLSYMS symbol lookup table['+mod_name+']\n')
+        kallsyms_file.write(
+            kallsyms_header_format.format(
+                'sym_addr', 'sym_type', 'syn_name[mod_name]', 'idx_elf_sym',
+                'st_name', 'st_shndx', 'st_size'))
+        for mod_sym_line in mod_kallsyms_table:
+            kallsyms_file.write(
+                kallsyms_record_format.format(
+                    mod_sym_line[0], mod_sym_line[2], mod_sym_line[1], mod_sym_line[3],
+                    hex(mod_sym_line[4]), mod_sym_line[5], mod_sym_line[6]))
+        kallsyms_file.close()
+
+    def dump_global_symbol_lookup_table(self):
+        sym_dump_file = self.open_file('sym_table.txt')
+        for line in self.lookup_table:
+            sym_dump_file.write('0x{0:x} {1}\n'.format(line[0], line[1]))
+        sym_dump_file.close()
 
     def address_of(self, symbol):
         """Returns the address of a symbol.
