@@ -44,6 +44,8 @@ linux-parser-output.txt is used
 
 --qtf-path <path> : QTF tool executable
 
+--timeout <timeout valye in secs>: each parser will be terminated within given time limit value
+
 The list of features parsed is constantly growing. Please use --help option
 to see the full list of features that can be parsed.
 
@@ -77,6 +79,8 @@ specify the paths to these tools. This can be done in three ways
     - After download the zip file, you will find a folder pyelftools-master.
     - Inside this folder you will find another folder named "elftools"
 	- copy that entire folder and paste it in below directory <installed Python path>\Lib\site-packages
+5) for --timeout option please do 'pip install func_timeout'
+    https://pypi.org/project/func-timeout/
 
 Just having gdb/nm on the path is not supported as there are too many
 variations on names to invoke.
