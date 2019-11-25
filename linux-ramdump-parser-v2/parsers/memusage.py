@@ -1,4 +1,4 @@
-# Copyright (c) 2016-2018 The Linux Foundation. All rights reserved.
+# Copyright (c) 2016-2019 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -11,6 +11,27 @@
 
 from print_out import print_out_str
 from parser_util import register_parser, RamParser, cleanupString
+from linux_list import ListWalker
+
+
+""" Returns number of pages """
+def get_shmem_swap_usage(ramdump):
+    shmem_swaplist = ramdump.address_of("shmem_swaplist")
+    if not shmem_swaplist:
+        return 0
+
+    offset = ramdump.field_offset('struct shmem_inode_info', 'swaplist')
+    if not offset:
+        return 0
+
+    iter = ListWalker(ramdump, shmem_swaplist, offset)
+
+    total = 0
+    for shmem_inode_info in iter:
+        total += ramdump.read_structure_field(
+                    shmem_inode_info, 'struct shmem_inode_info', 'swapped')
+
+    return total
 
 
 def do_dump_process_memory(ramdump):
@@ -32,6 +53,7 @@ def do_dump_process_memory(ramdump):
                             'vm_zone_stat[NR_SLAB_UNRECLAIMABLE]')
         total_shmem = ramdump.read_word('vm_node_stat[NR_SHMEM]')
 
+    total_shmem_swap = get_shmem_swap_usage(ramdump)
     total_slab = slab_rec + slab_unrec
     total_mem = ramdump.read_word('totalram_pages') * 4
     offset_comm = ramdump.field_offset('struct task_struct', 'comm')
@@ -49,8 +71,10 @@ def do_dump_process_memory(ramdump):
             slab_unrec * 4, (100.0 * slab_unrec * 4) / total_mem))
     memory_file.write('Total Slab memory: {0:,}kB({1:.1f}%)\n'.format(
             total_slab * 4, (100.0 * total_slab * 4) / total_mem))
-    memory_file.write('Total SHMEM: {0:,}kB({1:.1f}%)\n\n'.format(
+    memory_file.write('Total SHMEM (PAGECACHE): {0:,}kB({1:.1f}%)\n'.format(
         total_shmem * 4, (100.0 * total_shmem * 4) / total_mem))
+    memory_file.write('Total SHMEM (SWAP): {0:,}kB({1:.1f}%)\n\n'.format(
+        total_shmem_swap * 4, (100.0 * total_shmem_swap * 4) / total_mem))
 
     for task in ramdump.for_each_process():
         next_thread_comm = task + offset_comm
@@ -70,12 +94,15 @@ def do_dump_process_memory(ramdump):
             task_info.append([thread_task_name, thread_task_pid, rss, swap, rss + swap, adj])
 
     task_info = sorted(task_info, key=lambda l: l[4], reverse=True)
-    str = '{0:<17s}{1:>8s}{2:>19s}{3:>12s}{4:>8}\n'.format(
+    str = '{0:<17s}{1:>8s}{2:>19s}{3:>19s}{4:>6}\n'.format(
         'Task name', 'PID', 'RSS in kB', 'SWAP in kB', 'ADJ')
     memory_file.write(str)
     for item in task_info:
-        str = '{0:<17s}{1:8d}{2:13,d}({4:2.1f}%){3:13,d} {5:6}\n'.format(
-            item[0], item[1], item[2], item[3], (100.0 * item[2]) / total_mem, item[5])
+        str = '{taskname:<17s}{pid:8d}{rss:13,d}({rss_pct:2.1f}%){swap:13,d}({swap_pct:2.1f}%){adj:6}\n'.format(
+            taskname = item[0], pid = item[1],
+            rss = item[2], rss_pct = (100.0 * item[2]) / total_mem,
+            swap = item[3], swap_pct = (100.0 * item[3]) / total_mem,
+            adj = item[5])
         memory_file.write(str)
     memory_file.close()
     print_out_str('---wrote meminfo to memory.txt')

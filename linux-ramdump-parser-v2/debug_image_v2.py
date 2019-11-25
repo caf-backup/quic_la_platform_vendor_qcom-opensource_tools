@@ -34,7 +34,7 @@ from sysregs import SysRegDump
 from fcmdump import FCM_Dump
 
 MEMDUMPV2_MAGIC = 0x42445953
-MAX_NUM_ENTRIES = 0x150
+MAX_NUM_ENTRIES = 0x162
 IMEM_OFFSET_MEM_DUMP_TABLE = 0x3f010
 
 class client(object):
@@ -52,6 +52,7 @@ class client(object):
     MSM_DUMP_DATA_VSENSE = 0xE9
     MSM_DUMP_DATA_TMC_ETF = 0xF0
     MSM_DUMP_DATA_TMC_ETF_SWAO = 0xF1
+    MSM_DUMP_DATA_TMC_REG = 0x100
     MSM_DUMP_DATA_TMC_ETR_REG = 0x100
     MSM_DUMP_DATA_TMC_ETF_REG = 0x101
     MSM_DUMP_DATA_TMC_ETF_SWAO_REG = 0x102
@@ -59,9 +60,12 @@ class client(object):
     MSM_DUMP_DATA_LOG_BUF_FIRST_IDX = 0x111
     MSM_DUMP_DATA_L2_TLB = 0x120
     MSM_DUMP_DATA_SCANDUMP = 0xEB
+    MSM_DUMP_DATA_RPMH = 0xEC
     MSM_DUMP_DATA_FCMDUMP = 0xEE
+    MSM_DUMP_DATA_CPUSS = 0xEF
     MSM_DUMP_DATA_SCANDUMP_PER_CPU = 0x130
     MSM_DUMP_DATA_LLC_CACHE = 0x140
+    MSM_DUMP_DATA_MHM = 0x161
     MSM_DUMP_DATA_MAX = MAX_NUM_ENTRIES
 
 # Client functions will be executed in top-to-bottom order
@@ -69,6 +73,7 @@ client_types = [
     ('MSM_DUMP_DATA_SCANDUMP', 'parse_scandump'),
     ('MSM_DUMP_DATA_SCANDUMP_PER_CPU', 'parse_scandump'),
     ('MSM_DUMP_DATA_FCMDUMP', 'parse_fcmdump'),
+    ('MSM_DUMP_DATA_CPUSS', 'parse_cpuss'),
     ('MSM_DUMP_DATA_CPU_CTX', 'parse_cpu_ctx'),
     ('MSM_DUMP_DATA_L1_INST_TLB', 'parse_tlb_common'),
     ('MSM_DUMP_DATA_L1_DATA_TLB', 'parse_tlb_common'),
@@ -90,6 +95,7 @@ client_types = [
     ('MSM_DUMP_DATA_L2_TLB', 'parse_tlb_common'),
     ('MSM_DUMP_DATA_LLC_CACHE', 'parse_system_cache_common'),
     ('MSM_DUMP_DATA_MISC', 'parse_sysdbg_regs'),
+    ('MSM_DUMP_DATA_MHM', 'parse_mhm_dump')
 ]
 
 qdss_tag_to_field_name = {
@@ -128,7 +134,7 @@ class DebugImage_v2():
         self.qdss = QDSSDump()
         self.dump_type_lookup_table = []
         self.dump_table_id_lookup_table = []
-        self.dump_data_id_lookup_table  = []
+        self.dump_data_id_lookup_table  = {}
         version = re.findall(r'\d+', ramdump.version)
         if int(version[0]) > 3:
             self.event_call = 'struct trace_event_call'
@@ -177,6 +183,27 @@ class DebugImage_v2():
             sv2.dump_core_pc(ram_dump)
             sv2.dump_all_regs(ram_dump)
         return
+    def parse_cpuss(self, version, start, end, client_id, ram_dump):
+        client_name = self.dump_data_id_lookup_table[client_id]
+        cpuss_file_prefix = "cpuss_reg_dump.xml"
+        print_out_str(
+                'Parsing {0} context start {1:x} end {2:x}'.format(client_name, start, end))
+        try:
+            cpuss_parser_path = local_settings.cpuss_parser_path
+            cpuss_parser_json = local_settings.cpuss_parser_json
+         except AttributeError:
+            print_out_str('Could not find cpuss_parser_path . Please define cpuss_parser_path in local_settings')
+            return
+        offset = None
+        for eb_file in ram_dump.ebi_files:
+            if start >= eb_file[1] and start <= eb_file[2]:
+                input = eb_file[3]
+                offset = start - eb_file[1]
+                break
+        if offset is None:
+            print_out_str("parse_cpuss start address {0} not found".format(start))
+        print_out_str("parse_cpuss offset address = {0} input = {1} cpuss_parser_json = {2}".format(hex(int(offset)),input,cpuss_parser_json))
+        subprocess.call('python {0} -i {1} -O {2} -o {3} -j {4}'.format(cpuss_parser_path, input, hex(int(offset)), ram_dump.outdir, cpuss_parser_json))
 
     def parse_fcmdump(self, version, start, end, client_id, ram_dump):
         client_name = self.dump_data_id_lookup_table[client_id]
@@ -613,17 +640,15 @@ class DebugImage_v2():
             client_entry = table + j * dump_entry_size
             client_id = ram_dump.read_u32(
                             client_entry + dump_entry_id_offset, False)
-
-            if (client_id < 0 or
-                    client_id >= len(self.dump_data_id_lookup_table)):
+            if client_id in self.dump_data_id_lookup_table:
+                client_name = self.dump_data_id_lookup_table[client_id]
+                if client_name not in client_table:
+                    print_out_str(
+                        '!!! client_id = {0} client_name = {1} Does not have an associated function. Skipping!'.format(client_id,client_name))
+                    continue
+            else:
                 print_out_str(
                     '!!! Invalid dump client id found {0:x}'.format(client_id))
-                continue
-
-            client_name = self.dump_data_id_lookup_table[client_id]
-            if client_name not in client_table:
-                print_out_str(
-                    '!!! {0} Does not have an associated function. Skipping!'.format(client_name))
                 continue
 
             results.append((client_name, client_table[client_name], client_entry))
@@ -645,7 +670,22 @@ class DebugImage_v2():
 
         results.append((client_name, client_id,client_table[client_name], entry_pa_addr,end_addr))
         return results
-
+    def parse_mhm_dump(self, version, start, end, client_id, ram_dump):
+        if ram_dump.arm64:
+            arch = "aarch64"
+        else:
+            arch = "aarch32"
+        if client_id == client.MSM_DUMP_DATA_MHM:
+            input = os.path.join(ram_dump.outdir, "mhm_scandump.bin")
+        print_out_str(
+            'Parsing mhm dump start {0:x} end {1:x} {2}'.format(start, end, input))
+        header_bin = ram_dump.open_file(input)
+        it = range(start, end)
+        for i in it:
+            val = ram_dump.read_byte(i, False)
+            header_bin.write(struct.pack("<B", val))
+        header_bin.close()
+        return
     class MsmDumpTable(object):
         def __init__(self):
             self.name = "Anon"
@@ -685,11 +725,9 @@ class DebugImage_v2():
             'msm_dump_type', 2)
         self.dump_table_id_lookup_table = ram_dump.gdbmi.get_enum_lookup_table(
             'msm_dump_table_ids', MAX_NUM_ENTRIES)
-        self.dump_data_id_lookup_table = ram_dump.gdbmi.get_enum_lookup_table(
-            'msm_dump_data_ids', MAX_NUM_ENTRIES)
         cpus = ram_dump.get_num_cpus()
         # per cpu entries
-        for i in range(1, cpus):
+        for i in range(0, cpus):
 
                 self.dump_data_id_lookup_table[
                     client.MSM_DUMP_DATA_CPU_CTX + i] = 'MSM_DUMP_DATA_CPU_CTX'
@@ -704,6 +742,8 @@ class DebugImage_v2():
                 self.dump_data_id_lookup_table[
                     client.MSM_DUMP_DATA_L2_CACHE + i] = 'MSM_DUMP_DATA_L2_CACHE'
                 self.dump_data_id_lookup_table[
+                    client.MSM_DUMP_DATA_L3_CACHE + i] = 'MSM_DUMP_DATA_L3_CACHE'
+                self.dump_data_id_lookup_table[
                     client.MSM_DUMP_DATA_ETM_REG + i] = 'MSM_DUMP_DATA_ETM_REG'
                 self.dump_data_id_lookup_table[
                     client.MSM_DUMP_DATA_SCANDUMP_PER_CPU + i] = 'MSM_DUMP_DATA_SCANDUMP_PER_CPU'
@@ -711,9 +751,33 @@ class DebugImage_v2():
         for i in range(0, 4):
                 self.dump_data_id_lookup_table[
                     client.MSM_DUMP_DATA_LLC_CACHE + i] = 'MSM_DUMP_DATA_LLC_CACHE'
+        self.dump_data_id_lookup_table[
+            client.MSM_DUMP_DATA_OCMEM] = 'MSM_DUMP_DATA_OCMEM'
+        self.dump_data_id_lookup_table[
+            client.MSM_DUMP_DATA_DBGUI_REG] = 'MSM_DUMP_DATA_DBGUI_REG'
+        self.dump_data_id_lookup_table[
+            client.MSM_DUMP_DATA_MISC] = 'MSM_DUMP_DATA_MISC'
+        self.dump_data_id_lookup_table[
+            client.MSM_DUMP_DATA_VSENSE] = 'MSM_DUMP_DATA_VSENSE'
+        self.dump_data_id_lookup_table[
+            client.MSM_DUMP_DATA_TMC_ETF] = 'MSM_DUMP_DATA_TMC_ETF'
+        self.dump_data_id_lookup_table[
+            client.MSM_DUMP_DATA_TMC_ETF_SWAO] = 'MSM_DUMP_DATA_TMC_ETF_SWAO'
+        self.dump_data_id_lookup_table[
+            client.MSM_DUMP_DATA_TMC_ETF_REG] = 'MSM_DUMP_DATA_TMC_ETF_REG'
+        self.dump_data_id_lookup_table[
+            client.MSM_DUMP_DATA_SCANDUMP] = 'MSM_DUMP_DATA_SCANDUMP'
+        self.dump_data_id_lookup_table[
+            client.MSM_DUMP_DATA_LLC_CACHE] = 'MSM_DUMP_DATA_LLC_CACHE'
+        self.dump_data_id_lookup_table[
+            client.MSM_DUMP_DATA_TMC_ETF_SWAO_REG] = 'MSM_DUMP_DATA_TMC_ETF_SWAO_REG'
+        self.dump_data_id_lookup_table[
+            client.MSM_DUMP_DATA_TMC_REG] = 'MSM_DUMP_DATA_TMC_REG'
 
         self.dump_data_id_lookup_table[
             client.MSM_DUMP_DATA_FCMDUMP] = 'MSM_DUMP_DATA_FCMDUMP'
+        self.dump_data_id_lookup_table[
+            client.MSM_DUMP_DATA_CPUSS] = 'MSM_DUMP_DATA_CPUSS'
         # 0x100 - tmc-etr registers and 0x101 - for tmc-etf registers
         self.dump_data_id_lookup_table[
             client.MSM_DUMP_DATA_TMC_ETR_REG + 1] = 'MSM_DUMP_DATA_TMC_ETR_REG'
@@ -721,6 +785,8 @@ class DebugImage_v2():
             client.MSM_DUMP_DATA_LOG_BUF] = 'MSM_DUMP_DATA_LOG_BUF'
         self.dump_data_id_lookup_table[
             client.MSM_DUMP_DATA_LOG_BUF_FIRST_IDX] = 'MSM_DUMP_DATA_LOG_BUF_FIRST_IDX'
+        self.dump_data_id_lookup_table[
+            client.MSM_DUMP_DATA_MHM] = 'MSM_DUMP_DATA_MHM'
 	for i in range(0, cpus):
 		self.dump_data_id_lookup_table[
 		    client.MSM_DUMP_DATA_L2_TLB + i] = 'MSM_DUMP_DATA_L2_TLB'
@@ -902,16 +968,16 @@ class DebugImage_v2():
                 if entry_pa_addr in ram_dump.ebi_pa_name_map:
                     section_name = ram_dump.ebi_pa_name_map[entry_pa_addr]
                     section_name = re.sub("\d+", "", section_name)
-                    if section_name in minidump_dump_table_value.values():
-                        lst = self.minidump_data_clients(
-                            ram_dump, entry_id,entry_pa_addr,end_addr)
-                        if lst:
-                            client_name, client_id,func,\
-                                client_entry,client_end = lst[0]
-                            print_out_str('--------')
-                            getattr(DebugImage_v2, func)(
-                                self, 20, client_entry,
-                                client_end, client_id, ram_dump)
+                    #if section_name in minidump_dump_table_value.values():
+                    lst = self.minidump_data_clients(
+                        ram_dump, entry_id,entry_pa_addr,end_addr)
+                    if lst:
+                        client_name, client_id,func,\
+                            client_entry,client_end = lst[0]
+                        print_out_str('--------')
+                        getattr(DebugImage_v2, func)(
+                            self, 20, client_entry,
+                            client_end, client_id, ram_dump)
 
         self.parse_dcc(ram_dump)
         if ram_dump.sysreg:
