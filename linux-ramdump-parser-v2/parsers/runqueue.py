@@ -1,4 +1,4 @@
-# Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
+# Copyright (c) 2013-2019, The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -40,7 +40,10 @@ class RunQueues(RamParser):
     def print_task_state(self, status, task_addr):
         pid_offset = self.ramdump.field_offset('struct task_struct', 'pid')
         comm_offset = self.ramdump.field_offset('struct task_struct', 'comm')
-        affinity_offset = self.ramdump.field_offset('struct task_struct', 'cpus_allowed')
+        if self.ramdump.kernel_version > (5, 2, 0):
+            affinity_offset = self.ramdump.field_offset('struct task_struct', 'cpus_mask')
+        else:
+            affinity_offset = self.ramdump.field_offset('struct task_struct', 'cpus_allowed')
 
         if 0 < task_addr:
             pid = self.ramdump.read_int(task_addr + pid_offset)
