@@ -22,6 +22,8 @@ def parse_locat(ramdump):
     dentry_offset = ramdump.field_offset('struct path', 'dentry')
     d_iname_offset = ramdump.field_offset('struct dentry', 'd_iname')
 
+    logdaddr = 0
+    limit_size = int("0x20000000", 16)
     for task in ramdump.for_each_process():
         task_name = task + offset_comm
         task_name = cleanupString(ramdump.read_cstring(task_name, 16))
@@ -32,47 +34,89 @@ def parse_locat(ramdump):
             pgd = ramdump.read_structure_field(mm_addr, 'struct mm_struct',
                                                'pgd')
             pgdp = ramdump.virt_to_phys(pgd)
-            va_start = ramdump.read_structure_field(mmap,
-                                    'struct vm_area_struct', 'vm_start')
+            min = ramdump.read_structure_field(
+                                   mmap, 'struct vm_area_struct', 'vm_start')
             max = 0
             count = 0
-            while mmap != 0:
-                if count == 3:
-                    va_start = ramdump.read_structure_field(mmap,
-                                        'struct vm_area_struct', 'vm_start')
-                    count = count + 1
-                file = ramdump.read_structure_field(mmap,
-                                        'struct vm_area_struct', 'vm_file')
+            logdcount = 0
+            logdmap = mmap
+
+            # 3 logd vm_area, then heap
+            # 4 logd + 1 bss, then heap in case of Android Q
+            while logdmap != 0:
+                tmpstartVm = ramdump.read_structure_field(
+                                logdmap, 'struct vm_area_struct', 'vm_start')
+                file = ramdump.read_structure_field(
+                                logdmap, 'struct vm_area_struct', 'vm_file')
+
                 if file != 0:
                     dentry = ramdump.read_word(file + f_path_offset +
                                                dentry_offset)
-                    file_name = cleanupString(ramdump.read_cstring(dentry +
-                                            d_iname_offset, 16))
+                    file_name = cleanupString(ramdump.read_cstring(
+                                            dentry + d_iname_offset, 16))
+                    if file_name == "logd":
+                        logdcount = logdcount + 1
+                        if logdcount == 1:
+                            logdaddr = ramdump.read_structure_field(
+                                  logdmap, 'struct vm_area_struct', 'vm_start')
+                            logdaddr = (logdaddr & 0xFFFF000000) >> 0x18
+                elif logdaddr != 0:
+                    checkaddr = tmpstartVm >> 0x18
+                    if checkaddr == logdaddr:
+                        logdcount = logdcount + 1
+                logdmap = ramdump.read_structure_field(
+                                   logdmap, 'struct vm_area_struct', 'vm_next')
+
+            if logdcount < 3:
+                print "found logd region {0} is smaller than expected. set " \
+                      "logdcount to 3".format(logdcount)
+                logdcount = 3
+
+            tmpstartVm = 0
+            while mmap != 0:
+                tmpstartVm = ramdump.read_structure_field(
+                                    mmap, 'struct vm_area_struct', 'vm_start')
+                if count == logdcount:
+                    min = tmpstartVm
+                    count = count + 1  # do not enter here again
+
+                file = ramdump.read_structure_field(
+                                mmap, 'struct vm_area_struct', 'vm_file')
+                if file != 0:
+                    dentry = ramdump.read_word(file + f_path_offset +
+                                               dentry_offset)
+                    file_name = cleanupString(ramdump.read_cstring(
+                                            dentry + d_iname_offset, 16))
                     if file_name == "logd":
                         count = count + 1
                     if file_name.find("linker") == 0:
-                        va_end = ramdump.read_structure_field(mmap,
-                                            'struct vm_area_struct', 'vm_end')
+                        va_end = ramdump.read_structure_field(
+                                       mmap, 'struct vm_area_struct', 'vm_end')
                         if va_end > max:
                             max = va_end
-                mmap = ramdump.read_structure_field(mmap, 'struct '
-                                                'vm_area_struct', 'vm_next')
-            size = max - va_start
-            if size > 0x4000000:
-                size = 0x4000000
+                elif logdaddr != 0:
+                    checkaddr = (tmpstartVm) >> 0x18
+                    if checkaddr == logdaddr:
+                        count = count + 1
+                mmap = ramdump.read_structure_field(
+                                    mmap, 'struct vm_area_struct', 'vm_next')
+            size = max - min
+            if size > limit_size:
+                size = limit_size
             break
-    mmu = Armv8MMU(ramdump,pgdp)
-    print_out_str("logcat.bin base address is {0:x}".format(va_start))
+
+    mmu = Armv8MMU(ramdump, pgdp)
+    print_out_str("logcat.bin base address is {0:x}".format(min))
     with ramdump.open_file("logcat.bin", 'ab') as out_file:
-        max = va_start + size
-        while(va_start <= max):
-            phys = mmu.virt_to_phys(va_start)
+        max = min + size
+        while(min <= max):
+            phys = mmu.virt_to_phys(min)
             if phys is None:
-                va_start = va_start + 0x1000
+                min = min + 0x1000
                 out_file.write(b'\x00' * 0x1000)
                 continue
             out_file.write(ramdump.read_physical(phys, 0x1000))
-            va_start = va_start + 0x1000
+            min = min + 0x1000
     return
 
 

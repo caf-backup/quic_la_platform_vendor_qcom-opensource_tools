@@ -37,6 +37,29 @@ def cleanupString(unclean_str):
     else:
         return ''.join([c for c in unclean_str if c in string.printable])
 
+def import_all_by_path(path):
+    """Imports everyone under the given directory. It is expected that
+    the modules under the given directory will register themselves with
+    one of the decorators below.
+
+    Note that the import is effectively a noop if the module has already
+    been imported, so there's no harm in calling with the same path
+    multiple times"""
+
+    dir = os.path.join(os.path.dirname(__file__), path)
+    if not os.path.isdir(dir):
+        return
+
+    package = path.replace(os.sep, '.')
+    for f in sorted(glob.glob(os.path.join(dir, '*.py'))):
+        modname_ext = os.path.basename(f)
+        if modname_ext == '__init__.py':
+            continue
+
+        modname = os.path.splitext(modname_ext)[0]
+        __import__(package + '.' + modname)
+
+
 def register_parser(longopt, desc, shortopt=None, optional=False):
     """Decorator for registering a parser class.
 
@@ -94,20 +117,9 @@ def get_parsers():
     of the importing.
 
     """
-    parsers_dir = os.path.join(os.path.dirname(__file__), 'parsers')
-    for f in sorted(glob.glob(os.path.join(parsers_dir, '*.py'))):
-        modname_ext = os.path.basename(f)
-        if modname_ext == '__init__.py':
-            continue
-        modname = 'parsers.' + os.path.splitext(modname_ext)[0]
-        # if the module contains a class (or classes) that are
-        # decorated with `register_parser' then the following import
-        # will have the side-effect of adding that class (encapsulated
-        # in a ParserConfig object) to the _parsers list. Note that
-        # this import is effectively a noop if the module has already
-        # been imported, so there's no harm in calling get_parsers
-        # multiple times.
-        __import__(modname)
+
+    import_all_by_path('parsers')
+    import_all_by_path(os.path.join('extensions','parsers'))
     return _parsers
 
 
