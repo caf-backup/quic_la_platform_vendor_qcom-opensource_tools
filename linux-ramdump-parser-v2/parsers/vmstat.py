@@ -27,8 +27,12 @@ class ZoneInfo(RamParser):
 
         zstats_addr = zone + \
             self.ramdump.field_offset('struct zone', 'vm_stat')
-        zwatermark_addr = zone + \
-            self.ramdump.field_offset('struct zone', 'watermark')
+        if (self.ramdump.kernel_version < (4, 19, 0)):
+            zwatermark_addr = zone + \
+                self.ramdump.field_offset('struct zone', 'watermark')
+        else:
+            zwatermark_addr = zone + \
+                self.ramdump.field_offset('struct zone', '_watermark')
 
         print_out_str('\nZone {0:8}'.format(zname))
         for i in xrange(0, max_zone_stats):
