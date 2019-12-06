@@ -248,11 +248,11 @@ class MemStats(RamParser):
         self.calculate_vmalloc()
 
         if type(ion_mem) is str:
-            accounted_mem = total_free + total_slab + kgsl_memory + \
+            accounted_mem = total_free + total_slab + kgsl_memory + stat_val + \
                             self.vmalloc_size + other_mem
         else:
             accounted_mem = total_free + total_slab + ion_mem + kgsl_memory + \
-                        self.vmalloc_size + other_mem
+                        stat_val + self.vmalloc_size + other_mem
 
         unaccounted_mem = total_mem - accounted_mem
 

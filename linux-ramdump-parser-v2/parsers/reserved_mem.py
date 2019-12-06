@@ -355,6 +355,28 @@ def parse_softirq_stat(ramdump):
         index = index + 1
 
 
+def do_parse_qsee_log(ramdump):
+    qsee_out = ramdump.open_file('qsee_log.txt')
+    g_qsee_log_addr = ramdump.address_of('g_qsee_log')
+    if g_qsee_log_addr is None:
+        print_out_str("!!! g_qsee_logs not found")
+        qsee_out.close()
+        return
+    try:
+        g_qsee_log_addr = ramdump.read_word(g_qsee_log_addr)
+    except Exception as e:
+        print_out_str('!!! Cannot read g_qsee_log_addr')
+        qsee_out.close()
+        return
+    log_buf_offset = ramdump.field_offset('struct tzdbg_log_t', 'log_buf')
+    log_buf_addr = g_qsee_log_addr + log_buf_offset
+    qsee_log_buf_size = 0x8000 ##define QSEE_LOG_BUF_SIZE 0x8000
+    qsee_log_data = ramdump.read_cstring(log_buf_addr, qsee_log_buf_size)
+    qsee_log_data = qsee_log_data.rstrip(' \t\r\n\0')
+    qsee_out.write(qsee_log_data)
+    qsee_out.close()
+
+
 @register_parser('--print-reserved-mem', 'Print reserved memory info ')
 class ReservedMem(RamParser):
 
@@ -378,3 +400,9 @@ class SoftirqStat(RamParser):
 
     def parse(self):
         parse_softirq_stat(self.ramdump)
+
+
+@register_parser('--print-qsee-log', 'Extract qsee com logs')
+class ParseQseeLog(RamParser):
+    def parse(self):
+        do_parse_qsee_log(self.ramdump)
