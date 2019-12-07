@@ -522,6 +522,7 @@ class RamDump():
         self.ipc_log_help = options.ipc_help
         self.use_stdout = options.stdout
         self.kernel_version = (0, 0, 0)
+        self.linux_banner = None
         self.minidump = options.minidump
         self.elffile = None
         self.ram_elf_file = None
@@ -605,17 +606,31 @@ class RamDump():
             self.page_offset = options.page_offset
         self.setup_symbol_tables()
 
-        va_bits = 39
-        modules_vsize = 0x08000000
-        self.va_start = (0xffffffffffffffff << va_bits) \
-            & 0xffffffffffffffff
-        if self.address_of("kasan_init") is None:
-            self.kasan_shadow_size = 0
-        else:
-            self.kasan_shadow_size = 1 << (va_bits - 3)
+        if self.get_kernel_version() > (4, 20, 0):
+            va_bits = 39
+            modules_vsize = 0x08000000
+            bpf_jit_vsize = 0x08000000
+            self.page_end = (0xffffffffffffffff << (va_bits - 1)) & 0xffffffffffffffff
+            if self.address_of("kasan_init") is None:
+                self.kasan_shadow_size = 0
+            else:
+                self.kasan_shadow_size = 1 << (va_bits - 3)
 
-        self.kimage_vaddr = self.va_start + self.kasan_shadow_size + \
-            modules_vsize
+            self.kimage_vaddr = self.page_end + self.kasan_shadow_size + modules_vsize + \
+                                bpf_jit_vsize
+        else:
+            va_bits = 39
+            modules_vsize = 0x08000000
+            self.va_start = (0xffffffffffffffff << va_bits) & 0xffffffffffffffff
+            if self.address_of("kasan_init") is None:
+                self.kasan_shadow_size = 0
+            else:
+                self.kasan_shadow_size = 1 << (va_bits - 3)
+
+            self.kimage_vaddr = self.va_start + self.kasan_shadow_size + \
+                                modules_vsize
+
+        print_out_str("Kernel version vmlinux: {0}".format(self.kernel_version))
         self.kimage_vaddr = self.kimage_vaddr + self.get_kaslr_offset()
         self.modules_end = self.page_offset
         if self.arm64:
@@ -695,7 +710,7 @@ class RamDump():
                 '!!! This is a BUG in the parser and should be reported.')
             sys.exit(1)
 
-        if not self.get_matched_version():
+        if not self.match_version():
             print_out_str('!!! Could not get the Linux version!')
             print_out_str(
                 '!!! Your vmlinux is probably wrong for these dumps')
@@ -753,9 +768,19 @@ class RamDump():
         kconfig_addr = self.address_of('kernel_config_data')
         if kconfig_addr is None:
             return
-        kconfig_size = self.sizeof('kernel_config_data')
-        # size includes magic, offset from it
-        kconfig_size = kconfig_size - 16 - 1
+        if self.kernel_version > (5, 0, 0):
+            kconfig_addr_end = self.address_of('kernel_config_data_end')
+            if kconfig_addr_end is None:
+                return
+            kconfig_size = kconfig_addr_end - kconfig_addr
+            # magic is 8 bytes before kconfig_addr and data
+            # starts at kconfig_addr for kernel > 5.0.0
+            kconfig_addr = kconfig_addr - 8
+        else:
+            kconfig_size = self.sizeof('kernel_config_data')
+            # size includes magic, offset from it
+            kconfig_size = kconfig_size - 16 - 1
+
         zconfig = NamedTemporaryFile(mode='wb', delete=False)
         # kconfig data starts with magic 8 byte string, go past that
         s = self.read_cstring(kconfig_addr, 8)
@@ -796,6 +821,28 @@ class RamDump():
     def is_config_defined(self, config):
         return config in self.config_dict
 
+    def get_kernel_version(self):
+        if self.kernel_version == (0, 0, 0):
+            vm_v = self.gdbmi.get_value_of_string('linux_banner')
+            if vm_v is None:
+                print_out_str('!!! Could not read linux_banner from vmlinux!')
+                sys.exit(1)
+            v = re.search('Linux version (\d{0,2}\.\d{0,2}\.\d{0,2})', vm_v)
+            if v is None:
+                print_out_str('!!! Could not extract version info!')
+                sys.exit(1)
+            self.version = v.group(1)
+            match = re.search('(\d+)\.(\d+)\.(\d+)', self.version)
+            if match is not None:
+                self.version = tuple(map(int, match.groups()))
+                self.kernel_version = self.version
+                self.linux_banner = vm_v
+            else:
+                print_out_str('!!! Could not extract version info! {0}'.format(self.version))
+                sys.exit(1)
+
+        return self.kernel_version
+
     def kernel_virt_to_phys(self, addr):
         if self.minidump:
             return minidump_util.minidump_virt_to_phys(self.ebi_files_minidump,addr)
@@ -804,47 +851,37 @@ class RamDump():
             if self.kimage_voffset is None:
                 return addr - self.page_offset + self.phys_offset
             else:
-                if addr & (1 << (va_bits - 1)):
-                    return addr - self.page_offset + self.phys_offset
+                if self.kernel_version > (4, 20, 0):
+                    if not (addr & (1 << (va_bits - 1))):
+                        return addr - self.page_offset + self.phys_offset
+                    else:
+                        return addr - (self.kimage_voffset)
                 else:
-                    return addr - (self.kimage_voffset)
+                    if addr & (1 << (va_bits - 1)):
+                        return addr - self.page_offset + self.phys_offset
+                    else:
+                        return addr - (self.kimage_voffset)
 
-    def get_matched_version(self):
+    def match_version(self):
         banner_addr = self.address_of('linux_banner')
         if banner_addr is not None:
             banner_addr = self.kernel_virt_to_phys(banner_addr)
-            vm_v = self.gdbmi.get_value_of_string('linux_banner')
-            if vm_v is None:
-                print_out_str('!!! Could not read banner address from vmlinux!')
-                return False
-            banner_len = len(vm_v)
+            banner_len = len(self.linux_banner)
             b = self.read_cstring(banner_addr, banner_len, False)
             if b is None:
-                print_out_str('!!! Could not read banner address!')
+                print_out_str('!!! Banner not found in dumps!')
                 return False
-            v = re.search('Linux version (\d{0,2}\.\d{0,2}\.\d{0,2})', b)
-            if v is None:
-                print_out_str('!!! Could not match version! {0}'.format(b))
-                return False
-            self.version = v.group(1)
-            match = re.search('(\d+)\.(\d+)\.(\d+)', self.version)
-            if match is not None:
-                self.kernel_version = tuple(map(int, match.groups()))
-            else:
-                print_out_str('!!! Could not extract version info! {0}'.format(self.version))
-
             print_out_str('Linux Banner: ' + b.rstrip())
-            print_out_str('version = {0}'.format(self.version))
-            if str(vm_v) in str(b):
-                print_out_str("Linux banner from vmlinux = %s" % vm_v)
+            if str(self.linux_banner) in str(b):
+                print_out_str("Linux banner from vmlinux = %s" % self.linux_banner)
                 print_out_str("Linux banner from dump = %s" % b)
                 return True
             else:
-                print_out_str("Expected Linux banner = %s" % vm_v)
-                print_out_str("But Linux banner got = %s" % b)
+                print_out_str("Expected Linux banner = %s" % self.linux_banner)
+                print_out_str("Linux banner in Dumps = %s" % b)
                 return False
         else:
-            print_out_str('!!! Could not lookup banner address')
+            print_out_str('!!! linux_banner sym not found in vmlinux')
             return False
 
     def print_command_line(self):
@@ -885,6 +922,8 @@ class RamDump():
         return False
 
     def print_socinfo(self):
+        if self.read_pointer('socinfo') is None:
+          return None
         content_socinfo = hex(self.read_pointer('socinfo'))
         content_socinfo = content_socinfo.strip('L')
 
