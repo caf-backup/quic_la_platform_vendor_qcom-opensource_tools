@@ -61,7 +61,11 @@ def dump_thread_group(ramdump, thread_group, task_out, taskhighlight_out, check_
     offset_stack = ramdump.field_offset('struct task_struct', 'stack')
     offset_state = ramdump.field_offset('struct task_struct', 'state')
     offset_prio = ramdump.field_offset('struct task_struct', 'prio')
-    offset_affine = ramdump.field_offset('struct task_struct', 'cpus_allowed')
+    if ramdump.kernel_version > (5, 2, 0):
+        offset_affine = ramdump.field_offset('struct task_struct', 'cpus_mask')
+    else:
+        offset_affine = ramdump.field_offset('struct task_struct', 'cpus_allowed')
+
     offset_exit_state = ramdump.field_offset(
         'struct task_struct', 'exit_state')
     orig_thread_group = thread_group
