@@ -165,8 +165,8 @@ class RamDump():
                 self.unwind_table.append((a, b, start + 8 * i))
                 i += 1
 
-            ver = ramdump.version
-            if re.search('3.0.\d', ver) is not None:
+            ver = ramdump.get_kernel_version()
+            if (ver[0] == 3 and ver[1] == 0):
                 self.search_idx = self.search_idx_3_0
             else:
                 self.search_idx = self.search_idx_3_4
