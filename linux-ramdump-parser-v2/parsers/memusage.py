@@ -55,7 +55,11 @@ def do_dump_process_memory(ramdump):
 
     total_shmem_swap = get_shmem_swap_usage(ramdump)
     total_slab = slab_rec + slab_unrec
-    total_mem = ramdump.read_word('totalram_pages') * 4
+    if(ramdump.kernel_version > (4, 20, 0)):
+        total_mem = ramdump.read_word('_totalram_pages') * 4
+    else:
+        total_mem = ramdump.read_word('totalram_pages') * 4
+
     offset_comm = ramdump.field_offset('struct task_struct', 'comm')
     offset_signal = ramdump.field_offset('struct task_struct', 'signal')
     offset_adj = ramdump.field_offset('struct signal_struct', 'oom_score_adj')

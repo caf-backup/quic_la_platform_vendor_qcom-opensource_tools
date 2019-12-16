@@ -135,8 +135,7 @@ class DebugImage_v2():
         self.dump_type_lookup_table = []
         self.dump_table_id_lookup_table = []
         self.dump_data_id_lookup_table  = {}
-        version = re.findall(r'\d+', ramdump.version)
-        if int(version[0]) > 3:
+        if ramdump.kernel_version > (3, 9, 9):
             self.event_call = 'struct trace_event_call'
             self.event_class = 'struct trace_event_class'
         else:
@@ -191,7 +190,7 @@ class DebugImage_v2():
         try:
             cpuss_parser_path = local_settings.cpuss_parser_path
             cpuss_parser_json = local_settings.cpuss_parser_json
-         except AttributeError:
+        except AttributeError:
             print_out_str('Could not find cpuss_parser_path . Please define cpuss_parser_path in local_settings')
             return
         offset = None
