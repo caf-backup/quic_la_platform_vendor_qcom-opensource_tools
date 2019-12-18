@@ -43,6 +43,8 @@ class IommuLib(object):
             pass
         elif self.find_iommu_domains_debug_attachments():
             pass
+        elif self.find_iommu_domains_device_core():
+            pass
         else:
             print_out_str("Unable to find any iommu domains")
 
@@ -102,6 +104,43 @@ class IommuLib(object):
                 client_name = self.ramdump.read_structure_cstring(
                     kobj_ptr, 'struct kobject', 'name')
 
+
+            self._find_iommu_domains_arm_smmu(domain_ptr, client_name, self.domain_list)
+
+        return True
+
+
+    """
+    will only find active iommu domains. This means it will exclude most gpu domains.
+    """
+    def find_iommu_domains_device_core(self):
+        domains = set()
+        devices_kset = self.ramdump.read_pointer('devices_kset')
+        if not devices_kset:
+            return False
+
+        list_head = devices_kset + self.ramdump.field_offset('struct kset',
+                                                             'list')
+
+        offset = self.ramdump.field_offset('struct device', 'kobj.entry')
+        list_walker = llist.ListWalker(self.ramdump, list_head, offset)
+
+        for dev in list_walker:
+            iommu_group = self.ramdump.read_structure_field(dev, 'struct device', 'iommu_group')
+            if not iommu_group:
+                continue
+
+            domain_ptr = self.ramdump.read_structure_field(iommu_group, 'struct iommu_group', 'domain')
+            if not domain_ptr:
+                continue
+
+            if domain_ptr in domains:
+                continue
+
+            domains.add(domain_ptr)
+
+            client_name_addr = self.ramdump.read_structure_field(dev, 'struct device', 'kobj.name')
+            client_name = self.ramdump.read_cstring(client_name_addr)
 
             self._find_iommu_domains_arm_smmu(domain_ptr, client_name, self.domain_list)
 
