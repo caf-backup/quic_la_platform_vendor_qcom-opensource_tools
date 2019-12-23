@@ -1,4 +1,4 @@
-# Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
+# Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are
@@ -845,3 +845,9 @@ lookuptable[("bengal", 0x24, 0x14)] = L1_TLB_KRYO2XX_GOLD()
 lookuptable[("bengal", 0x25, 0x14)] = L1_TLB_KRYO2XX_GOLD()
 lookuptable[("bengal", 0x26, 0x14)] = L1_TLB_KRYO2XX_GOLD()
 lookuptable[("bengal", 0x27, 0x14)] = L1_TLB_KRYO2XX_GOLD()
+
+# "scuba"
+lookuptable[("scuba", 0x120, 0x14)] = L1_TLB_A53()
+lookuptable[("scuba", 0x121, 0x14)] = L1_TLB_A53()
+lookuptable[("scuba", 0x122, 0x14)] = L1_TLB_A53()
+lookuptable[("scuba", 0x123, 0x14)] = L1_TLB_A53()
