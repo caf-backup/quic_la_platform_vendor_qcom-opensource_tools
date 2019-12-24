@@ -96,19 +96,32 @@ class IrqParse(RamParser):
 
     def is_internal_node(self, addr):
         radix_tree_entry_mask = 0x3
-        radix_tree_internal_node = 0x1
+        if self.ramdump.kernel_version > (4, 20, 0):
+            radix_tree_internal_node = 0x2
+        else:
+            radix_tree_internal_node = 0x1
         return (addr & radix_tree_entry_mask) == radix_tree_internal_node
 
     def entry_to_node(self, addr):
-        return addr & 0xfffffffffffffffe
+        if self.ramdump.kernel_version > (4, 20, 0):
+            return addr & 0xfffffffffffffffd
+        else:
+            return addr & 0xfffffffffffffffe
 
     def radix_tree_lookup_element_v2(self, ram_dump, root_addr, index):
-        rnode_offset = ram_dump.field_offset('struct radix_tree_root', 'rnode')
-        rnode_shift_offset = ram_dump.field_offset('struct radix_tree_node', 'shift')
-        slots_offset = ram_dump.field_offset('struct radix_tree_node', 'slots')
-        pointer_size = ram_dump.sizeof('struct radix_tree_node *')
-        maxindex = 0
+        if self.ramdump.kernel_version > (4, 20,0 ):
+            rnode_offset = ram_dump.field_offset('struct xarray', 'xa_head')
+            rnode_shift_offset = ram_dump.field_offset('struct xa_node', 'shift')
+            slots_offset = ram_dump.field_offset('struct xa_node', 'slots')
+            pointer_size = ram_dump.sizeof('struct xa_node *')
+        else:
+            rnode_offset = ram_dump.field_offset('struct radix_tree_root', 'rnode')
+            rnode_shift_offset = ram_dump.field_offset('struct radix_tree_node', 'shift')
+            slots_offset = ram_dump.field_offset('struct radix_tree_node', 'slots')
+            pointer_size = ram_dump.sizeof('struct radix_tree_node *')
+
         # if CONFIG_BASE_SMALL=0: radix_tree_map_shift = 6
+        maxindex = 0
         radix_tree_map_shift = 6
         radix_tree_map_mask = 0x3f
 

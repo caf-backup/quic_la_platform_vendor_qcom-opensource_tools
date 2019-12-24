@@ -142,7 +142,11 @@ class MemStats(RamParser):
 
     def print_mem_stats(self, out_mem_stat):
         # Total memory
-        total_mem = self.ramdump.read_word('totalram_pages')
+        if(self.ramdump.kernel_version > (4, 20, 0)):
+            total_mem = self.ramdump.read_word('_totalram_pages')
+        else:
+            total_mem = self.ramdump.read_word('totalram_pages')
+
         total_mem = self.pages_to_mb(total_mem)
 
         if (self.ramdump.kernel_version < (4, 9, 0)):
@@ -248,11 +252,11 @@ class MemStats(RamParser):
         self.calculate_vmalloc()
 
         if type(ion_mem) is str:
-            accounted_mem = total_free + total_slab + kgsl_memory + \
+            accounted_mem = total_free + total_slab + kgsl_memory + stat_val + \
                             self.vmalloc_size + other_mem
         else:
             accounted_mem = total_free + total_slab + ion_mem + kgsl_memory + \
-                        self.vmalloc_size + other_mem
+                        stat_val + self.vmalloc_size + other_mem
 
         unaccounted_mem = total_mem - accounted_mem
 
