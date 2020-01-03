@@ -837,14 +837,14 @@ lookuptable[("8998", 0x46, 0x14)] = L1_TLB_KRYO2XX_GOLD()
 lookuptable[("8998", 0x47, 0x14)] = L1_TLB_KRYO2XX_GOLD()
 
 # "bengal"
-lookuptable[("bengal", 0x20, 0x14)] = L1_TLB_A53()
-lookuptable[("bengal", 0x21, 0x14)] = L1_TLB_A53()
-lookuptable[("bengal", 0x22, 0x14)] = L1_TLB_A53()
-lookuptable[("bengal", 0x23, 0x14)] = L1_TLB_A53()
-lookuptable[("bengal", 0x24, 0x14)] = L1_TLB_KRYO2XX_GOLD()
-lookuptable[("bengal", 0x25, 0x14)] = L1_TLB_KRYO2XX_GOLD()
-lookuptable[("bengal", 0x26, 0x14)] = L1_TLB_KRYO2XX_GOLD()
-lookuptable[("bengal", 0x27, 0x14)] = L1_TLB_KRYO2XX_GOLD()
+lookuptable[("bengal", 0x120, 0x14)] = L1_TLB_A53()
+lookuptable[("bengal", 0x121, 0x14)] = L1_TLB_A53()
+lookuptable[("bengal", 0x122, 0x14)] = L1_TLB_A53()
+lookuptable[("bengal", 0x123, 0x14)] = L1_TLB_A53()
+lookuptable[("bengal", 0x124, 0x14)] = L1_TLB_KRYO2XX_GOLD()
+lookuptable[("bengal", 0x125, 0x14)] = L1_TLB_KRYO2XX_GOLD()
+lookuptable[("bengal", 0x126, 0x14)] = L1_TLB_KRYO2XX_GOLD()
+lookuptable[("bengal", 0x127, 0x14)] = L1_TLB_KRYO2XX_GOLD()
 
 # "scuba"
 lookuptable[("scuba", 0x120, 0x14)] = L1_TLB_A53()
