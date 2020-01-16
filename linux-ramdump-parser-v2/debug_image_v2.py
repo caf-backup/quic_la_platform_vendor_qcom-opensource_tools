@@ -576,8 +576,8 @@ class DebugImage_v2():
 
         if (os.path.isfile(os.path.join(bin_dir, 'DCC_SRAM.BIN'))):
             sram_file = os.path.join(bin_dir, 'DCC_SRAM.BIN')
-            cmd = ["-s ", sram_file, " --out-dir ", out_dir, " --config-offset ", "0x6000", " --v2"]
-            p = subprocess.Popen([sys.executable, dcc_parser_path, cmd], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            cmd = [sys.executable, dcc_parser_path, "-s ", sram_file, " --out-dir ", out_dir, " --config-offset ", "0x6000", " --v2"]
+            p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             print_out_str('--------')
             print_out_str(p.communicate()[0])
         elif os.path.isfile(os.path.join(out_dir, 'sram.bin')):
