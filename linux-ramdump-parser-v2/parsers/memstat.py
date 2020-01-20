@@ -1,4 +1,4 @@
-# Copyright (c) 2016-2019 The Linux Foundation. All rights reserved.
+# Copyright (c) 2016-2020 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -60,7 +60,7 @@ class MemStats(RamParser):
             list_walker.walk(vmlist, self.list_func)
             self.vmalloc_size = self.pages_to_mb(self.vmalloc_size)
         else:
-            val = self.ramdump.read_u64('nr_vmalloc_pages')
+            val = self.ramdump.read_word('nr_vmalloc_pages')
             self.vmalloc_size = self.pages_to_mb(val)
 
     def calculate_vm_stat(self):
@@ -231,7 +231,7 @@ class MemStats(RamParser):
                 else:
                     page_allocated = mem_pool + self.ramdump.field_offset(
                                     'struct zs_pool', 'pages_allocated')
-                    stat_val = self.ramdump.read_u64(page_allocated)
+                    stat_val = self.ramdump.read_word(page_allocated)
                     if stat_val is None:
                         stat_val = 0
                     stat_val = self.pages_to_mb(stat_val)
