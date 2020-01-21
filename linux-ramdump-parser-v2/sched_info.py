@@ -15,15 +15,23 @@ from print_out import print_out_str
 DEFAULT_MIGRATION_NR=32
 DEFAULT_MIGRATION_COST=500000
 
+def mask_bitset_pos(cpumask):
+    obj = [i for i in range(cpumask.bit_length()) if cpumask & (1<<i)]
+    if len(obj) == 0:
+        return None
+    else:
+        return obj
+
 def verify_active_cpus(ramdump):
-    core_sib_off = ramdump.field_offset('struct cpu_topology', 'core_sibling')
     cpu_topology_addr = ramdump.address_of('cpu_topology')
     cpu_topology_size = ramdump.sizeof('struct cpu_topology')
 
     if (ramdump.kernel_version >= (4, 19, 0)):
         cluster_id_off = ramdump.field_offset('struct cpu_topology', 'package_id')
+        core_sib_off = ramdump.field_offset('struct cpu_topology', 'core_possible_sibling')
     else:
         cluster_id_off = ramdump.field_offset('struct cpu_topology', 'cluster_id')
+        core_sib_off = ramdump.field_offset('struct cpu_topology', 'core_sibling')
 
     if (ramdump.kernel_version >= (4, 9, 0)):
         cpu_online_bits = ramdump.read_word('__cpu_online_mask')
@@ -72,11 +80,14 @@ def verify_active_cpus(ramdump):
             min_req_cpus = 1
 
         if ((cluster_nr_oncpus - cluster_nr_isocpus) < min_req_cpus):
-                print_out_str("\n************ WARNING **************\n")
-                print_out_str("\tMinimum active cpus are not available in the cluster {0} \n".format(i))
-                print_out_str("\tCluster cpus: {0:b}  Online cpus: {1:b} Isolated cpus: {2:b}\n".format(
-                                cluster_cpus, cluster_online_cpus, cluster_isolated_cpus))
-                print_out_str("\n***********************************\n")
+                print_out_str("\n" + "*" * 10 + " WARNING " + "*" * 10 + "\n")
+                print_out_str("\tMinimum active cpus are not available in the cluster {0}\n".format(i))
+
+                print_out_str("\tCluster cpus: {0}  Online cpus: {1} Isolated cpus: {2}\n".format(
+                                mask_bitset_pos(cluster_cpus),
+                                mask_bitset_pos(cluster_online_cpus),
+                                mask_bitset_pos(cluster_isolated_cpus)))
+                print_out_str("*" * 10 + " WARNING " + "*" * 10 + "\n")
 
 @register_parser('--sched-info', 'Verify scheduler\'s various parameter status')
 class Schedinfo(RamParser):
@@ -87,20 +98,41 @@ class Schedinfo(RamParser):
         # verify nr_migrates
         sched_nr_migrate = self.ramdump.read_u32('sysctl_sched_nr_migrate')
         if (sched_nr_migrate != DEFAULT_MIGRATION_NR):
-            print_out_str("\n************ WARNING **************\n")
+            print_out_str("*" * 5 + " WARNING:" + "\n")
             print_out_str("\t sysctl_sched_nr_migrate has changed!!\n")
             print_out_str("\t If it is single digit, scheduler's load balancer has broken in the dump\n")
 
         # verify migration cost
         sched_migration_cost = self.ramdump.read_u32('sysctl_sched_migration_cost')
         if (sched_migration_cost != DEFAULT_MIGRATION_COST):
-            print_out_str("\n************ WARNING **************\n")
+            print_out_str("*" * 5 + " WARNING:" + "\n")
             print_out_str("\t sysctl_sched_migration_cost has changed!!\n")
             print_out_str("\t\tDefault: 500000 and Value in dump:{0}\n".format(sched_migration_cost))
 
         # verify CFS BANDWIDTH enabled
         cfs_bandwidth_enabled = self.ramdump.read_u32('sysctl_sched_cfs_bandwidth_slice')
         if cfs_bandwidth_enabled is not None:
-            print_out_str("\n************ INFORMATION **************\n")
+            print_out_str("*" * 5 + " INFORMATION:" + "\n")
             print_out_str("\tCFS_BANDWIDTH is enabled in the dump!!\n")
             print_out_str("\tBandwidth slice: {0}\n".format(cfs_bandwidth_enabled))
+
+        # verify rq root domain
+        if (self.ramdump.kernel_version >= (4, 9, 0)):
+            cpu_online_bits = self.ramdump.read_word('__cpu_online_mask')
+        else:
+            cpu_online_bits = self.ramdump.read_word('cpu_online_bits')
+
+        runqueues_addr = self.ramdump.address_of('runqueues')
+        rd_offset = self.ramdump.field_offset('struct rq', 'rd')
+        sd_offset = self.ramdump.field_offset('struct rq', 'sd')
+        def_rd_addr = self.ramdump.address_of('def_root_domain')
+        for cpu in (mask_bitset_pos(cpu_online_bits)):
+            rq_addr = runqueues_addr + self.ramdump.per_cpu_offset(cpu)
+            rd = self.ramdump.read_word(rq_addr + rd_offset)
+            sd = self.ramdump.read_word(rq_addr + sd_offset)
+            if rd == def_rd_addr :
+                print_out_str("*" * 5 + " WARNING:" + "\n")
+                print_out_str("Online cpu:{0} has attached to default sched root domain {1:x}\n".format(cpu, def_rd_addr))
+            if sd == 0 or sd == None:
+                print_out_str("*" * 5 + " WARNING:" + "\n")
+                print_out_str("Online cpu:{0} has Null sched_domain!!\n".format(cpu))
