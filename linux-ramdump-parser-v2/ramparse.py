@@ -1,6 +1,6 @@
 #!/usr/bin/env python2
 
-# Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
+# Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -181,6 +181,7 @@ if __name__ == '__main__':
         default_list.append("Dmesg")
         default_list.append("RTB")
         default_list.append("DebugImage")
+        default_list.append("Watchdog")
 
     if options.outdir:
         if not os.path.exists(options.outdir):
