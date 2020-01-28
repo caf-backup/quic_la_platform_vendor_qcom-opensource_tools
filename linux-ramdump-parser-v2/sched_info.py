@@ -29,6 +29,9 @@ def verify_active_cpus(ramdump):
     if (ramdump.kernel_version >= (4, 19, 0)):
         cluster_id_off = ramdump.field_offset('struct cpu_topology', 'package_id')
         core_sib_off = ramdump.field_offset('struct cpu_topology', 'core_possible_sibling')
+        # if possible sibling mask is not present, active cpu verification is not worthy.
+        if core_sib_off is None:
+            return
     else:
         cluster_id_off = ramdump.field_offset('struct cpu_topology', 'cluster_id')
         core_sib_off = ramdump.field_offset('struct cpu_topology', 'core_sibling')
