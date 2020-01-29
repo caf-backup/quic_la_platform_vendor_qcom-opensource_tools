@@ -839,7 +839,7 @@ def ns_to_sec(ns):
 def get_wdog_timing(ramdump):
     logical_map = []
     jiffies = ramdump.read_word('jiffies')
-    last_jiffies_update = ramdump.read_word('last_jiffies_update')
+    last_jiffies_update = ramdump.read_s64('last_jiffies_update')
     tick_do_timer_cpu = ramdump.read_s32('tick_do_timer_cpu')
     wdog_data_addr = ramdump.read_word('wdog_data')
     pet_timer_off = ramdump.field_offset(
