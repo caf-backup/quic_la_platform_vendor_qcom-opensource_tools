@@ -1,4 +1,4 @@
-# Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
+# Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -998,7 +998,7 @@ class RamDump():
 
         startup_script.write(('title \"' + out_path + '\"\n').encode('ascii', 'ignore'))
 
-        is_cortex_a53 = self.hw_id in ["8916", "8939", "8936"]
+        is_cortex_a53 = self.hw_id in ["8916", "8939", "8936", "bengal"]
 
         if self.arm64 and is_cortex_a53:
             startup_script.write('sys.cpu CORTEXA53\n'.encode('ascii', 'ignore'))
@@ -1006,6 +1006,8 @@ class RamDump():
             startup_script.write('sys.cpu {0}\n'.format(self.cpu_type).encode('ascii', 'ignore'))
         startup_script.write('sys.up\n'.encode('ascii', 'ignore'))
 
+        if is_cortex_a53 and not self.arm64:
+            startup_script.write('r.s m 0x13\n')
         for ram in self.ebi_files:
             ebi_path = os.path.abspath(ram[3])
             startup_script.write('data.load.binary {0} 0x{1:x}\n'.format(
@@ -1125,7 +1127,7 @@ class RamDump():
             if self.arm64:
                 t32_binary = 'C:\\T32\\bin\\windows64\\t32MARM64.exe'
             elif is_cortex_a53:
-                t32_binary = 'C:\\T32\\bin\\windows64\\t32MARM.exe'
+                t32_binary = 'C:\\T32\\bin\\windows64\\t32MARM64.exe'
             else:
                 t32_binary = 'c:\\t32\\t32MARM.exe'
             t32_bat.write(('start '+ t32_binary + ' -c ' + out_path + '/t32_config.t32, ' +
