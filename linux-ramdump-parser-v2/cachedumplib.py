@@ -1,4 +1,4 @@
-# Copyright (c) 2015-2019, The Linux Foundation. All rights reserved.
+# Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -1409,3 +1409,14 @@ lookuptable[("bengal", 0x64, 0x14)] = L1_ICache_KRYO2XX_GOLD()
 lookuptable[("bengal", 0x65, 0x14)] = L1_ICache_KRYO2XX_GOLD()
 lookuptable[("bengal", 0x66, 0x14)] = L1_ICache_KRYO2XX_GOLD()
 lookuptable[("bengal", 0x67, 0x14)] = L1_ICache_KRYO2XX_GOLD()
+
+# "scuba"
+lookuptable[("scuba", 0x80, 0x14)] = L1_DCache_KRYO2XX_SILVER()
+lookuptable[("scuba", 0x81, 0x14)] = L1_DCache_KRYO2XX_SILVER()
+lookuptable[("scuba", 0x82, 0x14)] = L1_DCache_KRYO2XX_SILVER()
+lookuptable[("scuba", 0x83, 0x14)] = L1_DCache_KRYO2XX_SILVER()
+
+lookuptable[("scuba", 0x60, 0x14)] = L1_ICache_KYRO2XX_SILVER()
+lookuptable[("scuba", 0x61, 0x14)] = L1_ICache_KYRO2XX_SILVER()
+lookuptable[("scuba", 0x62, 0x14)] = L1_ICache_KYRO2XX_SILVER()
+lookuptable[("scuba", 0x63, 0x14)] = L1_ICache_KYRO2XX_SILVER()
