@@ -1,4 +1,4 @@
-# Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
+# Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -985,9 +985,9 @@ def get_wdog_timing(ramdump):
         ping_end_time_offset = ramdump.field_offset(
                         'struct msm_watchdog_data', 'ping_end')
         for i in range(0, ramdump.get_num_cpus()):
-            ping_start_time = ramdump.read_word(wdog_data_addr +
+            ping_start_time = ramdump.read_u64(wdog_data_addr +
                                                  ping_start_time_offset + i*8)
-            ping_end_time = ramdump.read_word(wdog_data_addr +
+            ping_end_time = ramdump.read_u64(wdog_data_addr +
                                                  ping_end_time_offset + i*8)
             print_out_str("CPU#{0} : ping_start: {1:.6f} : ping_end: {2:.6f}"
                           .format(i, ns_to_sec(ping_start_time),
