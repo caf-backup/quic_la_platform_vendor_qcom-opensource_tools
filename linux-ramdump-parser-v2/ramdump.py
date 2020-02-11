@@ -486,6 +486,40 @@ class RamDump():
                 if urc < 0:
                     break
 
+    def determine_phys_offset(self):
+        vmalloc_start = self.modules_end - self.kaslr_offset
+        min_image_align = 0x00200000
+
+        phys_base = 0xffffffff
+        phys_end = 0
+        for a in self.ebi_files:
+            _, start, end, path = a
+            if "DDR" in os.path.basename(path):
+                if start < phys_base:
+                    phys_base = start
+                if end > phys_end:
+                    phys_end = end
+
+        if phys_end > 0xffffffff:
+            phys_end = 0xffffffff
+
+        print_out_str("phys_base: {0:x} phys_end: {1:x}".format(phys_base, phys_end))
+
+        kimage_load_addr = phys_base;
+        while (kimage_load_addr < phys_end):
+            kimage_voffset = self.kimage_vaddr - kimage_load_addr
+            addr = self.address_of("kimage_voffset") - self.kaslr_offset - \
+                   vmalloc_start + kimage_load_addr
+            val = self.read_u64(addr, False)
+            if val is None:
+                val = 0
+            val = long(val)
+            if (long(kimage_voffset) == val):
+                return kimage_load_addr
+            kimage_load_addr = kimage_load_addr + min_image_align
+
+        return 0
+
     def __init__(self, options, nm_path, gdb_path, objdump_path):
         self.ebi_files = []
         self.ebi_files_minidump = []
@@ -638,6 +672,13 @@ class RamDump():
             if self.kimage_voffset is not None:
                 self.kimage_voffset = self.kimage_vaddr - self.phys_offset
                 self.modules_end = self.kimage_vaddr
+                if not (options.phys_offset or self.minidump):
+                    phys_offset_dyn = self.determine_phys_offset()
+                    if phys_offset_dyn:
+                        print_out_str("Dynamically determined phys offset is"
+                                      ": {:x}".format(phys_offset_dyn))
+                        self.phys_offset = phys_offset_dyn
+                self.kimage_voffset = self.kimage_vaddr - self.phys_offset
                 print_out_str("The kimage_voffset extracted is: {:x}".format(self.kimage_voffset))
         else:
             self.kimage_voffset = None
