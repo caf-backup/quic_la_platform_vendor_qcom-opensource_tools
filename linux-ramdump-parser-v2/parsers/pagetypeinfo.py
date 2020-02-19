@@ -11,7 +11,7 @@
 
 from print_out import print_out_str
 from parser_util import register_parser, RamParser
-
+import linux_list as llist
 
 @register_parser('--print-pagetypeinfo', 'Print the pagetypeinfo')
 class Pagetypeinfo(RamParser):
@@ -44,22 +44,12 @@ class Pagetypeinfo(RamParser):
 
                 area = zone + free_area_offset + order * free_area_size
 
-                orig_free_list = area + free_list_offset + list_head_size * mtype
-                curr = orig_free_list
-                pg_count = -1
-                first = True
-                seen = []
-                while True:
-                    pg_count = pg_count + 1
-                    seen.append(curr)
-                    next_p = ramdump.read_word(curr)
-                    first = False
-                    curr = next_p
-                    if curr == orig_free_list:
-                        break
-                    if next_p in seen:
-                        is_corrupt = True
-                        break
+                free_list = area + free_list_offset + list_head_size * mtype
+                it = llist.ListWalker(ramdump, free_list, 0)
+                pg_count = 0
+                for i in it:
+                    pg_count += 1
+
                 nums = nums + ('{0:6}'.format(pg_count))
                 total_type_bytes = total_type_bytes + \
                     pg_count * 4096 * (2 ** order)
