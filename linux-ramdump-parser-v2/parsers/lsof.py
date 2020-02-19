@@ -1,5 +1,5 @@
 """
-Copyright (c) 2016, The Linux Foundation. All rights reserved.
+Copyright (c) 2016, 2020 The Linux Foundation. All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are
@@ -28,7 +28,8 @@ IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 
 from parser_util import register_parser, RamParser
-DNAME_INLINE_LEN = 40
+from parser_util import cleanupString
+
 TASK_NAME_LENGTH = 16
 
 
@@ -37,6 +38,68 @@ def do_dump_lsof_info(self, ramdump, lsof_info):
         parse_task(self, ramdump, task_struct, lsof_info)
         lsof_info.write("\n*********************************")
 
+def get_dname_of_dentry(self, dentry):
+    ramdump = self.ramdump
+    dentry_name_offset = ramdump.field_offset(
+        'struct dentry', 'd_name')
+    len_offset = ramdump.field_offset(
+        'struct qstr', 'len')
+    qst_name_offset = ramdump.field_offset(
+        'struct qstr', 'name')
+
+    name_address = ramdump.read_word(dentry + dentry_name_offset + qst_name_offset)
+    len_address = dentry + dentry_name_offset + len_offset
+    len = ramdump.read_u32(len_address)
+    name = cleanupString(ramdump.read_cstring(
+        name_address, len))
+    return name
+
+def get_pathname_by_file(self, ramdump, file):
+    f_pathoffset = ramdump.field_offset(
+        'struct file', 'f_path')
+    f_path = f_pathoffset + file
+
+    mnt_offset_in_path = ramdump.field_offset('struct path', 'mnt')
+    mnt = ramdump.read_word(f_path + mnt_offset_in_path)
+    mnt_offset_in_mount = self.ramdump.field_offset(
+        'struct mount', 'mnt')
+    mnt_parent_offset = ramdump.field_offset('struct mount', 'mnt_parent')
+    mount = mnt - mnt_offset_in_mount
+    mnt_mountpoint_offset = self.ramdump.field_offset(
+        'struct mount', 'mnt_mountpoint')
+    mnt_parent_pre = 0
+    mnt_parent = mount
+    mount_name = []
+    while  mnt_parent_pre !=  mnt_parent:
+        mnt_parent_pre = mnt_parent
+        mnt_mountpoint = ramdump.read_word(mnt_parent +  mnt_mountpoint_offset)
+        name = get_dname_of_dentry(self, mnt_mountpoint)
+        mnt_parent = ramdump.read_word(mnt_parent + mnt_parent_offset)
+        if name == '/':
+            break
+        mount_name.append(name)
+
+    dentry = ramdump.read_structure_field(
+        f_path, 'struct path', 'dentry')
+    d_parent_offset = ramdump.field_offset(
+        'struct dentry', 'd_parent')
+    d_parent = dentry
+    d_parent_pre = 0
+    names = []
+    while d_parent_pre != d_parent:
+        d_parent_pre = d_parent
+        name = get_dname_of_dentry(self, d_parent)
+        d_parent = ramdump.read_word(d_parent + d_parent_offset)
+        if name == '/':
+            break
+        names.append(name)
+    full_name = ''
+    for item in mount_name:
+        names.append(item)
+    names.reverse()
+    for item in names:
+        full_name += '/' + item
+    return full_name
 
 def parse_task(self, ramdump, task, lsof_info):
     index = 0
@@ -54,7 +117,7 @@ def parse_task(self, ramdump, task, lsof_info):
                     task, 'struct task_struct', 'pid')
     files = ramdump.read_structure_field(
                     task, 'struct task_struct', 'files')
-    str_task_file = '\n Task: {0:x}, comm: {1}, pid : {2:1}, files : {3:x}'
+    str_task_file = '\n Task: 0x{0:x}, comm: {1}, pid : {2:1}, files : 0x{3:x}'
     lsof_info.write(str_task_file.format(
                     task, client_name, task_pid, files))
     fdt = ramdump.read_structure_field(
@@ -63,8 +126,8 @@ def parse_task(self, ramdump, task, lsof_info):
                     fdt, 'struct fdtable', 'max_fds')
     fd = ramdump.read_structure_field(
                     fdt, 'struct fdtable', 'fd')
-    ion_str = "\n [{0}] file : 0x{1:x} {2} {3} client : 0x{4:x}"
-    str = "\n [{0}] file : 0x{1:x} {2} {3}"
+    ion_str = "\n {0:8d} file : 0x{1:16x} {2:32s} {3:32s} client : 0x{4:x}"
+    str = "\n {0:8d} file : 0x{1:16x} {2:32s} {3:32s}"
 
     while index < max_fds:
         file = ramdump.read_word(fd + (index * addressspace))
@@ -78,22 +141,8 @@ def parse_task(self, ramdump, task, lsof_info):
                 index = index + 1
                 continue
             fop, offset = look
-
-            f_pathoffset = ramdump.field_offset(
-                            'struct file', 'f_path')
-            f_path = f_pathoffset + file
-            dentry = ramdump.read_structure_field(
-                        f_path, 'struct path', 'dentry')
-            dentry_iname_offset = ramdump.field_offset(
-                                'struct dentry', 'd_iname')
-            iname_address = dentry + dentry_iname_offset
-            iname = ramdump.read_cstring(
-                    iname_address, DNAME_INLINE_LEN)
-            if iname != "null":
-                look = ramdump.unwind_lookup(iname_address)
-                if look is not None:
-                    iname, offset = look
-            if iname == "ion":
+            iname = get_pathname_by_file(self, self.ramdump, file)
+            if fop.find("ion_fops", 0, 8) is not -1:
                 lsof_info.write(ion_str.format(
                         index, file, fop, iname, priv_data))
             else:
