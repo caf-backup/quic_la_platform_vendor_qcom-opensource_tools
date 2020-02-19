@@ -1,4 +1,4 @@
-# Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+# Copyright (c) 2012-2015, 2020 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -22,6 +22,7 @@ class Pagetypeinfo(RamParser):
         free_area_size = ramdump.sizeof('struct free_area')
         free_list_offset = ramdump.field_offset(
             'struct free_area', 'free_list')
+        list_head_size = ramdump.sizeof('struct list_head')
         migratetype_names = ramdump.address_of('migratetype_names')
         zone_name_offset = ramdump.field_offset('struct zone', 'name')
         zname_addr = ramdump.read_word(zone + zone_name_offset)
@@ -43,7 +44,7 @@ class Pagetypeinfo(RamParser):
 
                 area = zone + free_area_offset + order * free_area_size
 
-                orig_free_list = area + free_list_offset + 8 * mtype
+                orig_free_list = area + free_list_offset + list_head_size * mtype
                 curr = orig_free_list
                 pg_count = -1
                 first = True
