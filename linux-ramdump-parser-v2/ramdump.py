@@ -461,7 +461,7 @@ class RamDump():
             frame.sp = sp
             frame.lr = lr
             frame.pc = pc
-
+            backtrace = '\n'
             while True:
                 where = frame.pc
                 offset = 0
@@ -481,11 +481,12 @@ class RamDump():
                     out_file.write(pstring + '\n')
                 else:
                     print_out_str(pstring)
+                backtrace += pstring + '\n'
 
                 urc = self.unwind_frame(frame)
                 if urc < 0:
                     break
-
+            return backtrace
     def __init__(self, options, nm_path, gdb_path, objdump_path):
         self.ebi_files = []
         self.ebi_files_minidump = []
