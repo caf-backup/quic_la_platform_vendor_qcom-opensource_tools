@@ -9,7 +9,6 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 
-from print_out import print_out_str
 from parser_util import register_parser, RamParser
 import linux_list as llist
 
@@ -55,21 +54,22 @@ class Pagetypeinfo(RamParser):
                     pg_count * 4096 * (2 ** order)
                 total_type_pages = total_type_pages + pg_count * (2 ** order)
                 total_orders[order] += pg_count
-            print_out_str(pageinfo + nums +
-                          ' = {0} MB {1} pages'.format(total_type_bytes / (1024 * 1024), total_type_pages))
+            self.f.write(pageinfo + nums +
+                          ' = {0} MB {1} pages\n'.format(total_type_bytes / (1024 * 1024), total_type_pages))
             total_bytes = total_bytes + total_type_bytes
             total_pages = total_pages + total_type_pages
         for order in range(0, 11):
             total_orders_str += '{0:6}'.format(total_orders[order])
-        print_out_str(total_orders_str)
+        self.f.write(total_orders_str + '\n')
 
-        print_out_str('Approximate total for zone {0}: {1} MB, {2} pages\n'.format(
+        self.f.write('Approximate total for zone {0}: {1} MB, {2} pages\n'.format(
             zname, total_bytes / (1024 * 1024), total_pages))
         if is_corrupt:
-            print_out_str(
-                '!!! Numbers may not be accurate due to list corruption!')
+            self.f.write(
+                '!!! Numbers may not be accurate due to list corruption!\n')
 
     def parse(self):
+        self.f = open(self.ramdump.outdir + "/pagetypeinfo.txt", "w")
         migrate_types = self.ramdump.gdbmi.get_value_of('MIGRATE_TYPES')
         max_nr_zones = self.ramdump.gdbmi.get_value_of('__MAX_NR_ZONES')
 
@@ -88,3 +88,5 @@ class Pagetypeinfo(RamParser):
                     self.ramdump, zone, migrate_types)
 
             zone = zone + sizeofzone
+
+        self.f.close()
