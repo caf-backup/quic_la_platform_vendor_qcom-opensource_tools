@@ -1,4 +1,4 @@
-# Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+# Copyright (c) 2012-2015, 2020 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -147,7 +147,7 @@ class RTB(RamParser):
         line = self.get_caller(caller)
         timestamp = self.get_timestamp(rtb_ptr)
 	cycle_count = self.get_cycle_count(rtb_ptr)
-        rtbout.write('[{0}] [{1}] : {2} interrupt {3:x} handled from addr {4:x} {5} {6}\n'.format(
+        rtbout.write('[{0}] [{1}] : {2} interrupt 0x{3:x} handled from addr {4:x} {5} {6}\n'.format(
             timestamp, cycle_count, logtype, data, caller, func, line).encode('ascii', 'ignore'))
 
     def next_rtb_entry(self, index, step_size, mask):
