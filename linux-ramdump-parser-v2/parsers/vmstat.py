@@ -16,7 +16,20 @@ from parser_util import register_parser, RamParser
 @register_parser('--print-vmstats', 'Print the information similar to /proc/zoneinfo and /proc/vmstat')
 class ZoneInfo(RamParser):
 
-    def print_zone_stats(self, zone, vmstat_names, max_zone_stats):
+    def print_atomic_long_counters(self, output_file, counter_name, addr, num):
+
+        for i in xrange(0, num):
+            val = 0
+            if self.ramdump.arm64:
+                val = self.ramdump.read_s64(self.ramdump.array_index(addr,
+                    'atomic_long_t', i))
+
+            else:
+                val = self.ramdump.read_s32(self.ramdump.array_index(addr,
+                    'atomic_long_t', i))
+            output_file.write(('{0:30}: {1:10} {2:10}MB\n'.format(counter_name[i], val, val * 4 / 1024)))
+
+    def print_zone_stats(self, zone, vmstat_names, max_zone_stats, output_file):
         nr_watermark = self.ramdump.gdbmi.get_value_of('NR_WMARK')
         wmark_names = self.ramdump.gdbmi.get_enum_lookup_table(
             'zone_watermarks', nr_watermark)
@@ -34,30 +47,25 @@ class ZoneInfo(RamParser):
             zwatermark_addr = zone + \
                 self.ramdump.field_offset('struct zone', '_watermark')
 
-        print_out_str('\nZone {0:8}'.format(zname))
-        for i in xrange(0, max_zone_stats):
-            print_out_str('{0:30}: {1:8}'.format(vmstat_names[i], self.ramdump.read_word(
-                self.ramdump.array_index(zstats_addr, 'atomic_long_t', i))))
-
+        output_file.write('\nZone {0:8}\n'.format(zname))
         for i in xrange(0, nr_watermark):
-            print_out_str('{0:30}: {1:8}'.format(wmark_names[i], self.ramdump.read_word(
-                self.ramdump.array_index(zwatermark_addr, 'unsigned long', i))))
+            val = self.ramdump.read_word(
+                                    self.ramdump.array_index(zwatermark_addr,
+                                        'unsigned long', i))
+            output_file.write('{0:30}: {1:10} {2:10}MB\n'.format(wmark_names[i],
+                val, val * 4 / 1024))
 
-    def print_vm_node_states(self):
+        self.print_atomic_long_counters(output_file, vmstat_names, zstats_addr,
+                max_zone_stats)
+
+    def print_vm_node_states(self, output_file):
         vm_node_stats = self.ramdump.address_of('vm_node_stat')
         max_node_stat_item = self.ramdump.gdbmi.get_value_of('NR_VM_NODE_STAT_ITEMS')
         vmstat_names = self.ramdump.gdbmi.get_enum_lookup_table('node_stat_item', max_node_stat_item)
-        for i in xrange(0, max_node_stat_item):
-            if self.ramdump.arm64:
-                val = self.ramdump.read_word(self.ramdump.array_index(vm_node_stats,
-                    'atomic_long_t', i))
-                print_out_str('{0:30}: {1:8}'.format(vmstat_names[i], val))
-            else:
-                val = self.ramdump.read_word(self.ramdump.array_index(vm_node_stats,
-                    'atomic_long_t', i))
-                print_out_str('{0:30}: {1:8}'.format(vmstat_names[i], val))
+        self.print_atomic_long_counters(output_file, vmstat_names, vm_node_stats,
+                max_node_stat_item)
 
-    def print_vm_event_states(self):
+    def print_vm_event_states(self, output_file):
         vm_event_states = self.ramdump.address_of('vm_event_states')
         max_node_stat_item = self.ramdump.gdbmi.get_value_of('NR_VM_EVENT_ITEMS')
         vmstat_names = self.ramdump.gdbmi.get_enum_lookup_table(
@@ -69,19 +77,20 @@ class ZoneInfo(RamParser):
                 rq_addr[j] = vm_event_states + self.ramdump.per_cpu_offset(j)
                 if self.ramdump.arm64:
                     val += self.ramdump.read_word(self.ramdump.array_index(rq_addr[j],
-                        'atomic_long_t', i))
+                        'unsigned long', i))
                 else:
                     val += self.ramdump.read_word(self.ramdump.array_index(rq_addr[j],
-                        'atomic_long_t', i))
+                        'unsigned long', i))
 
             if self.ramdump.arm64:
-                print_out_str('{0:30}: {1:8}'.format(vmstat_names[i],
-                    val))
+                output_file.write('{0:30}: {1:10} {2:10}MB\n'.format(vmstat_names[i],
+                    val, val * 4 / 1024))
             else:
-                print_out_str('{0:30}: {1:8}'.format(vmstat_names[i],
-                    val))
+                output_file.write('{0:30}: {1:10} {2:10}MB\n'.format(vmstat_names[i],
+                    val, val * 4 / 1024))
 
     def parse(self):
+        output_file = self.ramdump.open_file("vmstats.txt", "w")
         max_zone_stats = self.ramdump.gdbmi.get_value_of(
             'NR_VM_ZONE_STAT_ITEMS')
         vmstat_names = self.ramdump.gdbmi.get_enum_lookup_table(
@@ -99,28 +108,26 @@ class ZoneInfo(RamParser):
         while zone < (contig_page_data + node_zones_offset + max_nr_zones * sizeofzone):
             present_pages = self.ramdump.read_word(zone + present_pages_offset)
             if not not present_pages:
-                self.print_zone_stats(zone, vmstat_names, max_zone_stats)
+                self.print_zone_stats(zone, vmstat_names, max_zone_stats,
+                        output_file)
 
             zone = zone + sizeofzone
 
-        print_out_str('\nGlobal Stats')
+        output_file.write("\nGlobal Stats\n")
         if self.ramdump.kernel_version < (4,9,0):
             vmstats_addr = self.ramdump.address_of('vm_stat')
         else:
             vmstats_addr = self.ramdump.address_of('vm_zone_stat')
-        for i in xrange(0, max_zone_stats):
-            if self.ramdump.arm64:
-                print_out_str('{0:30}: {1:8}'.format(vmstat_names[i], self.ramdump.read_s64(
-                self.ramdump.array_index(vmstats_addr, 'atomic_long_t', i))))
-            else:
-                print_out_str('{0:30}: {1:8}'.format(vmstat_names[i], self.ramdump.read_s32(
-                self.ramdump.array_index(vmstats_addr, 'atomic_long_t', i))))
+            
+        self.print_atomic_long_counters(output_file, vmstat_names,
+                vmstats_addr,
+                max_zone_stats)
 
-        print_out_str('\nNode Stats')
-        self.print_vm_node_states()
+        output_file.write('\nNode Stats\n')
+        self.print_vm_node_states(output_file)
 
-        print_out_str('\nVM EVENT Stats')
-        self.print_vm_event_states()
+        output_file.write('\nVM EVENT Stats\n')
+        self.print_vm_event_states(output_file)
 
-        print_out_str('Total system pages: {0}'.format(self.ramdump.read_word(
-            self.ramdump.address_of('totalram_pages'))))
+        output_file.write('Total system pages:{0}\n'.format(self.ramdump.read_word(self.ramdump.address_of('totalram_pages'))))
+        output_file.close()
