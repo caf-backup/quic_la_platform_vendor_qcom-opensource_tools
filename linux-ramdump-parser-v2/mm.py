@@ -1,4 +1,4 @@
-# Copyright (c) 2013-2018, The Linux Foundation. All rights reserved.
+# Copyright (c) 2013-2020, The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -312,10 +312,12 @@ def page_address(ramdump, page):
 def phys_to_virt(ramdump, phys):
     if not ramdump.arm64:
         return phys - ramdump.phys_offset + ramdump.page_offset
+    if ramdump.kernel_version >= (5, 4, 0):
+        #as the page_offset value got changed in 5.4 kernel. It is upstream change to support 52 bit
+        return phys - ramdump.read_s64('physvirt_offset ')
 
     if ramdump.kernel_version < (4, 4, 0):
         return None
-
     memstart_addr = ramdump.read_s64('memstart_addr')
     val = (phys - memstart_addr) | ramdump.page_offset
     return val
