@@ -1,4 +1,4 @@
-# Copyright (c) 2013-2017, The Linux Foundation. All rights reserved.
+# Copyright (c) 2013-2020, The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -279,6 +279,7 @@ class GdbMI(object):
         'Line 78 of \\"kernel/kernel/panic.c\\"'
 
         """
+        address = address - self.kaslr_offset
         result = self._run_for_one('info line *0x{0:x}'.format(address))
         m = re.search(r'(Line \d+ of \\?\".*\\?\")', result)
         if m is not None:
