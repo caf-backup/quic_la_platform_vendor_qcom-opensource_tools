@@ -544,7 +544,8 @@ class DebugImage_v2():
             pid = server_proc.pid
             pid = int(pid)
             parent = psutil.Process(pid)
-            for child in parent.children(recursive=True):				# or parent.children() for recursive=False
+            # or parent.children() for recursive=False
+            for child in parent.children(recursive=True):
                 print_out_str("child process = {0} which needs to be killed forcefully after QTF timeout".format(child))
                 if (psutil.pid_exists(child.pid)):
                     try:
@@ -786,9 +787,8 @@ class DebugImage_v2():
             client.MSM_DUMP_DATA_LOG_BUF_FIRST_IDX] = 'MSM_DUMP_DATA_LOG_BUF_FIRST_IDX'
         self.dump_data_id_lookup_table[
             client.MSM_DUMP_DATA_MHM] = 'MSM_DUMP_DATA_MHM'
-	for i in range(0, cpus):
-		self.dump_data_id_lookup_table[
-		    client.MSM_DUMP_DATA_L2_TLB + i] = 'MSM_DUMP_DATA_L2_TLB'
+        for i in range(0, cpus):
+            self.dump_data_id_lookup_table[client.MSM_DUMP_DATA_L2_TLB + i] = 'MSM_DUMP_DATA_L2_TLB'
 
         if not ram_dump.minidump:
             dump_table_ptr_offset = ram_dump.field_offset(
