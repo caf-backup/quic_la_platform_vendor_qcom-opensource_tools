@@ -1,4 +1,4 @@
-# Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
+# Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -461,7 +461,7 @@ class RamDump():
             frame.sp = sp
             frame.lr = lr
             frame.pc = pc
-
+            backtrace = '\n'
             while True:
                 where = frame.pc
                 offset = 0
@@ -481,10 +481,46 @@ class RamDump():
                     out_file.write(pstring + '\n')
                 else:
                     print_out_str(pstring)
+                backtrace += pstring + '\n'
 
                 urc = self.unwind_frame(frame)
                 if urc < 0:
                     break
+            return backtrace
+
+    def determine_phys_offset(self):
+        vmalloc_start = self.modules_end - self.kaslr_offset
+        min_image_align = 0x00200000
+
+        phys_base = 0xffffffff
+        phys_end = 0
+        for a in self.ebi_files:
+            _, start, end, path = a
+            if "DDR" in os.path.basename(path):
+                if start < phys_base:
+                    phys_base = start
+                if end > phys_end:
+                    phys_end = end
+
+        if phys_end > 0xffffffff:
+            phys_end = 0xffffffff
+
+        print_out_str("phys_base: {0:x} phys_end: {1:x}".format(phys_base, phys_end))
+
+        kimage_load_addr = phys_base;
+        while (kimage_load_addr < phys_end):
+            kimage_voffset = self.kimage_vaddr - kimage_load_addr
+            addr = self.address_of("kimage_voffset") - self.kaslr_offset - \
+                   vmalloc_start + kimage_load_addr
+            val = self.read_u64(addr, False)
+            if val is None:
+                val = 0
+            val = long(val)
+            if (long(kimage_voffset) == val):
+                return kimage_load_addr
+            kimage_load_addr = kimage_load_addr + min_image_align
+
+        return 0
 
     def __init__(self, options, nm_path, gdb_path, objdump_path):
         self.ebi_files = []
@@ -638,6 +674,13 @@ class RamDump():
             if self.kimage_voffset is not None:
                 self.kimage_voffset = self.kimage_vaddr - self.phys_offset
                 self.modules_end = self.kimage_vaddr
+                if not (options.phys_offset or self.minidump):
+                    phys_offset_dyn = self.determine_phys_offset()
+                    if phys_offset_dyn:
+                        print_out_str("Dynamically determined phys offset is"
+                                      ": {:x}".format(phys_offset_dyn))
+                        self.phys_offset = phys_offset_dyn
+                self.kimage_voffset = self.kimage_vaddr - self.phys_offset
                 print_out_str("The kimage_voffset extracted is: {:x}".format(self.kimage_voffset))
         else:
             self.kimage_voffset = None
@@ -998,7 +1041,7 @@ class RamDump():
 
         startup_script.write(('title \"' + out_path + '\"\n').encode('ascii', 'ignore'))
 
-        is_cortex_a53 = self.hw_id in ["8916", "8939", "8936"]
+        is_cortex_a53 = self.hw_id in ["8916", "8939", "8936", "bengal"]
 
         if self.arm64 and is_cortex_a53:
             startup_script.write('sys.cpu CORTEXA53\n'.encode('ascii', 'ignore'))
@@ -1006,6 +1049,8 @@ class RamDump():
             startup_script.write('sys.cpu {0}\n'.format(self.cpu_type).encode('ascii', 'ignore'))
         startup_script.write('sys.up\n'.encode('ascii', 'ignore'))
 
+        if is_cortex_a53 and not self.arm64:
+            startup_script.write('r.s m 0x13\n')
         for ram in self.ebi_files:
             ebi_path = os.path.abspath(ram[3])
             startup_script.write('data.load.binary {0} 0x{1:x}\n'.format(
@@ -1125,7 +1170,7 @@ class RamDump():
             if self.arm64:
                 t32_binary = 'C:\\T32\\bin\\windows64\\t32MARM64.exe'
             elif is_cortex_a53:
-                t32_binary = 'C:\\T32\\bin\\windows64\\t32MARM.exe'
+                t32_binary = 'C:\\T32\\bin\\windows64\\t32MARM64.exe'
             else:
                 t32_binary = 'c:\\t32\\t32MARM.exe'
             t32_bat.write(('start '+ t32_binary + ' -c ' + out_path + '/t32_config.t32, ' +

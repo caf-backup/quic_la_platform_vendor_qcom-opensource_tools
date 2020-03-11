@@ -1,4 +1,4 @@
-# Copyright (c) 2012,2014-2015,2017-2019 The Linux Foundation. All rights reserved.
+# Copyright (c) 2012,2014-2015,2017-2020 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -144,7 +144,7 @@ class PageTracking(RamParser):
                     handle = self.ramdump.read_structure_field(
                         temp_page_ext, 'struct page_ext', 'handle')
 
-                if handle is None:
+                if handle is 0 or handle is None:
                     return -1, -1, -1, -1
                 slabindex = handle & 0x1fffff
                 handle_offset = (handle >> 0x15) & 0x3ff
