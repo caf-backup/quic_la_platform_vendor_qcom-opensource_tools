@@ -1,4 +1,4 @@
-# Copyright (c) 2012, 2014-2018 The Linux Foundation. All rights reserved.
+# Copyright (c) 2012, 2014-2018, 2020 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -406,7 +406,8 @@ class QDSSDump():
                     it = range(pyh_start, pyh_start + dump_size)
                     size = size - dump_size
                     start = start + dump_size
-                    tmc_etr.write(ram_dump.read_physical(it[0], len(it)))
+                    #pyh_start lower 12 bit is PTE flag, so mask the flag.
+                    tmc_etr.write(ram_dump.read_physical((it[0] & 0xFFFFFFFFF000), len(it)))
         if pyh_start is None:
             return False
         else:
