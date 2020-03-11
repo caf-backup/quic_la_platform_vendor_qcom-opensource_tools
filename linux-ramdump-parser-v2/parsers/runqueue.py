@@ -1,4 +1,4 @@
-# Copyright (c) 2013-2019, The Linux Foundation. All rights reserved.
+# Copyright (c) 2013-2020, The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -40,6 +40,7 @@ class RunQueues(RamParser):
     def print_task_state(self, status, task_addr):
         pid_offset = self.ramdump.field_offset('struct task_struct', 'pid')
         comm_offset = self.ramdump.field_offset('struct task_struct', 'comm')
+
         if self.ramdump.kernel_version > (5, 2, 0):
             affinity_offset = self.ramdump.field_offset('struct task_struct', 'cpus_mask')
         else:
@@ -49,8 +50,15 @@ class RunQueues(RamParser):
             pid = self.ramdump.read_int(task_addr + pid_offset)
             taskname = self.ramdump.read_cstring(task_addr + comm_offset, 16)
             affinity = self.ramdump.read_u64(task_addr + affinity_offset)
-            self.print_out_str_with_tab(
-                '{0}: {1}({2}) [affinity={3:x}]'.format(status, taskname, pid, affinity))
+            se_offset = self.ramdump.field_offset('struct task_struct', 'se')
+            if se_offset is None:
+                vruntime = 0
+            else:
+                se = (task_addr + se_offset)
+                vruntime_offset = self.ramdump.field_offset('struct sched_entity', 'vruntime')
+                vruntime = self.ramdump.read_u64(se + vruntime_offset)
+            print_out_str(
+                '{0}: {1:16s}({2:6d}) [affinity=0x{3:02x}] [vruntime={4:16d}]'.format(status, taskname, pid, affinity, vruntime))
         else:
             self.print_out_str_with_tab('{0}: None(0)'.format(status))
 

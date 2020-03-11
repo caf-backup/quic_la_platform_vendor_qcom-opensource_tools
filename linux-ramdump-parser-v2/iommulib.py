@@ -1,4 +1,4 @@
-# Copyright (c) 2014-2019, The Linux Foundation. All rights reserved.
+# Copyright (c) 2014-2020, The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -158,7 +158,12 @@ class IommuLib(object):
         else:
             priv_ptr = None
 
-        arm_smmu_ops = self.ramdump.address_of('arm_smmu_ops')
+        if self.ramdump.kernel_version >= (5, 4, 0):
+            smmu_iommu_ops_offset = self.ramdump.field_offset('struct msm_iommu_ops','iommu_ops')
+            arm_smmu_ops_data = self.ramdump.address_of('arm_smmu_ops')
+            arm_smmu_ops = arm_smmu_ops_data + smmu_iommu_ops_offset
+        else:
+            arm_smmu_ops = self.ramdump.address_of('arm_smmu_ops')
 
         iommu_domain_ops = self.ramdump.read_structure_field(
             domain_ptr, 'struct iommu_domain', 'ops')
@@ -168,6 +173,11 @@ class IommuLib(object):
         if iommu_domain_ops == arm_smmu_ops:
             if priv_ptr is not None:
                 arm_smmu_domain_ptr = priv_ptr
+            elif self.ramdump.kernel_version >= (5, 4, 0):
+                arm_smmu_domain_ptr_wrapper = self.ramdump.container_of(
+                        domain_ptr, 'struct msm_iommu_domain', 'iommu_domain')
+                arm_smmu_domain_ptr = self.ramdump.container_of(
+                        arm_smmu_domain_ptr_wrapper, 'struct arm_smmu_domain', 'domain')
             else:
                 arm_smmu_domain_ptr = self.ramdump.container_of(
                     domain_ptr, 'struct arm_smmu_domain', 'domain')
@@ -190,16 +200,20 @@ class IommuLib(object):
                     arm_lpae_io_pgtable_ptr, 'struct arm_lpae_io_pgtable',
                     'levels')
 
-            pg_table = self.ramdump.read_structure_field(
-                arm_smmu_domain_ptr, 'struct arm_smmu_domain',
-                'pgtbl_cfg.arm_lpae_s1_cfg.ttbr[0]')
+            if self.ramdump.kernel_version >= (5, 4, 0):
+                pgtbl_info_offset = self.ramdump.field_offset('struct arm_smmu_domain','pgtbl_info')
+                pgtbl_info_data = arm_smmu_domain_ptr + pgtbl_info_offset
+                pg_table = self.ramdump.read_structure_field(pgtbl_info_data,'struct msm_io_pgtable_info','pgtbl_cfg.arm_lpae_s1_cfg.ttbr[0]')
+            else:
+                pg_table = self.ramdump.read_structure_field(
+                    arm_smmu_domain_ptr, 'struct arm_smmu_domain',
+                    'pgtbl_cfg.arm_lpae_s1_cfg.ttbr[0]')
 
             pg_table = phys_to_virt(self.ramdump, pg_table)
 
             domain_create = Domain(pg_table, 0, [], client_name,
                                    ARM_SMMU_DOMAIN, level)
             domain_list.append(domain_create)
-
         else:
             priv_pt_offset = self.ramdump.field_offset('struct msm_iommu_priv',
                                                        'pt')

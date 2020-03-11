@@ -205,7 +205,14 @@ class MemStats(RamParser):
             if zram_index_idr is None:
                 stat_val = 0
             else:
-                if self.ramdump.kernel_version >= (4, 14):
+                #From Kernel 9.5, The 'struct radix_tree_root', 'rnode' is replaced by 'struct xarray', 'xa_head'
+                #   refer LA.UM.9.14/kernel/msm-5.4/include/linux/xarray.h
+                if self.ramdump.kernel_version >= (5, 4):
+                    idr_layer_ary_offset = self.ramdump.field_offset(
+                            'struct xarray', 'xa_head')
+                    idr_layer_ary = self.ramdump.read_word(zram_index_idr +
+                                                           idr_layer_ary_offset)
+                elif self.ramdump.kernel_version >= (4, 14):
                     idr_layer_ary_offset = self.ramdump.field_offset(
                             'struct radix_tree_root', 'rnode')
                     idr_layer_ary = self.ramdump.read_word(zram_index_idr +

@@ -1,4 +1,4 @@
-# Copyright (c) 2013-2015, 2017, 2019 The Linux Foundation. All rights reserved.
+# Copyright (c) 2013-2015, 2017, 2019-2020 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -43,6 +43,44 @@ class ZoneInfo(RamParser):
             print_out_str('{0:30}: {1:8}'.format(wmark_names[i], self.ramdump.read_word(
                 self.ramdump.array_index(zwatermark_addr, 'unsigned long', i))))
 
+    def print_vm_node_states(self):
+        vm_node_stats = self.ramdump.address_of('vm_node_stat')
+        max_node_stat_item = self.ramdump.gdbmi.get_value_of('NR_VM_NODE_STAT_ITEMS')
+        vmstat_names = self.ramdump.gdbmi.get_enum_lookup_table('node_stat_item', max_node_stat_item)
+        for i in xrange(0, max_node_stat_item):
+            if self.ramdump.arm64:
+                val = self.ramdump.read_word(self.ramdump.array_index(vm_node_stats,
+                    'atomic_long_t', i))
+                print_out_str('{0:30}: {1:8}'.format(vmstat_names[i], val))
+            else:
+                val = self.ramdump.read_word(self.ramdump.array_index(vm_node_stats,
+                    'atomic_long_t', i))
+                print_out_str('{0:30}: {1:8}'.format(vmstat_names[i], val))
+
+    def print_vm_event_states(self):
+        vm_event_states = self.ramdump.address_of('vm_event_states')
+        max_node_stat_item = self.ramdump.gdbmi.get_value_of('NR_VM_EVENT_ITEMS')
+        vmstat_names = self.ramdump.gdbmi.get_enum_lookup_table(
+                  'vm_event_item', max_node_stat_item)
+        rq_addr=[0,0,0,0,0,0,0,0]
+        for i in xrange(0, max_node_stat_item):
+            val = 0
+            for j in self.ramdump.iter_cpus():
+                rq_addr[j] = vm_event_states + self.ramdump.per_cpu_offset(j)
+                if self.ramdump.arm64:
+                    val += self.ramdump.read_word(self.ramdump.array_index(rq_addr[j],
+                        'atomic_long_t', i))
+                else:
+                    val += self.ramdump.read_word(self.ramdump.array_index(rq_addr[j],
+                        'atomic_long_t', i))
+
+            if self.ramdump.arm64:
+                print_out_str('{0:30}: {1:8}'.format(vmstat_names[i],
+                    val))
+            else:
+                print_out_str('{0:30}: {1:8}'.format(vmstat_names[i],
+                    val))
+
     def parse(self):
         max_zone_stats = self.ramdump.gdbmi.get_value_of(
             'NR_VM_ZONE_STAT_ITEMS')
@@ -77,6 +115,12 @@ class ZoneInfo(RamParser):
             else:
                 print_out_str('{0:30}: {1:8}'.format(vmstat_names[i], self.ramdump.read_s32(
                 self.ramdump.array_index(vmstats_addr, 'atomic_long_t', i))))
+
+        print_out_str('\nNode Stats')
+        self.print_vm_node_states()
+
+        print_out_str('\nVM EVENT Stats')
+        self.print_vm_event_states()
 
         print_out_str('Total system pages: {0}'.format(self.ramdump.read_word(
             self.ramdump.address_of('totalram_pages'))))
