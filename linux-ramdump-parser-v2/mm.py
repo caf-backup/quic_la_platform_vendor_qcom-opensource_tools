@@ -10,6 +10,7 @@
 # GNU General Public License for more details.
 
 import bitops
+from ctypes import *
 
 
 def page_buddy(ramdump, page):
