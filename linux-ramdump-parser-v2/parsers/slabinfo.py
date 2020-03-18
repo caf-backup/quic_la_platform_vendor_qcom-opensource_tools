@@ -1,4 +1,4 @@
-# Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
+# Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -230,12 +230,12 @@ class Slabinfo(RamParser):
 
         page_addr = page_address(ramdump, page)
         p = page_addr
-        if page is None:
+        if page is None or page_addr is None:
             return
         n_objects = self.ramdump.read_word(page + g_offsetof.page_objects)
-        n_objects = (n_objects >> 16) & 0x00007FFF
         if n_objects is None:
             return
+        n_objects = (n_objects >> 16) & 0x00007FFF
         bitarray = [0] * n_objects
         addr = page_address(self.ramdump, page)
         self.get_map(self.ramdump, slab, page, bitarray)
@@ -343,7 +343,7 @@ class Slabinfo(RamParser):
                 out_slabs_addrs.write(
                     '\n   Object {0:x}-{1:x} ALLOCATED'.format(
                                     p, p + slab.size))
-        if self.ramdump.is_config_defined('CONFIG_SLUB_DEBUG_ON'):
+        if slab.flags & SLAB_STORE_USER:
             if g_Optimization is False:
                 self.print_track(ramdump, slab, p, 0, out_file)
                 self.print_track(ramdump, slab, p, 1, out_file)
@@ -421,9 +421,14 @@ class Slabinfo(RamParser):
                     '\nslab address of : {0}'.format(slab_name))
             cpu_slab_addr = self.ramdump.read_word(
                                         slab + cpu_slab_offset)
-            nr_total_objects = self.ramdump.read_structure_field(
+
+            if self.ramdump.is_config_defined('CONFIG_SLUB_DEBUG'):
+                nr_total_objects = self.ramdump.read_structure_field(
                         slab_node_addr,
                         'struct kmem_cache_node', 'total_objects')
+            else:
+                nr_total_objects = 'NA'
+
             slab_out.write(
                 '\n {0:x} slab {1} {2:x}  total objects: {3}\n'.format(
                         slab, slab_name, slab_node_addr, nr_total_objects))
@@ -448,7 +453,7 @@ class Slabinfo(RamParser):
                 self.print_per_cpu_slab_info(
                     self.ramdump, slab_obj,
                     slab_node, cpu_slabn_addr + offsetof.cpu_cache_page_offset,
-                    slab_out, map_fn)
+                    slab_out, map_fn, out_slabs_addrs)
             self.printsummary(slabs_output_summary, slab_out)
             self.g_allstacks.clear()
             if slab_name_found is True:
