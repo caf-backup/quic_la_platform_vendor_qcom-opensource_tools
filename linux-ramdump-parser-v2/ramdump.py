@@ -1753,6 +1753,12 @@ class RamDump():
         fn = self.read_u32 if self.sizeof('void *') == 4 else self.read_u64
         return fn(addr_or_name, virtual, cpu)
 
+    def struct_field_addr(self, addr, the_type, field):
+        try:
+            return self.gdbmi.field_offset(the_type, field) + addr
+        except gdbmi.GdbMIException:
+            pass
+
     def read_structure_field(self, addr_or_name, struct_name, field, virtual=True):
         """reads a 4 or 8 byte field from a structure"""
         size = self.sizeof("(({0} *)0)->{1}".format(struct_name, field))
