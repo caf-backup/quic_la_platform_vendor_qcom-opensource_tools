@@ -565,7 +565,10 @@ class RamDump():
         self.ram_addr = options.ram_addr
         self.autodump = options.autodump
         self.module_table = module_table.module_table_class()
-        self.module_table.setup_sym_path(options.sym_path)
+        # Save all paths given from --mod_path option. These will be searched for .ko.unstripped files
+        if options.mod_path_list:
+            for path in options.mod_path_list:
+                self.module_table.add_sym_path(path)
         self.dump_module_symbol_table = options.dump_module_symbol_table
         self.dump_kernel_symbol_table = options.dump_kernel_symbol_table
         self.dump_module_kallsyms = options.dump_module_kallsyms
@@ -767,7 +770,7 @@ class RamDump():
                 print_out_str('!!! Some features may be disabled!')
 
         self.unwind = self.Unwinder(self)
-        if self.module_table.sym_path_exists():
+        if self.module_table.sym_paths_exist():
             self.setup_module_symbols()
             self.gdbmi.setup_module_table(self.module_table)
             if self.dump_global_symbol_table:
@@ -1395,9 +1398,16 @@ class RamDump():
             self.module_table.add_entry(mod_tbl_ent)
             next_list_ent = self.read_pointer(next_list_ent + next_offset)
 
-    def parse_symbols_of_one_module(self, mod_tbl_ent, sym_path):
-        if not mod_tbl_ent.set_sym_path( os.path.join(sym_path, mod_tbl_ent.name + '.ko') ):
+    def parse_symbols_of_one_module(self, mod_tbl_ent, ko_file_list):
+        if mod_tbl_ent.name not in ko_file_list:
+            print_out_str('!! Object not found for {}'.format(mod_tbl_ent.name))
             return
+
+        if not mod_tbl_ent.set_sym_path(ko_file_list[mod_tbl_ent.name]):
+            return
+
+        stream = os.popen(self.nm_path + ' -n ' + mod_tbl_ent.get_sym_path())
+        symbols = stream.readlines()
 
         if self.is_config_defined("CONFIG_KALLSYMS"):
             symtab_offset = self.field_offset('struct mod_kallsyms', 'symtab')
@@ -1458,9 +1468,35 @@ class RamDump():
             if self.dump_module_symbol_table:
                 self.dump_mod_sym_table(mod_tbl_ent.name, mod_tbl_ent.sym_lookup_table)
 
+    def walk_depth(self, path, on_file, depth=10):
+        if depth <= 0:
+            return
+        for basename in os.listdir(path):
+            file = os.path.join(path, basename)
+            if os.path.isdir(file) and not os.path.islink(file):
+                self.walk_depth(file, on_file, depth=depth-1)
+            elif os.path.isfile(file):
+                on_file(file)
+
     def parse_module_symbols(self):
+        # Recursively search all files under mod_path ending in '.ko.unstripped' and store in a list
+        ko_file_list = {}
+        for path in self.module_table.sym_path_list:
+            def on_file(file):
+                if file.endswith('.ko.unstripped'):
+                    name = file[:-len('.ko.unstripped')]
+                elif file.endswith('.ko'):
+                    name = file[:-len('.ko')]
+                else:
+                    continue
+                # Prefer .ko.unstripped
+                if ko_file_list.get(name, '').endswith('.ko.unstripped') and file.endswith('.ko'):
+                    continue
+                ko_file_list[name] = file
+            self.walk_depth(path, on_file)
+
         for mod_tbl_ent in self.module_table.module_table:
-            self.parse_symbols_of_one_module(mod_tbl_ent, self.module_table.sym_path)
+            self.parse_symbols_of_one_module(mod_tbl_ent, ko_file_list)
 
     def add_symbols_to_global_lookup_table(self):
         if self.is_config_defined("CONFIG_KALLSYMS"):
