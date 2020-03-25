@@ -1511,10 +1511,10 @@ class RamDump():
                 elif file.endswith('.ko'):
                     name = file[:-len('.ko')]
                 else:
-                    continue
+                    return
                 # Prefer .ko.unstripped
                 if ko_file_list.get(name, '').endswith('.ko.unstripped') and file.endswith('.ko'):
-                    continue
+                    return
                 ko_file_list[name] = file
             self.walk_depth(path, on_file)
 
