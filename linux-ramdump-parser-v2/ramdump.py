@@ -1727,6 +1727,22 @@ class RamDump():
             s = self.read_string(addr_or_name, '<H', virtual, cpu)
         return s[0] if s is not None else None
 
+    def read_slong(self, addr_or_name, virtual=True, cpu=None):
+        """returns a value corresponding to half the word size"""
+        if self.arm64:
+            s = self.read_string(addr_or_name, '<q', virtual, cpu)
+        else:
+            s = self.read_string(addr_or_name, '<i', virtual, cpu)
+        return s[0] if s is not None else None
+
+    def read_ulong(self, addr_or_name, virtual=True, cpu=None):
+        """returns a value corresponding to half the word size"""
+        if self.arm64:
+            s = self.read_string(addr_or_name, '<Q', virtual, cpu)
+        else:
+            s = self.read_string(addr_or_name, '<I', virtual, cpu)
+        return s[0] if s is not None else None
+
     def read_byte(self, addr_or_name, virtual=True, cpu=None):
         """Reads a single byte."""
         s = self.read_string(addr_or_name, '<B', virtual, cpu)
