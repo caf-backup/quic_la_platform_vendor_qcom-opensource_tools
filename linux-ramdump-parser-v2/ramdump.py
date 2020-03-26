@@ -1894,12 +1894,18 @@ class RamDump():
         return ret
 
     def per_cpu_offset(self, cpu):
+        """ __per_cpu_offset has been observed to be a negative number
+        on kernel 5.4, even though it is stored in a unsigned long.
+        Since python supports numbers larger than 64 bits, the behavior
+        on overflow differs with that of C. Therefore, read it as a
+        signed value instead. """
+
         per_cpu_offset_addr = self.address_of('__per_cpu_offset')
         if per_cpu_offset_addr is None:
             return 0
         per_cpu_offset_addr_indexed = self.array_index(
             per_cpu_offset_addr, 'unsigned long', cpu)
-        return self.read_word(per_cpu_offset_addr_indexed)
+        return self.read_slong(per_cpu_offset_addr_indexed)
 
     def get_num_cpus(self):
         """Gets the number of CPUs in the system."""
