@@ -574,6 +574,29 @@ class RamDump():
         self.dump_module_kallsyms = options.dump_module_kallsyms
         self.dump_global_symbol_table = options.dump_global_symbol_table
         self.currentEL = options.currentEL or None
+        # Add search path for kernel modules under "vendor/qcom" directory
+        # Location of this directory in relation to vmlinux changes depending on whether it's a primary or secondary boot.
+        # PRIMARY-BOOT case:
+        if os.path.basename(os.path.dirname(os.path.dirname(options.vmlinux))) == 'obj':
+            boot_dir = os.path.dirname(os.path.dirname(options.vmlinux))
+            mod_build_path = os.path.join(boot_dir, 'vendor', 'qcom') # obj/vendor/qcom
+            if os.path.exists(mod_build_path):
+                self.module_table.add_sym_path(mod_build_path)
+            mod_build_path = os.path.join(boot_dir, os.pardir, 'vendor', 'lib', 'modules') # obj/../vendor/lib
+            if os.path.exists(mod_build_path):
+                self.module_table.add_sym_path(mod_build_path)
+        # SECONDARY-BOOT or gki-boot case:
+        elif os.path.basename(os.path.dirname(options.vmlinux)) in ['secondary-boot', 'gki-boot']:
+            boot_dir = os.path.dirname(options.vmlinux)
+            mod_build_path = os.path.join(boot_dir, 'unstripped_modules')  # secondary-boot/unstripped_modules
+            if os.path.exists(mod_build_path):
+                self.module_table.add_sym_path(mod_build_path)
+            mod_build_path = os.path.join(boot_dir, 'vendor', 'modules')  # secondary-boot/vendor/modules
+            if os.path.exists(mod_build_path):
+                self.module_table.add_sym_path(mod_build_path)
+            mod_build_path = os.path.join(boot_dir, 'dlkm', 'lib', 'modules')
+            if os.path.exists(mod_build_path):
+                self.module_table.add_sym_path(mod_build_path)
         if self.minidump:
             try:
                 mod = import_module('elftools.elf.elffile')
@@ -1752,6 +1775,12 @@ class RamDump():
         """
         fn = self.read_u32 if self.sizeof('void *') == 4 else self.read_u64
         return fn(addr_or_name, virtual, cpu)
+
+    def struct_field_addr(self, addr, the_type, field):
+        try:
+            return self.gdbmi.field_offset(the_type, field) + addr
+        except gdbmi.GdbMIException:
+            pass
 
     def read_structure_field(self, addr_or_name, struct_name, field, virtual=True):
         """reads a 4 or 8 byte field from a structure"""
