@@ -41,6 +41,8 @@ PC = 15
 # just hard code it
 
 SMEM_HW_SW_BUILD_ID = 0x89
+SMEM_PRIVATE_CANARY = 0xa5a5
+PARTITION_MAGIC = 0x54525024
 BUILD_ID_LENGTH = 32
 
 def is_ramdump_file(val):
@@ -1254,7 +1256,17 @@ class RamDump():
         if (self.hw_id is None):
             if not self.minidump:
                 heap_toc_offset = self.field_offset('struct smem_shared', 'heap_toc')
-                if heap_toc_offset is None:
+                global_partition_offset_offset = self.field_offset('struct smem_header', 'free_offset')
+                if not heap_toc_offset is None:
+                    smem_heap_entry_size = self.sizeof('struct smem_heap_entry')
+                    offset_offset = self.field_offset('struct smem_heap_entry', 'offset')
+                elif not global_partition_offset_offset is None:
+                    smem_partition_header_size = self.sizeof('struct smem_partition_header')
+                    uncached_offset_offset = self.field_offset('struct smem_partition_header', 'offset_free_uncached')
+                    smem_private_entry_size = self.sizeof('struct smem_private_entry')
+                    entry_item_offset = self.field_offset('struct smem_private_entry', 'item')
+                    item_size_offset = self.field_offset('struct smem_private_entry', 'size')
+                else:
                     print_out_str(
                         '!!!! Could not get a necessary offset for auto detection!')
                     print_out_str(
@@ -1262,20 +1274,18 @@ class RamDump():
                     print_out_str('!!!! Also check that the vmlinux is not stripped')
                     print_out_str('!!!! Exiting...')
                     sys.exit(1)
-
-                smem_heap_entry_size = self.sizeof('struct smem_heap_entry')
-                offset_offset = self.field_offset('struct smem_heap_entry', 'offset')
             for board in boards:
-                if not self.minidump:
-                    socinfo_start_addr = board.smem_addr + heap_toc_offset + smem_heap_entry_size * SMEM_HW_SW_BUILD_ID + offset_offset
-                else:
+                if self.minidump:
                     if hasattr(board, 'smem_addr_buildinfo'):
-                        socinfo_start_addr = board.smem_addr_buildinfo
+                        socinfo_start = board.smem_addr_buildinfo
+                        if add_offset:
+                            socinfo_start += board.ram_start
                     else:
                         continue
-                if add_offset:
-                    socinfo_start_addr += board.ram_start
-                if not self.minidump:
+                elif not heap_toc_offset is None:
+                    socinfo_start_addr = board.smem_addr + heap_toc_offset + smem_heap_entry_size * SMEM_HW_SW_BUILD_ID + offset_offset
+                    if add_offset:
+                        socinfo_start_addr += board.ram_start
                     soc_start = self.read_int(socinfo_start_addr, False)
                     if soc_start is None:
                         continue
@@ -1283,7 +1293,38 @@ class RamDump():
                     if add_offset:
                         socinfo_start += board.ram_start
                 else:
-                    socinfo_start = socinfo_start_addr
+                    found = False
+                    global_partition_offset_addr = board.smem_addr + global_partition_offset_offset
+                    uncached_offset_addr = board.smem_addr + uncached_offset_offset
+                    if add_offset:
+                        global_partition_offset_addr += board.ram_start
+                        uncached_offset_addr += board.ram_start
+                    global_partition_offset = self.read_int(global_partition_offset_addr, False)
+                    if global_partition_offset is None:
+                        continue
+                    uncached_offset_addr += global_partition_offset
+                    uncached_offset = self.read_int(uncached_offset_addr, False)
+                    partition_magic_addr = board.smem_addr + global_partition_offset
+                    if add_offset:
+                        partition_magic_addr += board.ram_start
+                    if self.read_int(partition_magic_addr, False) != PARTITION_MAGIC:
+                        continue
+                    entry_addr = board.smem_addr + global_partition_offset + smem_partition_header_size
+                    uncached_end_addr = board.smem_addr + global_partition_offset + uncached_offset
+                    if add_offset:
+                        entry_addr += board.ram_start
+                        uncached_end_addr += board.ram_start
+                    while entry_addr < uncached_end_addr:
+                        if self.read_u16(entry_addr, False) != SMEM_PRIVATE_CANARY:
+                            break
+                        if self.read_u16(entry_addr + entry_item_offset, False) == SMEM_HW_SW_BUILD_ID:
+                            found = True
+                            socinfo_start = entry_addr + smem_private_entry_size
+                            break
+                        entry_addr += self.read_int(entry_addr + item_size_offset, False)
+                        entry_addr += smem_private_entry_size
+                    if not found:
+                        continue
                 socinfo_id = self.read_int(socinfo_start + 4, False)
                 if socinfo_id != board.socid:
                     continue
