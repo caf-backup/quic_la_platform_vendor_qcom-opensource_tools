@@ -1,4 +1,4 @@
-# Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+# Copyright (c) 2012-2015, 2020 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -307,6 +307,8 @@ class TZRegDump(RamParser):
 
     def parse(self):
         if self.ramdump.address_of('memdump'):
+            print_out_str(
+                '!!! No memdump')
             return None
 
         ebi_addr = self.ramdump.read_tz_offset()
