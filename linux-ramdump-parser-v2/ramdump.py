@@ -1564,6 +1564,7 @@ class RamDump():
                     name = file[:-len('.ko')]
                 else:
                     return
+                name = os.path.basename(name)
                 # Prefer .ko.unstripped
                 if ko_file_list.get(name, '').endswith('.ko.unstripped') and file.endswith('.ko'):
                     return
