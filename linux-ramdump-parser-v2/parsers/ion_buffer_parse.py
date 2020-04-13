@@ -1,5 +1,5 @@
 """
-Copyright (c) 2016, 2018 The Linux Foundation. All rights reserved.
+Copyright (c) 2016, 2018, 2020 The Linux Foundation. All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are
@@ -63,7 +63,9 @@ def ion_buffer_info(self, ramdump, ion_info):
     size_offset = ramdump.field_offset('struct dma_buf', 'size')
     file_offset = ramdump.field_offset('struct dma_buf', 'file')
     f_count_offset = ramdump.field_offset('struct file', 'f_count')
-    name_offset = ramdump.field_offset('struct dma_buf', 'name')
+    name_offset = ramdump.field_offset('struct dma_buf', 'buf_name')
+    if name_offset is None:
+        name_offset = ramdump.field_offset('struct dma_buf', 'name')
     exp_name_offset = ramdump.field_offset('struct dma_buf', 'exp_name')
     ion_info.write("{0:40} {1:4} {2:15} {3:10} {4:10} {5:10} {6:20}\n".format(
             'File_addr', 'REF', 'Name', 'Size', 'Exp', 'Heap', 'Size in KB'))
@@ -532,7 +534,9 @@ class DumpIonBuffer(RamParser):
         self.private_data_offset = self.ramdump.field_offset('struct file',
                                                    'private_data')
         self.size_offset = self.ramdump.field_offset('struct dma_buf', 'size')
-        self.name_offset = self.ramdump.field_offset('struct dma_buf', 'name')
+        self.name_offset = self.ramdump.field_offset('struct dma_buf', 'buf_name')
+        if self.name_offset is None:
+            self.name_offset = self.ramdump.field_offset('struct dma_buf', 'name')
         self.stime_offset = self.ramdump.field_offset('struct timekeeper',
                                                 'ktime_sec')
 
