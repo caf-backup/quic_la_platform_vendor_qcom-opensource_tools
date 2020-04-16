@@ -1,4 +1,4 @@
-# Copyright (c) 2017, 2019, The Linux Foundation. All rights reserved.
+# Copyright (c) 2017, 2019, 2020, The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -40,7 +40,7 @@ class module_table_class():
 
     def __init__(self):
         self.module_table = []
-        self.sym_path = ''
+        self.sym_path_list = []
 
     def add_entry(self, new_entry):
         self.module_table.append(new_entry)
@@ -48,20 +48,16 @@ class module_table_class():
     def num_modules(self):
         return len(self.module_table)
 
-    def setup_sym_path(self, sym_path):
+    def add_sym_path(self, sym_path):
         if sym_path is None:
             print_out_str('sym_path: not specified!')
-            self.sym_path = ''
             return False
         elif not os.path.exists(sym_path):
             print_out_str('sym_path: ' + sym_path + ' not valid or directory doesn\'t exist')
-            self.sym_path = ''
             return False
         else:
-            self.sym_path = sym_path
+            self.sym_path_list.append(sym_path)
             return True
 
-    def sym_path_exists(self):
-        return self.sym_path != ''
-
-
+    def sym_paths_exist(self):
+        return len(self.sym_path_list) > 0

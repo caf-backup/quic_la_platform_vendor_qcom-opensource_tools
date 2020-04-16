@@ -102,10 +102,14 @@ class struct_member_offset(object):
             'struct kmem_cache_cpu', 'page')
         self.kmemcpucache_cpu_slab = ramdump.field_offset(
             'struct kmem_cache', 'cpu_slab')
+        self.kmemcache_cpu_partial = ramdump.field_offset(
+            'struct kmem_cache', 'cpu_partial')
         self.kmemcachenode_partial = ramdump.field_offset(
             'struct kmem_cache_node', 'partial')
         self.kmemcachenode_full = ramdump.field_offset(
                             'struct kmem_cache_node', 'full')
+        self.page_next = ramdump.field_offset(
+                            'struct page', 'next')
         self.page_lru = ramdump.field_offset(
                             'struct page', 'lru')
         self.page_flags = ramdump.field_offset(
@@ -124,6 +128,8 @@ class struct_member_offset(object):
                                             'struct track')
         self.cpu_cache_page_offset = ramdump.field_offset(
                             'struct kmem_cache_cpu', 'page')
+        self.cpu_partial_offset = ramdump.field_offset(
+                            'struct kmem_cache_cpu', 'partial')
         self.sizeof_void_pointer = ramdump.sizeof(
                                              "void *")
         self.sizeof_unsignedlong = ramdump.sizeof(
@@ -297,7 +303,7 @@ class Slabinfo(RamParser):
 
     def print_slab_page_info(
                 self, ramdump, slab_obj, slab_node, start,
-                out_file, map_fn, out_slabs_addrs):
+                out_file, map_fn, out_slabs_addrs, cpu_partial=False):
         page = self.ramdump.read_word(start)
         if page == 0:
             return
@@ -305,19 +311,25 @@ class Slabinfo(RamParser):
         max_pfn_addr = self.ramdump.address_of('max_pfn')
         max_pfn = self.ramdump.read_word(max_pfn_addr)
         max_page = pfn_to_page(ramdump, max_pfn)
-        while page != start:
-            if page is None:
+        while True:
+            if page == start:
+                return
+            if page is None or page == 0:
                 return
             if page in seen:
                 return
             if page > max_page:
                 return
+            if cpu_partial is False:
+                page = page - g_offsetof.page_lru
             seen.append(page)
-            page = page - g_offsetof.page_lru
             self.print_slab(
                 self.ramdump, slab_obj, page, out_file, map_fn,
                 out_slabs_addrs)
-            page = self.ramdump.read_word(page + g_offsetof.page_lru)
+            if cpu_partial is False:
+                page = self.ramdump.read_word(page + g_offsetof.page_lru)
+            else:
+                page = self.ramdump.read_word(page + g_offsetof.page_next)
 
     def print_per_cpu_slab_info(
             self, ramdump, slab, slab_node, start, out_file, map_fn,
@@ -446,14 +458,21 @@ class Slabinfo(RamParser):
 
             # per cpu slab
             for i in range(0, cpus):
-                cpu_slabn_addr = self.ramdump.read_word(
-                                                cpu_slab_addr, cpu=i)
+                cpu_slabn_addr = cpu_slab_addr + self.ramdump.per_cpu_offset(i)
                 if cpu_slabn_addr == 0 or None:
                     break
+
                 self.print_per_cpu_slab_info(
                     self.ramdump, slab_obj,
                     slab_node, cpu_slabn_addr + offsetof.cpu_cache_page_offset,
                     slab_out, map_fn, out_slabs_addrs)
+                cpu_partial_val = self.ramdump.read_int(
+                                        slab + offsetof.kmemcache_cpu_partial)
+                if self.ramdump.is_config_defined('CONFIG_SLUB_CPU_PARTIAL') and cpu_partial_val is not 0:
+                    self.print_slab_page_info(self.ramdump, slab_obj, slab_node,
+                            cpu_slabn_addr + offsetof.cpu_partial_offset,
+                            slab_out, map_fn, out_slabs_addrs, True)
+
             self.printsummary(slabs_output_summary, slab_out)
             self.g_allstacks.clear()
             if slab_name_found is True:

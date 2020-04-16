@@ -105,10 +105,30 @@ class IommuLib(object):
                     kobj_ptr, 'struct kobject', 'name')
 
 
-            self._find_iommu_domains_arm_smmu(domain_ptr, client_name, self.domain_list)
+            has_pgtbl_info = self.ramdump.read_structure_field(debug_attachment,\
+                             'struct iommu_debug_attachment', 'fmt') is not None
+            if self.ramdump.kernel_version >= (5, 4, 0) and has_pgtbl_info:
+                self._find_iommu_domains_debug_attachments(debug_attachment,\
+                                                client_name, self.domain_list)
+            else:
+                self._find_iommu_domains_arm_smmu(domain_ptr, client_name,\
+                                                  self.domain_list)
 
         return True
 
+    """
+    will generate domains using only the information stored in the debug
+    attachments structure.
+    """
+    def _find_iommu_domains_debug_attachments(self, debug_attachment,\
+                                              client_name, domain_list):
+        levels = self.ramdump.read_structure_field(debug_attachment,\
+                                    'struct iommu_debug_attachment', 'levels')
+        pg_table = self.ramdump.read_structure_field(debug_attachment,\
+                                'struct iommu_debug_attachment', 'ttbr0')
+        domain = Domain(pg_table, 0, [], client_name, ARM_SMMU_DOMAIN,
+                        levels)
+        domain_list.append(domain)
 
     """
     will only find active iommu domains. This means it will exclude most gpu domains.

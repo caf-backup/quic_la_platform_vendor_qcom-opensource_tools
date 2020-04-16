@@ -41,6 +41,8 @@ PC = 15
 # just hard code it
 
 SMEM_HW_SW_BUILD_ID = 0x89
+SMEM_PRIVATE_CANARY = 0xa5a5
+PARTITION_MAGIC = 0x54525024
 BUILD_ID_LENGTH = 32
 
 def is_ramdump_file(val):
@@ -565,12 +567,38 @@ class RamDump():
         self.ram_addr = options.ram_addr
         self.autodump = options.autodump
         self.module_table = module_table.module_table_class()
-        self.module_table.setup_sym_path(options.sym_path)
+        # Save all paths given from --mod_path option. These will be searched for .ko.unstripped files
+        if options.mod_path_list:
+            for path in options.mod_path_list:
+                self.module_table.add_sym_path(path)
         self.dump_module_symbol_table = options.dump_module_symbol_table
         self.dump_kernel_symbol_table = options.dump_kernel_symbol_table
         self.dump_module_kallsyms = options.dump_module_kallsyms
         self.dump_global_symbol_table = options.dump_global_symbol_table
         self.currentEL = options.currentEL or None
+        # Add search path for kernel modules under "vendor/qcom" directory
+        # Location of this directory in relation to vmlinux changes depending on whether it's a primary or secondary boot.
+        # PRIMARY-BOOT case:
+        if os.path.basename(os.path.dirname(os.path.dirname(options.vmlinux))) == 'obj':
+            boot_dir = os.path.dirname(os.path.dirname(options.vmlinux))
+            mod_build_path = os.path.join(boot_dir, 'vendor', 'qcom') # obj/vendor/qcom
+            if os.path.exists(mod_build_path):
+                self.module_table.add_sym_path(mod_build_path)
+            mod_build_path = os.path.join(boot_dir, os.pardir, 'vendor', 'lib', 'modules') # obj/../vendor/lib
+            if os.path.exists(mod_build_path):
+                self.module_table.add_sym_path(mod_build_path)
+        # SECONDARY-BOOT or gki-boot case:
+        elif os.path.basename(os.path.dirname(options.vmlinux)) in ['secondary-boot', 'gki-boot']:
+            boot_dir = os.path.dirname(options.vmlinux)
+            mod_build_path = os.path.join(boot_dir, 'unstripped_modules')  # secondary-boot/unstripped_modules
+            if os.path.exists(mod_build_path):
+                self.module_table.add_sym_path(mod_build_path)
+            mod_build_path = os.path.join(boot_dir, 'vendor', 'modules')  # secondary-boot/vendor/modules
+            if os.path.exists(mod_build_path):
+                self.module_table.add_sym_path(mod_build_path)
+            mod_build_path = os.path.join(boot_dir, 'dlkm', 'lib', 'modules')
+            if os.path.exists(mod_build_path):
+                self.module_table.add_sym_path(mod_build_path)
         if self.minidump:
             try:
                 mod = import_module('elftools.elf.elffile')
@@ -767,7 +795,7 @@ class RamDump():
                 print_out_str('!!! Some features may be disabled!')
 
         self.unwind = self.Unwinder(self)
-        if self.module_table.sym_path_exists():
+        if self.module_table.sym_paths_exist():
             self.setup_module_symbols()
             self.gdbmi.setup_module_table(self.module_table)
             if self.dump_global_symbol_table:
@@ -1228,7 +1256,17 @@ class RamDump():
         if (self.hw_id is None):
             if not self.minidump:
                 heap_toc_offset = self.field_offset('struct smem_shared', 'heap_toc')
-                if heap_toc_offset is None:
+                global_partition_offset_offset = self.field_offset('struct smem_header', 'free_offset')
+                if not heap_toc_offset is None:
+                    smem_heap_entry_size = self.sizeof('struct smem_heap_entry')
+                    offset_offset = self.field_offset('struct smem_heap_entry', 'offset')
+                elif not global_partition_offset_offset is None:
+                    smem_partition_header_size = self.sizeof('struct smem_partition_header')
+                    uncached_offset_offset = self.field_offset('struct smem_partition_header', 'offset_free_uncached')
+                    smem_private_entry_size = self.sizeof('struct smem_private_entry')
+                    entry_item_offset = self.field_offset('struct smem_private_entry', 'item')
+                    item_size_offset = self.field_offset('struct smem_private_entry', 'size')
+                else:
                     print_out_str(
                         '!!!! Could not get a necessary offset for auto detection!')
                     print_out_str(
@@ -1236,20 +1274,18 @@ class RamDump():
                     print_out_str('!!!! Also check that the vmlinux is not stripped')
                     print_out_str('!!!! Exiting...')
                     sys.exit(1)
-
-                smem_heap_entry_size = self.sizeof('struct smem_heap_entry')
-                offset_offset = self.field_offset('struct smem_heap_entry', 'offset')
             for board in boards:
-                if not self.minidump:
-                    socinfo_start_addr = board.smem_addr + heap_toc_offset + smem_heap_entry_size * SMEM_HW_SW_BUILD_ID + offset_offset
-                else:
+                if self.minidump:
                     if hasattr(board, 'smem_addr_buildinfo'):
-                        socinfo_start_addr = board.smem_addr_buildinfo
+                        socinfo_start = board.smem_addr_buildinfo
+                        if add_offset:
+                            socinfo_start += board.ram_start
                     else:
                         continue
-                if add_offset:
-                    socinfo_start_addr += board.ram_start
-                if not self.minidump:
+                elif not heap_toc_offset is None:
+                    socinfo_start_addr = board.smem_addr + heap_toc_offset + smem_heap_entry_size * SMEM_HW_SW_BUILD_ID + offset_offset
+                    if add_offset:
+                        socinfo_start_addr += board.ram_start
                     soc_start = self.read_int(socinfo_start_addr, False)
                     if soc_start is None:
                         continue
@@ -1257,7 +1293,38 @@ class RamDump():
                     if add_offset:
                         socinfo_start += board.ram_start
                 else:
-                    socinfo_start = socinfo_start_addr
+                    found = False
+                    global_partition_offset_addr = board.smem_addr + global_partition_offset_offset
+                    uncached_offset_addr = board.smem_addr + uncached_offset_offset
+                    if add_offset:
+                        global_partition_offset_addr += board.ram_start
+                        uncached_offset_addr += board.ram_start
+                    global_partition_offset = self.read_int(global_partition_offset_addr, False)
+                    if global_partition_offset is None:
+                        continue
+                    uncached_offset_addr += global_partition_offset
+                    uncached_offset = self.read_int(uncached_offset_addr, False)
+                    partition_magic_addr = board.smem_addr + global_partition_offset
+                    if add_offset:
+                        partition_magic_addr += board.ram_start
+                    if self.read_int(partition_magic_addr, False) != PARTITION_MAGIC:
+                        continue
+                    entry_addr = board.smem_addr + global_partition_offset + smem_partition_header_size
+                    uncached_end_addr = board.smem_addr + global_partition_offset + uncached_offset
+                    if add_offset:
+                        entry_addr += board.ram_start
+                        uncached_end_addr += board.ram_start
+                    while entry_addr < uncached_end_addr:
+                        if self.read_u16(entry_addr, False) != SMEM_PRIVATE_CANARY:
+                            break
+                        if self.read_u16(entry_addr + entry_item_offset, False) == SMEM_HW_SW_BUILD_ID:
+                            found = True
+                            socinfo_start = entry_addr + smem_private_entry_size
+                            break
+                        entry_addr += self.read_int(entry_addr + item_size_offset, False)
+                        entry_addr += smem_private_entry_size
+                    if not found:
+                        continue
                 socinfo_id = self.read_int(socinfo_start + 4, False)
                 if socinfo_id != board.socid:
                     continue
@@ -1395,9 +1462,16 @@ class RamDump():
             self.module_table.add_entry(mod_tbl_ent)
             next_list_ent = self.read_pointer(next_list_ent + next_offset)
 
-    def parse_symbols_of_one_module(self, mod_tbl_ent, sym_path):
-        if not mod_tbl_ent.set_sym_path( os.path.join(sym_path, mod_tbl_ent.name + '.ko') ):
+    def parse_symbols_of_one_module(self, mod_tbl_ent, ko_file_list):
+        if mod_tbl_ent.name not in ko_file_list:
+            print_out_str('!! Object not found for {}'.format(mod_tbl_ent.name))
             return
+
+        if not mod_tbl_ent.set_sym_path(ko_file_list[mod_tbl_ent.name]):
+            return
+
+        stream = os.popen(self.nm_path + ' -n ' + mod_tbl_ent.get_sym_path())
+        symbols = stream.readlines()
 
         if self.is_config_defined("CONFIG_KALLSYMS"):
             symtab_offset = self.field_offset('struct mod_kallsyms', 'symtab')
@@ -1458,9 +1532,35 @@ class RamDump():
             if self.dump_module_symbol_table:
                 self.dump_mod_sym_table(mod_tbl_ent.name, mod_tbl_ent.sym_lookup_table)
 
+    def walk_depth(self, path, on_file, depth=10):
+        if depth <= 0:
+            return
+        for basename in os.listdir(path):
+            file = os.path.join(path, basename)
+            if os.path.isdir(file) and not os.path.islink(file):
+                self.walk_depth(file, on_file, depth=depth-1)
+            elif os.path.isfile(file):
+                on_file(file)
+
     def parse_module_symbols(self):
+        # Recursively search all files under mod_path ending in '.ko.unstripped' and store in a list
+        ko_file_list = {}
+        for path in self.module_table.sym_path_list:
+            def on_file(file):
+                if file.endswith('.ko.unstripped'):
+                    name = file[:-len('.ko.unstripped')]
+                elif file.endswith('.ko'):
+                    name = file[:-len('.ko')]
+                else:
+                    return
+                # Prefer .ko.unstripped
+                if ko_file_list.get(name, '').endswith('.ko.unstripped') and file.endswith('.ko'):
+                    return
+                ko_file_list[name] = file
+            self.walk_depth(path, on_file)
+
         for mod_tbl_ent in self.module_table.module_table:
-            self.parse_symbols_of_one_module(mod_tbl_ent, self.module_table.sym_path)
+            self.parse_symbols_of_one_module(mod_tbl_ent, ko_file_list)
 
     def add_symbols_to_global_lookup_table(self):
         if self.is_config_defined("CONFIG_KALLSYMS"):
@@ -1668,6 +1768,22 @@ class RamDump():
             s = self.read_string(addr_or_name, '<H', virtual, cpu)
         return s[0] if s is not None else None
 
+    def read_slong(self, addr_or_name, virtual=True, cpu=None):
+        """returns a value corresponding to half the word size"""
+        if self.arm64:
+            s = self.read_string(addr_or_name, '<q', virtual, cpu)
+        else:
+            s = self.read_string(addr_or_name, '<i', virtual, cpu)
+        return s[0] if s is not None else None
+
+    def read_ulong(self, addr_or_name, virtual=True, cpu=None):
+        """returns a value corresponding to half the word size"""
+        if self.arm64:
+            s = self.read_string(addr_or_name, '<Q', virtual, cpu)
+        else:
+            s = self.read_string(addr_or_name, '<I', virtual, cpu)
+        return s[0] if s is not None else None
+
     def read_byte(self, addr_or_name, virtual=True, cpu=None):
         """Reads a single byte."""
         s = self.read_string(addr_or_name, '<B', virtual, cpu)
@@ -1716,6 +1832,12 @@ class RamDump():
         """
         fn = self.read_u32 if self.sizeof('void *') == 4 else self.read_u64
         return fn(addr_or_name, virtual, cpu)
+
+    def struct_field_addr(self, addr, the_type, field):
+        try:
+            return self.gdbmi.field_offset(the_type, field) + addr
+        except gdbmi.GdbMIException:
+            pass
 
     def read_structure_field(self, addr_or_name, struct_name, field, virtual=True):
         """reads a 4 or 8 byte field from a structure"""
@@ -1813,12 +1935,18 @@ class RamDump():
         return ret
 
     def per_cpu_offset(self, cpu):
+        """ __per_cpu_offset has been observed to be a negative number
+        on kernel 5.4, even though it is stored in a unsigned long.
+        Since python supports numbers larger than 64 bits, the behavior
+        on overflow differs with that of C. Therefore, read it as a
+        signed value instead. """
+
         per_cpu_offset_addr = self.address_of('__per_cpu_offset')
         if per_cpu_offset_addr is None:
             return 0
         per_cpu_offset_addr_indexed = self.array_index(
             per_cpu_offset_addr, 'unsigned long', cpu)
-        return self.read_word(per_cpu_offset_addr_indexed)
+        return self.read_slong(per_cpu_offset_addr_indexed)
 
     def get_num_cpus(self):
         """Gets the number of CPUs in the system."""
