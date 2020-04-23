@@ -117,6 +117,9 @@ def parse_task(self, ramdump, task, lsof_info):
                     task, 'struct task_struct', 'pid')
     files = ramdump.read_structure_field(
                     task, 'struct task_struct', 'files')
+    if files == 0x0:
+        return
+
     str_task_file = '\n Task: 0x{0:x}, comm: {1}, pid : {2:1}, files : 0x{3:x}'
     lsof_info.write(str_task_file.format(
                     task, client_name, task_pid, files))
