@@ -78,7 +78,7 @@ def ion_buffer_info(self, ramdump, ion_info):
         exp_name = ramdump.read_word(dma_buf_addr + exp_name_offset)
         exp_name = ramdump.read_cstring(exp_name, 48)
         ionheap_name = ""
-        if exp_name == 'ion':
+        if 'ion' in exp_name:
             ion_buffer = ramdump.read_structure_field(dma_buf_addr, 'struct dma_buf', 'priv')
             ion_heap = ramdump.read_structure_field(ion_buffer, 'struct ion_buffer', 'heap')
             ionheap_name_addr = ramdump.read_structure_field(ion_heap, 'struct ion_heap', 'name')
