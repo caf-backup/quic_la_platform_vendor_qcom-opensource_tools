@@ -1,4 +1,4 @@
-# Copyright (c) 2012-2013, 2015, 2017-2019 The Linux Foundation. All rights reserved.
+# Copyright (c) 2012-2013, 2015, 2017-2020 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -51,7 +51,20 @@ def find_panic(ramdump, addr_stack, thread_task_name):
                 return True
     return False
 
-task_state_name = ["Runing", "ISleep", "DSleep"]
+#Definitions taken from include/linux/sched.h
+TASK_REPORT = 0xff
+task_state_short_name = "RSDTtXZPI"
+
+def find_last_bit_index(count):
+    count &= TASK_REPORT
+    index = count.bit_length()
+    return index
+
+def task_state_to_char(task_state):
+    index = find_last_bit_index(task_state)
+    task_state_str = task_state_short_name[index]
+    return task_state_str
+
 def dump_thread_group(ramdump, thread_group, task_out, taskhighlight_out, check_for_panic=0):
     global highlight_tasks
     offset_thread_group = ramdump.field_offset(
@@ -61,7 +74,13 @@ def dump_thread_group(ramdump, thread_group, task_out, taskhighlight_out, check_
     offset_stack = ramdump.field_offset('struct task_struct', 'stack')
     offset_state = ramdump.field_offset('struct task_struct', 'state')
     offset_prio = ramdump.field_offset('struct task_struct', 'prio')
-    offset_affine = ramdump.field_offset('struct task_struct', 'cpus_allowed')
+    offset_last_enqueued_ts = ramdump.field_offset('struct task_struct', 'last_enqueued_ts')
+    offset_last_sleep_ts = ramdump.field_offset('struct task_struct', 'last_sleep_ts')
+    if ramdump.kernel_version > (5, 2, 0):
+        offset_affine = ramdump.field_offset('struct task_struct', 'cpus_mask')
+    else:
+        offset_affine = ramdump.field_offset('struct task_struct', 'cpus_allowed')
+
     offset_exit_state = ramdump.field_offset(
         'struct task_struct', 'exit_state')
     orig_thread_group = thread_group
@@ -95,10 +114,8 @@ def dump_thread_group(ramdump, thread_group, task_out, taskhighlight_out, check_
         task_state = ramdump.read_word(next_thread_state)
         if task_state is None:
             return
-        if task_state < 3:
-             task_state_str = task_state_name[task_state]
-        else:
-             task_state_str = task_state
+        task_state_str = task_state_to_char(task_state)
+
         task_exit_state = ramdump.read_int(next_thread_exit_state)
         if task_exit_state is None:
             return
@@ -108,10 +125,27 @@ def dump_thread_group(ramdump, thread_group, task_out, taskhighlight_out, check_
         threadinfo = next_thread_info
         if threadinfo is None:
             return
+
+        if offset_last_enqueued_ts is None:
+            task_last_enqueued_ts = 0
+        else:
+            next_thread_last_enqueued_ts = next_thread_start + offset_last_enqueued_ts
+            task_last_enqueued_ts = ramdump.read_u64(next_thread_last_enqueued_ts)
+            if task_last_enqueued_ts is None:
+                task_last_enqueued_ts = 0
+        if offset_last_sleep_ts is None:
+            task_last_sleep_ts = 0
+        else:
+            next_thread_last_sleep_ts = next_thread_start + offset_last_sleep_ts
+            task_last_sleep_ts = ramdump.read_u64(next_thread_last_sleep_ts)
+            if task_last_sleep_ts is None:
+                task_last_sleep_ts = 0
+
         if not check_for_panic:
             task_cpu = ramdump.get_task_cpu(next_thread_start, threadinfo)
             #thread_line = thread_task_pid + task_cpu + task_state_str+ next_thread_start+thread_task_name
-            thread_line = "PID %6d cpu %1d  state %16s start 0x%x comm %32s\n" %(thread_task_pid, task_cpu, task_state_str, next_thread_start, thread_task_name)
+            thread_line = "PID %6d cpu %1d  state %16s hex 0x%06x start 0x%x comm %32s\n" %(thread_task_pid, task_cpu,
+                task_state_str, task_state, next_thread_start, thread_task_name)
             if task_state != 1:
                 if not first:
                     highlight_tasks += "*" + thread_line
@@ -134,11 +168,13 @@ def dump_thread_group(ramdump, thread_group, task_out, taskhighlight_out, check_
                 task_out.write(
                     '=====================================================\n')
                 first = 1
-            task_out.write('    Task name: {0} pid: {1} cpu: {2} start: {'
-                           '6:x}\n    state: 0x{3:x} exit_state: 0x{4:x}'
-                           ' stack base: 0x{5:x} Prio: {7}\n'.format(
+            task_out.write('    Task name: {0} pid: {1} cpu: {2} prio: {7} start: {'
+                           '6:x}\n    state: 0x{3:x}[{8}] exit_state: 0x{4:x}'
+                           ' stack base: 0x{5:x}\n'
+                           '    Last_enqueued_ts:{9:18.9f} Last_sleep_ts:{10:18.9f}\n'.format(
                 thread_task_name, thread_task_pid, task_cpu, task_state,
-                task_exit_state, addr_stack, next_thread_start, thread_task_prio))
+                task_exit_state, addr_stack, next_thread_start, thread_task_prio, task_state_str,
+                task_last_enqueued_ts/1000000000.0, task_last_sleep_ts/1000000000.0))
             task_out.write('    Stack:\n')
             ramdump.unwind.unwind_backtrace(
                  ramdump.thread_saved_sp(next_thread_start),
@@ -315,17 +351,19 @@ def do_dump_task_timestamps(ramdump):
             task_out[i].write('!!!Note : Some thread may be missing\n\n')
         t[i] = sorted(t[i], key=lambda l:l[2], reverse=True)
         str = '{0:<17s}{1:>8s}{2:>18s}{3:>18s}{4:>18s}{5:>17s}' \
-              ' {6:>8s}\n'.format(
+              ' {6:>8s}{7:>8s}{8:>18s}{9:>18s}\n'.format(
                     'Task name', 'PID', 'Exec_Started_at',
                     'Last_Queued_at', 'Total_wait_time',
-                    'No_of_times_exec', 'Prio')
+                    'No_of_times_exec', 'Prio', 'State',
+                    'Last_enqueued_ts', 'Last_sleep_ts')
         task_out[i].write(str)
         for item in t[i]:
-            str = '{0:<17s}{1:8d}{2:18.9f}{3:18.9f}{4:18.9f}{5:17d}{6:8d}\n'\
+            str = '{0:<17s}{1:8d}{2:18.9f}{3:18.9f}{4:18.9f}{5:17d}{6:8d}{7:>9s}{8:18.9f}{9:18.9f}\n'\
                     .format(
                         item[0], item[1], item[2]/1000000000.0,
                         item[3]/1000000000.0, item[4]/1000000000.0,
-                        item[5], item[6])
+                        item[5], item[6], item[7], item[8]/1000000000.0,
+                        item[9]/1000000000.0)
             task_out[i].write(str)
         task_out[i].close()
         print_out_str('---wrote tasks to tasks_sched_stats{0}.txt'.format(i))
@@ -343,6 +381,9 @@ def dump_thread_group_timestamps(ramdump, thread_group, t):
     offset_last_queued = offset_schedinfo + ramdump.field_offset('struct sched_info', 'last_queued')
     offset_last_pcount = offset_schedinfo + ramdump.field_offset('struct sched_info', 'pcount')
     offset_last_rundelay = offset_schedinfo + ramdump.field_offset('struct sched_info', 'run_delay')
+    offset_state = ramdump.field_offset('struct task_struct', 'state')
+    offset_last_enqueued_ts = ramdump.field_offset('struct task_struct', 'last_enqueued_ts')
+    offset_last_sleep_ts = ramdump.field_offset('struct task_struct', 'last_sleep_ts')
     orig_thread_group = thread_group
     first = 0
     seen_threads = []
@@ -358,6 +399,24 @@ def dump_thread_group_timestamps(ramdump, thread_group, t):
         next_thread_run_delay = next_thread_start + offset_last_rundelay
         next_thread_stack = next_thread_start + offset_stack
         next_thread_info = ramdump.get_thread_info_addr(next_thread_start)
+        next_thread_state = next_thread_start + offset_state
+
+        if offset_last_enqueued_ts is None:
+            thread_last_enqueued_ts = 0
+        if offset_last_enqueued_ts is not None:
+            next_thread_last_enqueued_ts = next_thread_start + offset_last_enqueued_ts
+            thread_last_enqueued_ts = ramdump.read_u64(next_thread_last_enqueued_ts)
+            if thread_last_enqueued_ts is None:
+                thread_last_enqueued_ts = 0
+
+        if offset_last_sleep_ts is None:
+            thread_last_sleep_ts = 0
+        else:
+            next_thread_last_sleep_ts = next_thread_start + offset_last_sleep_ts
+            thread_last_sleep_ts = ramdump.read_u64(next_thread_last_sleep_ts)
+            if thread_last_sleep_ts is None:
+                thread_last_sleep_ts = 0
+
         addr_stack = ramdump.read_word(next_thread_stack)
         if addr_stack is None:
             print_out_str('!!!! Task list corruption\n')
@@ -369,6 +428,10 @@ def dump_thread_group_timestamps(ramdump, thread_group, t):
         thread_task_prio = ramdump.read_int(next_thread_prio)
         if thread_task_prio is None:
             return False
+        thread_task_state = ramdump.read_int(next_thread_state)
+        if thread_task_state is None:
+            return False
+        thread_task_state_str = task_state_to_char(thread_task_state)
         cpu_no = ramdump.get_task_cpu(next_thread_start, threadinfo)
         if cpu_no >= ramdump.get_num_cpus():
             return False
@@ -380,8 +443,11 @@ def dump_thread_group_timestamps(ramdump, thread_group, t):
         t[cpu_no].append([thread_task_name, thread_task_pid,
             ramdump.read_u64(next_thread_last_arrival),
             ramdump.read_u64(next_thread_last_queued),
-            ramdump.read_u64(next_thread_run_delay),ramdump.read_word(
-                next_thread_pcount),thread_task_prio])
+            ramdump.read_u64(next_thread_run_delay),
+            ramdump.read_word(next_thread_pcount),
+            thread_task_prio,thread_task_state_str,
+            thread_last_enqueued_ts,
+            thread_last_sleep_ts])
         next_thr = ramdump.read_word(thread_group)
         if (next_thr == thread_group) and (next_thr != orig_thread_group):
             print_out_str('!!!! Cycle in thread group! The list is corrupt!\n')

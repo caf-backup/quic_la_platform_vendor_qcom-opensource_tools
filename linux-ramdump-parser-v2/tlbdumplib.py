@@ -1,4 +1,4 @@
-# Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
+# Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are
@@ -760,6 +760,22 @@ lookuptable[("lito", 0x125, 0x14)] = L2_TLB_KRYO4XX_SILVER()
 lookuptable[("lito", 0x126, 0x14)] = L2_TLB_KRYO4XX_GOLD()
 lookuptable[("lito", 0x127, 0x14)] = L2_TLB_KRYO4XX_GOLD()
 
+#atoll
+lookuptable[("atoll", 0x26, 0x14)] = L1_ITLB_KRYO4XX_GOLD()
+lookuptable[("atoll", 0x27, 0x14)] = L1_ITLB_KRYO4XX_GOLD()
+
+lookuptable[("atoll", 0x46, 0x14)] = L1_DTLB_KRYO4XX_GOLD()
+lookuptable[("atoll", 0x47, 0x14)] = L1_DTLB_KRYO4XX_GOLD()
+
+lookuptable[("atoll", 0x120, 0x14)] = L2_TLB_KRYO4XX_SILVER()
+lookuptable[("atoll", 0x121, 0x14)] = L2_TLB_KRYO4XX_SILVER()
+lookuptable[("atoll", 0x122, 0x14)] = L2_TLB_KRYO4XX_SILVER()
+lookuptable[("atoll", 0x123, 0x14)] = L2_TLB_KRYO4XX_SILVER()
+lookuptable[("atoll", 0x124, 0x14)] = L2_TLB_KRYO4XX_SILVER()
+lookuptable[("atoll", 0x125, 0x14)] = L2_TLB_KRYO4XX_SILVER()
+lookuptable[("atoll", 0x126, 0x14)] = L2_TLB_KRYO4XX_GOLD()
+lookuptable[("atoll", 0x127, 0x14)] = L2_TLB_KRYO4XX_GOLD()
+
 # "sdm845"
 lookuptable[("sdm845", 0x120, 0x14)] = L2_TLB_KRYO3XX_SILVER()
 lookuptable[("sdm845", 0x121, 0x14)] = L2_TLB_KRYO3XX_SILVER()
@@ -820,3 +836,18 @@ lookuptable[("8998", 0x45, 0x14)] = L1_TLB_KRYO2XX_GOLD()
 lookuptable[("8998", 0x46, 0x14)] = L1_TLB_KRYO2XX_GOLD()
 lookuptable[("8998", 0x47, 0x14)] = L1_TLB_KRYO2XX_GOLD()
 
+# "bengal"
+lookuptable[("bengal", 0x120, 0x14)] = L1_TLB_A53()
+lookuptable[("bengal", 0x121, 0x14)] = L1_TLB_A53()
+lookuptable[("bengal", 0x122, 0x14)] = L1_TLB_A53()
+lookuptable[("bengal", 0x123, 0x14)] = L1_TLB_A53()
+lookuptable[("bengal", 0x124, 0x14)] = L1_TLB_KRYO2XX_GOLD()
+lookuptable[("bengal", 0x125, 0x14)] = L1_TLB_KRYO2XX_GOLD()
+lookuptable[("bengal", 0x126, 0x14)] = L1_TLB_KRYO2XX_GOLD()
+lookuptable[("bengal", 0x127, 0x14)] = L1_TLB_KRYO2XX_GOLD()
+
+# "scuba"
+lookuptable[("scuba", 0x120, 0x14)] = L1_TLB_A53()
+lookuptable[("scuba", 0x121, 0x14)] = L1_TLB_A53()
+lookuptable[("scuba", 0x122, 0x14)] = L1_TLB_A53()
+lookuptable[("scuba", 0x123, 0x14)] = L1_TLB_A53()

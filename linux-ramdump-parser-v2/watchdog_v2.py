@@ -1,4 +1,4 @@
-# Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
+# Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -358,7 +358,6 @@ sysdbg_cpu64_register_names_v1_4 = [
     ('__reserved1', '__reserved1', False),
     ('__reserved2', '__reserved2', False),
     ('__reserved3', '__reserved3', False),
-    ('__reserved4', '__reserved4', False),
 ]
 
 sysdbg_cpu64_ctxt_regs_type_v1_4 = ''.join([
@@ -413,7 +412,6 @@ sysdbg_cpu64_ctxt_regs_type_v1_4 = ''.join([
     'Q',  # __reserved1
     'Q',  # __reserved2
     'Q',  # __reserved3
-    'Q',  # __reserved4
 ])
 
 sysdbg_neon128_register_names_v1_4 = [
@@ -876,11 +874,16 @@ def get_wdog_timing(ramdump):
         wdog_data_addr, 'struct msm_watchdog_data', 'alive_mask.bits')
     tick_bc_mask = ramdump.read_word('tick_broadcast_oneshot_mask')
     tick_bc_pending_mask = ramdump.read_word('tick_broadcast_pending_mask')
+    tick_bc_force_mask = ramdump.read_word('tick_broadcast_force_mask')
     tick_bc_evt_dev = ramdump.read_structure_field(
         'tick_broadcast_device', 'struct tick_device', 'evtdev')
     tick_bc_next_evt = ramdump.read_structure_field(
         tick_bc_evt_dev, 'struct clock_event_device', 'next_event')
     tick_bc_next_evt = ns_to_sec(tick_bc_next_evt)
+    tick_bc_cpumask = ramdump.read_structure_field(
+        tick_bc_evt_dev, 'struct clock_event_device', 'cpumask')
+    tick_bc_cpumask_bits = ramdump.read_structure_field(
+        tick_bc_cpumask, 'struct cpumask', 'bits')
     if (ramdump.kernel_version >= (4, 9, 0)):
         cpu_online_bits = ramdump.read_word('__cpu_online_mask')
     else:
@@ -957,7 +960,11 @@ def get_wdog_timing(ramdump):
     print_out_str(
         'tick_broadcast_pending_mask: {0:08b}'.format(tick_bc_pending_mask))
     print_out_str(
-        'tick_broad_cast_device next_event: {0:.6f}'.format(tick_bc_next_evt))
+        'tick_broadcast_force_mask: {0:08b}'.format(tick_bc_force_mask))
+    print_out_str(
+        'tick_broadcast_device cpumask: {0:08b}'.format(tick_bc_cpumask_bits))
+    print_out_str(
+        'tick_broadcast_device next_event: {0:.6f}'.format(tick_bc_next_evt))
     for i in range(0, ramdump.get_num_cpus()):
         tick_cpu_device = ramdump.address_of(
             'tick_cpu_device') + ramdump.per_cpu_offset(i)
@@ -978,9 +985,9 @@ def get_wdog_timing(ramdump):
         ping_end_time_offset = ramdump.field_offset(
                         'struct msm_watchdog_data', 'ping_end')
         for i in range(0, ramdump.get_num_cpus()):
-            ping_start_time = ramdump.read_word(wdog_data_addr +
+            ping_start_time = ramdump.read_u64(wdog_data_addr +
                                                  ping_start_time_offset + i*8)
-            ping_end_time = ramdump.read_word(wdog_data_addr +
+            ping_end_time = ramdump.read_u64(wdog_data_addr +
                                                  ping_end_time_offset + i*8)
             print_out_str("CPU#{0} : ping_start: {1:.6f} : ping_end: {2:.6f}"
                           .format(i, ns_to_sec(ping_start_time),

@@ -22,6 +22,7 @@ from optparse import OptionParser
 count = 0
 address = []
 data = []
+dcc_sink = []
 
 def bm(msb, lsb):
     'Creates a bitmask from msb to lsb'
@@ -79,6 +80,7 @@ def read_config(config_pt):
     offset = 0
     base = 0
     list_nr.append(0)
+    count = 0
     if options.version is None:
         address_descriptor = 0x1 << 31
         link_descriptor = 0
@@ -89,6 +91,7 @@ def read_config(config_pt):
         # We return zero and fail
         on_zero_link_len = 0
         track_len = 0
+        empty_ind = 0x0
     else:
         address_descriptor = 0
         link_descriptor = 0x3 << 30
@@ -114,7 +117,6 @@ def read_config(config_pt):
             break
 
         val = struct.unpack('<L', word)[0]
-
         if val == 0:
             break
 
@@ -122,7 +124,7 @@ def read_config(config_pt):
 	read_write_ind = val & (0x1 << 28)
 
         if val == empty_ind:
-            config_pt.seek(8, 1)
+            continue
         elif descriptor == address_descriptor:
             if read_write_ind == dcc_write_ind:
                 config_pt.seek(8, 1)
@@ -130,6 +132,7 @@ def read_config(config_pt):
                 base = ((val & 0x0FFFFFFF) << 4)
                 offset = 0
                 length = 1
+                tmp_count = 0
         elif descriptor == link_descriptor:
             for i in range(0, 2):
                 offset = offset + (val & 0xFF) * 4 + (length - 1) * track_len
@@ -139,6 +142,8 @@ def read_config(config_pt):
                 val = val >> link_second_arg
                 if length != 0:
                     list_nr.append(length + list_nr[- 1])
+                    count = count + 1
+                    tmp_count = tmp_count + 1
                     add_addr(base, offset, length)
                 else:
                     if (i == 0 ):
@@ -154,6 +159,7 @@ def read_config(config_pt):
 
             loop_nr = list_nr[-1] - list_nr[-loop_offset]
             list_nr.append(loop_nr * loop_count + list_nr[-1])
+            count = count + 1
             add_loop_addr(loop_nr, loop_count)
 
         elif descriptor == rd_mod_wr_descriptor:
@@ -161,10 +167,19 @@ def read_config(config_pt):
             Skip over mask and value of rd_mod_wr.
             There is no gaurantee of this being actually written
             and we never read the value back to confirm.
+            Remove address added by previous entry since
+            that's for rd_mod_wr instead of read operation.
             '''
+            for i in range(0, tmp_count):
+                last_length = list_nr[-1] - list_nr[-2]
+                list_nr.pop()
+                count = count - 1
+                for j in range(0, last_length):
+                   address.pop()
+
             config_pt.seek(8, 1)
 
-    return list_nr[-1]
+    return count
 
 
 def new_linked_list(config_pt):
@@ -224,22 +239,41 @@ def dump_regs(options):
         dump_regs_xml(options)
 
 
-def read_data_atb(atb_data_pt):
+def read_data_atb(atb_data_pt, count):
+    atb_count = 0
     for line in atb_data_pt:
         if "ATID\" : 65, \"OpCode\" : \"D8\"" in line:
             data1 = ""
-            for i in range(4):
+            i = 0
+            while i < 4:
                 data_byte_re = re.match(
                     "\{\"ATID\" : 65, \"OpCode\" : \"D8\", \"Payload\" : "
                     "\"0x([0-9A-Fa-f][0-9A-Fa-f])\"\}", line)
                 if data_byte_re:
-                    data1 = (data_byte_re.group(1))+data1
+                    data1 = (data_byte_re.group(1)) + data1
+                    i += 1
                 else:
                     log.error("ATB file format wrong")
-                    exit(1)
-                if i < 3:
+                    return atb_count
+                if i < 4:
                     line = atb_data_pt.next()
             data.append(int(data1, 16))
+            atb_count = atb_count + 1
+            if atb_count >= count:
+                break
+        elif "ATID\" : 65, \"OpCode\" : \"D32\"" in line:
+            #print line
+            data_byte_re = re.match(
+                "\{\"ATID\" : 65, \"OpCode\" : \"D32\", \"Payload\" : "
+                "\"0x([0-9A-Fa-f]+)\"}", line)
+            if data_byte_re:
+                data1 = (data_byte_re.group(1))
+                #print data1
+                data.append(int(data1, 16))
+                atb_count = atb_count + 1
+                if atb_count >= count:
+                    break
+    return atb_count
 
 if __name__ == '__main__':
     usage = 'usage: %prog [options to print]. Run with --help for more details'
@@ -262,6 +296,8 @@ if __name__ == '__main__':
                       help='Start offset for DCC configuration')
     parser.add_option('--config-loopoffset', dest='config_loopoffset',
                       help='Offset of loop value')
+    parser.add_option('--dcc_sink', dest='dcc_sink',
+                      help='DCC sink(SRAM/ATB).Comma seperated list if more than one list used')
 
     (options, args) = parser.parse_args()
 
@@ -284,6 +320,12 @@ if __name__ == '__main__':
         ext = '.json'
     else:
         ext = '.xml'
+
+    if options.dcc_sink is None:
+        dcc_sink.append('SRAM')
+    else:
+        dcc_sink = options.dcc_sink.split(',')
+        print dcc_sink
 
     if options.outfile is None:
         options.outfile = 'dcc_captured_data{0}'.format(ext)
@@ -308,34 +350,40 @@ if __name__ == '__main__':
 
     if options.config_offset is not None:
         sram_file.seek(int(options.config_offset, 16), 1)
-
-    count = read_config(sram_file)
-
-    if options.atbfile is None:
-        atb_file = sram_file
-
-    if read_data(sram_file):
-        log.error('Couldn\'t read complete data.')
-        sys.exit(1)
-
     parsed_data = log_init('PARSED_DATA', options.outdir, options.outfile)
-    if new_linked_list(sram_file):
-        if options.atbfile is not None:
-            try:
-                atb_file = open(options.atbfile, 'rb')
-                read_config(sram_file)
-                read_data_atb(atb_file)
-            except:
-                log.error("could not open path {0}".format(options.atbfile))
-                log.error("Do you have read permissions on the path?")
-                dump_regs(options)
+    if options.atbfile is not None and os.path.exists(options.atbfile):
+        atb_file = open(options.atbfile, 'rb')
+
+    for sink in dcc_sink:
+        count = read_config(sram_file)
+        print "Number of registers in list:" , count
+        print "Sink used for the list:" ,  sink
+        if sink == 'SRAM':
+            print 'Read data from SRAM'
+            if read_data(sram_file):
+                log.error('Couldn\'t read complete data.')
                 sys.exit(1)
-
-    dump_regs(options)
-
-    sram_file.close()
-
-    if options.atbfile is not None:
+        elif sink == 'ATB':
+            print 'Read data from ATB file'
+            if options.atbfile is not None:
+                try:
+                    atb_count = read_data_atb(atb_file, count)
+                    if atb_count < count:
+                        del address[-count:]
+                        del data[-atb_count:]
+                        log.error("ATB file don't have complete DCC data")
+                except:
+                    log.error("could not open path {0}".format(options.atbfile))
+                    log.error("Do you have read permissions on the path?")
+                    del address[-count:]
+            else:
+                log.error('ATB file not given')
+                del address[-count:]
+        if not new_linked_list(sram_file):
+            log.error("Next list not available")
+            break
+    if options.atbfile is not None and os.path.exists(options.atbfile):
         atb_file.close()
-
+    dump_regs(options)
+    sram_file.close()
     sys.stderr.flush()
