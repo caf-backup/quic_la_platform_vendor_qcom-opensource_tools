@@ -111,13 +111,21 @@ class MemStats(RamParser):
     def calculate_ionmem(self):
         number_of_ion_heaps = self.ramdump.read_int('num_heaps')
         heap_addr = self.ramdump.read_word('heaps')
-        offset_total_allocated = \
+        if self.ramdump.kernel_version >= (5, 4):
+            offset_total_allocated = \
+            self.ramdump.field_offset(
+                'struct ion_heap', 'num_of_alloc_bytes')
+            size = self.ramdump.sizeof(
+                '((struct ion_heap *)0x0)->num_of_alloc_bytes')
+        else:
+            offset_total_allocated = \
             self.ramdump.field_offset(
                 'struct ion_heap', 'total_allocated')
+            size = self.ramdump.sizeof(
+                '((struct ion_heap *)0x0)->total_allocated')
+
         if offset_total_allocated is None:
             return "ion buffer debugging change is not there in this kernel"
-        size = self.ramdump.sizeof(
-                '((struct ion_heap *)0x0)->total_allocated')
         if self.ramdump.arm64:
             addressspace = 8
         else:
