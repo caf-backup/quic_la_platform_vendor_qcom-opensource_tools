@@ -511,10 +511,13 @@ class RamDump():
 
         kimage_load_addr = phys_base;
         while (kimage_load_addr < phys_end):
-            kimage_voffset = self.kimage_vaddr - kimage_load_addr
+            kimage_voffset = self.modules_end - kimage_load_addr
             addr = self.address_of("kimage_voffset") - self.kaslr_offset - \
                    vmalloc_start + kimage_load_addr
-            val = self.read_u64(addr, False)
+            if self.arm64:
+                val = self.read_u64(addr, False)
+            else:
+                val = self.read_u32(addr, False)
             if val is None:
                 val = 0
             val = long(val)
@@ -711,6 +714,14 @@ class RamDump():
                 self.kimage_voffset = self.kimage_vaddr - self.phys_offset
                 print_out_str("The kimage_voffset extracted is: {:x}".format(self.kimage_voffset))
         else:
+            self.kimage_voffset = self.address_of("kimage_voffset")
+            if self.kimage_voffset is not None:
+                if not (options.phys_offset or self.minidump):
+                    phys_offset_dyn = self.determine_phys_offset()
+                    if phys_offset_dyn:
+                        print_out_str("Dynamically determined phys offset is"
+                                      ": {:x}".format(phys_offset_dyn))
+                        self.phys_offset = phys_offset_dyn
             self.kimage_voffset = None
 
         # The address of swapper_pg_dir can be used to determine
@@ -898,7 +909,7 @@ class RamDump():
             if vm_v is None:
                 print_out_str('!!! Could not read linux_banner from vmlinux!')
                 sys.exit(1)
-            v = re.search('Linux version (\d{0,2}\.\d{0,2}\.\d{0,2})', vm_v)
+            v = re.search('Linux version (\d{0,2}\.\d{0,2}\.\d{0,3})', vm_v)
             if v is None:
                 print_out_str('!!! Could not extract version info!')
                 sys.exit(1)
@@ -1553,6 +1564,7 @@ class RamDump():
                     name = file[:-len('.ko')]
                 else:
                     return
+                name = os.path.basename(name)
                 # Prefer .ko.unstripped
                 if ko_file_list.get(name, '').endswith('.ko.unstripped') and file.endswith('.ko'):
                     return
