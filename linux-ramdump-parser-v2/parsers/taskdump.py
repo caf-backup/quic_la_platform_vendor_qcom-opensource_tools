@@ -56,15 +56,20 @@ def find_panic(ramdump, addr_stack, thread_task_name):
 
 #Definitions taken from include/linux/sched.h
 TASK_REPORT = 0xff
+TASK_REPORT_LATEST = 0x7f
 task_state_short_name = "RSDTtXZPI"
 
-def find_last_bit_index(count):
-    count &= TASK_REPORT
+def find_last_bit_index(task_state,task_state_exit,version):
+    if version >= (4, 14, 0):
+        count = (task_state | task_state_exit) & TASK_REPORT_LATEST
+    else:
+        count = task_state & TASK_REPORT
     index = count.bit_length()
     return index
 
-def task_state_to_char(task_state):
-    index = find_last_bit_index(task_state)
+
+def task_state_to_char(task_state,task_exit_state,version):
+    index = find_last_bit_index(task_state,task_exit_state,version)
     task_state_str = task_state_short_name[index]
     return task_state_str
 
@@ -132,11 +137,11 @@ def dump_thread_group(ramdump, thread_group, task_out, taskhighlight_out, check_
         if task_state is None:
             error = 1
             return
-        task_state_str = task_state_to_char(task_state)
 
         task_exit_state = ramdump.read_int(next_thread_exit_state)
         if task_exit_state is None:
             return
+        task_state_str = task_state_to_char(task_state,task_exit_state,ramdump.kernel_version)
         addr_stack = ramdump.read_word(next_thread_stack)
         if addr_stack is None:
             error = 1
@@ -424,6 +429,7 @@ def dump_thread_group_timestamps(ramdump, thread_group):
     offset_last_pcount = offset_schedinfo + ramdump.field_offset('struct sched_info', 'pcount')
     offset_last_rundelay = offset_schedinfo + ramdump.field_offset('struct sched_info', 'run_delay')
     offset_state = ramdump.field_offset('struct task_struct', 'state')
+    offset_esit_state = ramdump.field_offset('struct task_struct', 'exit_state')
     offset_last_enqueued_ts = ramdump.field_offset('struct task_struct', 'last_enqueued_ts')
     offset_last_sleep_ts = ramdump.field_offset('struct task_struct', 'last_sleep_ts')
     orig_thread_group = thread_group
@@ -444,6 +450,7 @@ def dump_thread_group_timestamps(ramdump, thread_group):
         next_thread_stack = next_thread_start + offset_stack
         next_thread_info = ramdump.get_thread_info_addr(next_thread_start)
         next_thread_state = next_thread_start + offset_state
+        next_thread_exit_state = next_thread_start + offset_exit_state
 
         if offset_last_enqueued_ts is None:
             thread_last_enqueued_ts = 0
@@ -475,7 +482,10 @@ def dump_thread_group_timestamps(ramdump, thread_group):
         thread_task_state = ramdump.read_int(next_thread_state)
         if thread_task_state is None:
             return False
-        thread_task_state_str = task_state_to_char(thread_task_state)
+        thread_exit_state = ramdump.read_int(next_thread_exit_state)
+        if thread_exit_state is None:
+            return False
+        thread_task_state_str = task_state_to_char(thread_task_state,thread_exit_state,ramdump.version)
         cpu_no = ramdump.get_task_cpu(next_thread_start, threadinfo)
         if cpu_no >= ramdump.get_num_cpus():
             return False

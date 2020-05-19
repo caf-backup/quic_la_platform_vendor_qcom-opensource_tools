@@ -909,7 +909,7 @@ class RamDump():
             if vm_v is None:
                 print_out_str('!!! Could not read linux_banner from vmlinux!')
                 sys.exit(1)
-            v = re.search('Linux version (\d{0,2}\.\d{0,2}\.\d{0,2})', vm_v)
+            v = re.search('Linux version (\d{0,2}\.\d{0,2}\.\d{0,3})', vm_v)
             if v is None:
                 print_out_str('!!! Could not extract version info!')
                 sys.exit(1)
@@ -1080,7 +1080,7 @@ class RamDump():
 
         startup_script.write(('title \"' + out_path + '\"\n').encode('ascii', 'ignore'))
 
-        is_cortex_a53 = self.hw_id in ["8916", "8939", "8936", "bengal"]
+        is_cortex_a53 = self.hw_id in ["8916", "8939", "8936", "bengal", "scuba"]
 
         if self.arm64 and is_cortex_a53:
             startup_script.write('sys.cpu CORTEXA53\n'.encode('ascii', 'ignore'))

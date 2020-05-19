@@ -78,7 +78,7 @@ def ion_buffer_info(self, ramdump, ion_info):
         exp_name = ramdump.read_word(dma_buf_addr + exp_name_offset)
         exp_name = ramdump.read_cstring(exp_name, 48)
         ionheap_name = ""
-        if exp_name == 'ion':
+        if 'ion' in exp_name:
             ion_buffer = ramdump.read_structure_field(dma_buf_addr, 'struct dma_buf', 'priv')
             ion_heap = ramdump.read_structure_field(ion_buffer, 'struct ion_buffer', 'heap')
             ionheap_name_addr = ramdump.read_structure_field(ion_heap, 'struct ion_heap', 'name')
@@ -162,7 +162,7 @@ def get_bufs(self, task, bufs, ion_info, ramdump):
         name = ramdump.read_word(dmabuf + self.name_offset)
         name = ramdump.read_cstring(name, 48)
 
-        item = [name, hex(size), bytes_to_KB(size), time]
+        item = [name, hex(size), bytes_to_KB(size), str(time), hex(file)]
         if item not in bufs:
             t_size = t_size + size
             bufs.append(item)
@@ -197,11 +197,11 @@ def ion_proc_info(self, ramdump, ion_info):
         str = "\n{0} (PID {1}) size (KB): {2}\n"\
             .format(proc[0], proc[1], proc[2])
         ion_info.write(str)
-        ion_info.write("{0:15} {1:15} {2:15} {3:15}\n".format(
-                'Name', 'Size', 'Size in KB', 'Time Alive(sec)'))
+        ion_info.write("{0:15} {1:15} {2:10} {3:20} {4:25}\n".format(
+                'Name', 'Size', 'Size in KB', 'Time Alive(sec)', '(struct file *)'))
         for item in proc[3]:
-            str = "{0:15} {1:15} {2:10} {3:15}\n".\
-                format(item[0], item[1], item[2], item[3])
+            str = "{0:15} {1:15} {2:10} {3:20} {4:25}\n".\
+                format(item[0], item[1], item[2], item[3], item[4])
             ion_info.write(str)
 
 
