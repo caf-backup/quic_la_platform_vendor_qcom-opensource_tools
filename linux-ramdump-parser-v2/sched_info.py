@@ -1,4 +1,4 @@
-# Copyright (c) 2019, The Linux Foundation. All rights reserved.
+# Copyright (c) 2019-2020, The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -14,6 +14,8 @@ from print_out import print_out_str
 
 DEFAULT_MIGRATION_NR=32
 DEFAULT_MIGRATION_COST=500000
+DEFAULT_RT_PERIOD=1000000
+DEFAULT_RT_RUNTIME=950000
 
 def mask_bitset_pos(cpumask):
     obj = [i for i in range(cpumask.bit_length()) if cpumask & (1<<i)]
@@ -118,6 +120,15 @@ class Schedinfo(RamParser):
             print_out_str("*" * 5 + " INFORMATION:" + "\n")
             print_out_str("\tCFS_BANDWIDTH is enabled in the dump!!\n")
             print_out_str("\tBandwidth slice: {0}\n".format(cfs_bandwidth_enabled))
+
+        #verify RT threasholds
+        sched_rt_runtime = self.ramdump.read_u32('sysctl_sched_rt_runtime')
+        sched_rt_period = self.ramdump.read_u32('sysctl_sched_rt_period')
+        if (sched_rt_runtime != DEFAULT_RT_RUNTIME) or (sched_rt_period != DEFAULT_RT_PERIOD):
+            print_out_str("*" * 5 + " WARNING:" + "\n")
+            print_out_str("\t RT sysctl knobs may have changed!!\n")
+            print_out_str("\t\t sysctl_sched_rt_runtime Default:{0} and Value in dump:{1}\n".format(DEFAULT_RT_RUNTIME, sched_rt_runtime))
+            print_out_str("\t\t sysctl_sched_rt_period Default:{0} and Value in dump:{1}\n".format(DEFAULT_RT_PERIOD, sched_rt_period))
 
         # verify rq root domain
         if (self.ramdump.kernel_version >= (4, 9, 0)):
