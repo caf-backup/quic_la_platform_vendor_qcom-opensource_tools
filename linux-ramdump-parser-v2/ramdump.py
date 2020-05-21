@@ -41,6 +41,8 @@ PC = 15
 # just hard code it
 
 SMEM_HW_SW_BUILD_ID = 0x89
+SMEM_PRIVATE_CANARY = 0xa5a5
+PARTITION_MAGIC = 0x54525024
 BUILD_ID_LENGTH = 32
 
 def is_ramdump_file(val):
@@ -509,10 +511,13 @@ class RamDump():
 
         kimage_load_addr = phys_base;
         while (kimage_load_addr < phys_end):
-            kimage_voffset = self.kimage_vaddr - kimage_load_addr
+            kimage_voffset = self.modules_end - kimage_load_addr
             addr = self.address_of("kimage_voffset") - self.kaslr_offset - \
                    vmalloc_start + kimage_load_addr
-            val = self.read_u64(addr, False)
+            if self.arm64:
+                val = self.read_u64(addr, False)
+            else:
+                val = self.read_u32(addr, False)
             if val is None:
                 val = 0
             val = long(val)
@@ -709,6 +714,14 @@ class RamDump():
                 self.kimage_voffset = self.kimage_vaddr - self.phys_offset
                 print_out_str("The kimage_voffset extracted is: {:x}".format(self.kimage_voffset))
         else:
+            self.kimage_voffset = self.address_of("kimage_voffset")
+            if self.kimage_voffset is not None:
+                if not (options.phys_offset or self.minidump):
+                    phys_offset_dyn = self.determine_phys_offset()
+                    if phys_offset_dyn:
+                        print_out_str("Dynamically determined phys offset is"
+                                      ": {:x}".format(phys_offset_dyn))
+                        self.phys_offset = phys_offset_dyn
             self.kimage_voffset = None
 
         # The address of swapper_pg_dir can be used to determine
@@ -896,7 +909,7 @@ class RamDump():
             if vm_v is None:
                 print_out_str('!!! Could not read linux_banner from vmlinux!')
                 sys.exit(1)
-            v = re.search('Linux version (\d{0,2}\.\d{0,2}\.\d{0,2})', vm_v)
+            v = re.search('Linux version (\d{0,2}\.\d{0,2}\.\d{0,3})', vm_v)
             if v is None:
                 print_out_str('!!! Could not extract version info!')
                 sys.exit(1)
@@ -1067,7 +1080,7 @@ class RamDump():
 
         startup_script.write(('title \"' + out_path + '\"\n').encode('ascii', 'ignore'))
 
-        is_cortex_a53 = self.hw_id in ["8916", "8939", "8936", "bengal"]
+        is_cortex_a53 = self.hw_id in ["8916", "8939", "8936", "bengal", "scuba"]
 
         if self.arm64 and is_cortex_a53:
             startup_script.write('sys.cpu CORTEXA53\n'.encode('ascii', 'ignore'))
@@ -1254,7 +1267,17 @@ class RamDump():
         if (self.hw_id is None):
             if not self.minidump:
                 heap_toc_offset = self.field_offset('struct smem_shared', 'heap_toc')
-                if heap_toc_offset is None:
+                global_partition_offset_offset = self.field_offset('struct smem_header', 'free_offset')
+                if not heap_toc_offset is None:
+                    smem_heap_entry_size = self.sizeof('struct smem_heap_entry')
+                    offset_offset = self.field_offset('struct smem_heap_entry', 'offset')
+                elif not global_partition_offset_offset is None:
+                    smem_partition_header_size = self.sizeof('struct smem_partition_header')
+                    uncached_offset_offset = self.field_offset('struct smem_partition_header', 'offset_free_uncached')
+                    smem_private_entry_size = self.sizeof('struct smem_private_entry')
+                    entry_item_offset = self.field_offset('struct smem_private_entry', 'item')
+                    item_size_offset = self.field_offset('struct smem_private_entry', 'size')
+                else:
                     print_out_str(
                         '!!!! Could not get a necessary offset for auto detection!')
                     print_out_str(
@@ -1262,20 +1285,18 @@ class RamDump():
                     print_out_str('!!!! Also check that the vmlinux is not stripped')
                     print_out_str('!!!! Exiting...')
                     sys.exit(1)
-
-                smem_heap_entry_size = self.sizeof('struct smem_heap_entry')
-                offset_offset = self.field_offset('struct smem_heap_entry', 'offset')
             for board in boards:
-                if not self.minidump:
-                    socinfo_start_addr = board.smem_addr + heap_toc_offset + smem_heap_entry_size * SMEM_HW_SW_BUILD_ID + offset_offset
-                else:
+                if self.minidump:
                     if hasattr(board, 'smem_addr_buildinfo'):
-                        socinfo_start_addr = board.smem_addr_buildinfo
+                        socinfo_start = board.smem_addr_buildinfo
+                        if add_offset:
+                            socinfo_start += board.ram_start
                     else:
                         continue
-                if add_offset:
-                    socinfo_start_addr += board.ram_start
-                if not self.minidump:
+                elif not heap_toc_offset is None:
+                    socinfo_start_addr = board.smem_addr + heap_toc_offset + smem_heap_entry_size * SMEM_HW_SW_BUILD_ID + offset_offset
+                    if add_offset:
+                        socinfo_start_addr += board.ram_start
                     soc_start = self.read_int(socinfo_start_addr, False)
                     if soc_start is None:
                         continue
@@ -1283,7 +1304,38 @@ class RamDump():
                     if add_offset:
                         socinfo_start += board.ram_start
                 else:
-                    socinfo_start = socinfo_start_addr
+                    found = False
+                    global_partition_offset_addr = board.smem_addr + global_partition_offset_offset
+                    uncached_offset_addr = board.smem_addr + uncached_offset_offset
+                    if add_offset:
+                        global_partition_offset_addr += board.ram_start
+                        uncached_offset_addr += board.ram_start
+                    global_partition_offset = self.read_int(global_partition_offset_addr, False)
+                    if global_partition_offset is None:
+                        continue
+                    uncached_offset_addr += global_partition_offset
+                    uncached_offset = self.read_int(uncached_offset_addr, False)
+                    partition_magic_addr = board.smem_addr + global_partition_offset
+                    if add_offset:
+                        partition_magic_addr += board.ram_start
+                    if self.read_int(partition_magic_addr, False) != PARTITION_MAGIC:
+                        continue
+                    entry_addr = board.smem_addr + global_partition_offset + smem_partition_header_size
+                    uncached_end_addr = board.smem_addr + global_partition_offset + uncached_offset
+                    if add_offset:
+                        entry_addr += board.ram_start
+                        uncached_end_addr += board.ram_start
+                    while entry_addr < uncached_end_addr:
+                        if self.read_u16(entry_addr, False) != SMEM_PRIVATE_CANARY:
+                            break
+                        if self.read_u16(entry_addr + entry_item_offset, False) == SMEM_HW_SW_BUILD_ID:
+                            found = True
+                            socinfo_start = entry_addr + smem_private_entry_size
+                            break
+                        entry_addr += self.read_int(entry_addr + item_size_offset, False)
+                        entry_addr += smem_private_entry_size
+                    if not found:
+                        continue
                 socinfo_id = self.read_int(socinfo_start + 4, False)
                 if socinfo_id != board.socid:
                     continue
@@ -1511,10 +1563,11 @@ class RamDump():
                 elif file.endswith('.ko'):
                     name = file[:-len('.ko')]
                 else:
-                    continue
+                    return
+                name = os.path.basename(name)
                 # Prefer .ko.unstripped
                 if ko_file_list.get(name, '').endswith('.ko.unstripped') and file.endswith('.ko'):
-                    continue
+                    return
                 ko_file_list[name] = file
             self.walk_depth(path, on_file)
 
@@ -1727,6 +1780,22 @@ class RamDump():
             s = self.read_string(addr_or_name, '<H', virtual, cpu)
         return s[0] if s is not None else None
 
+    def read_slong(self, addr_or_name, virtual=True, cpu=None):
+        """returns a value corresponding to half the word size"""
+        if self.arm64:
+            s = self.read_string(addr_or_name, '<q', virtual, cpu)
+        else:
+            s = self.read_string(addr_or_name, '<i', virtual, cpu)
+        return s[0] if s is not None else None
+
+    def read_ulong(self, addr_or_name, virtual=True, cpu=None):
+        """returns a value corresponding to half the word size"""
+        if self.arm64:
+            s = self.read_string(addr_or_name, '<Q', virtual, cpu)
+        else:
+            s = self.read_string(addr_or_name, '<I', virtual, cpu)
+        return s[0] if s is not None else None
+
     def read_byte(self, addr_or_name, virtual=True, cpu=None):
         """Reads a single byte."""
         s = self.read_string(addr_or_name, '<B', virtual, cpu)
@@ -1878,12 +1947,18 @@ class RamDump():
         return ret
 
     def per_cpu_offset(self, cpu):
+        """ __per_cpu_offset has been observed to be a negative number
+        on kernel 5.4, even though it is stored in a unsigned long.
+        Since python supports numbers larger than 64 bits, the behavior
+        on overflow differs with that of C. Therefore, read it as a
+        signed value instead. """
+
         per_cpu_offset_addr = self.address_of('__per_cpu_offset')
         if per_cpu_offset_addr is None:
             return 0
         per_cpu_offset_addr_indexed = self.array_index(
             per_cpu_offset_addr, 'unsigned long', cpu)
-        return self.read_word(per_cpu_offset_addr_indexed)
+        return self.read_slong(per_cpu_offset_addr_indexed)
 
     def get_num_cpus(self):
         """Gets the number of CPUs in the system."""

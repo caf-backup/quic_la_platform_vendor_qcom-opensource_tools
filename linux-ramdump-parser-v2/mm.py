@@ -182,6 +182,8 @@ def get_vmemmap(ramdump):
         # vmemmap is shifted to base addr (0x80000000) pfn.
         vmemmap = (ramdump.page_offset - pud_size - vmemmap_size -
                    memstart_offset)
+    elif ramdump.kernel_version >= (5, 4, 0):
+        vmemmap = ramdump.read_u64('vmemmap')
     else:
         # for version >= 4.9.0,
         # vmemmap_size = ( 1 << (39 - 12 - 1 + 6))
@@ -273,8 +275,14 @@ def dont_map_hole_lowmem_page_address(ramdump, page):
 def normal_lowmem_page_address(ramdump, page):
     phys = page_to_pfn(ramdump, page) << 12
     if ramdump.arm64:
-        memstart_addr = ramdump.read_s64('memstart_addr')
-        return phys - memstart_addr + ramdump.page_offset
+        if ramdump.kernel_version >= (5, 4, 0):
+            phys_addr = phys - ramdump.read_s64('physvirt_offset')
+            if phys_addr < 0:
+             phys_addr = phys_addr +  (1 << 64)
+            return phys_addr
+        else:
+            memstart_addr = ramdump.read_s64('memstart_addr')
+            return phys - memstart_addr + ramdump.page_offset
     else:
         return phys - ramdump.phys_offset + ramdump.page_offset
 
