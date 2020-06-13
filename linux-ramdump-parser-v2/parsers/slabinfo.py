@@ -102,7 +102,8 @@ class struct_member_offset(object):
             'struct kmem_cache_cpu', 'page')
         self.kmemcpucache_cpu_slab = ramdump.field_offset(
             'struct kmem_cache', 'cpu_slab')
-        self.kmemcache_cpu_partial = ramdump.field_offset(
+        if ramdump.is_config_defined('CONFIG_SLUB_CPU_PARTIAL'):
+            self.kmemcache_cpu_partial = ramdump.field_offset(
             'struct kmem_cache', 'cpu_partial')
         self.kmemcachenode_partial = ramdump.field_offset(
             'struct kmem_cache_node', 'partial')
@@ -466,7 +467,8 @@ class Slabinfo(RamParser):
                     self.ramdump, slab_obj,
                     slab_node, cpu_slabn_addr + offsetof.cpu_cache_page_offset,
                     slab_out, map_fn, out_slabs_addrs)
-                cpu_partial_val = self.ramdump.read_int(
+                if self.ramdump.is_config_defined('CONFIG_SLUB_CPU_PARTIAL'):
+                    cpu_partial_val = self.ramdump.read_int(
                                         slab + offsetof.kmemcache_cpu_partial)
                 if self.ramdump.is_config_defined('CONFIG_SLUB_CPU_PARTIAL') and cpu_partial_val is not 0:
                     self.print_slab_page_info(self.ramdump, slab_obj, slab_node,
