@@ -45,18 +45,23 @@ SMEM_PRIVATE_CANARY = 0xa5a5
 PARTITION_MAGIC = 0x54525024
 BUILD_ID_LENGTH = 32
 
-def is_ramdump_file(val):
-    ddr = re.compile(r'(DDR|EBI)[0-9_CS]+[.]BIN', re.IGNORECASE)
-    imem = re.compile(r'.*IMEM.BIN', re.IGNORECASE)
-    if ddr.match(val) or imem.match(val):
-        return True
+def is_ramdump_file(val, minidump):
+    if not minidump:
+        ddr = re.compile(r'(DDR|EBI)[0-9_CS]+[.]BIN', re.IGNORECASE)
+        imem = re.compile(r'.*IMEM.BIN', re.IGNORECASE)
+        if ddr.match(val) or imem.match(val):
+            return True
+    else:
+        if val == 'MD_SMEMINFO.BIN' or val == 'MD_SHRDIMEM.BIN':
+            return True
     return False
 
 class AutoDumpInfo(object):
     priority = 0
 
-    def __init__(self, autodumpdir):
+    def __init__(self, autodumpdir, minidump):
         self.autodumpdir = autodumpdir
+        self.minidump = minidump
         self.ebi_files = []
 
     def parse(self):
@@ -86,7 +91,7 @@ class AutoDumpInfoCMM(AutoDumpInfo):
         with open(os.path.join(self.autodumpdir, filename)) as f:
             for line in f.readlines():
                 words = line.split()
-                if len(words) == 4 and is_ramdump_file(words[1]):
+                if len(words) == 4 and is_ramdump_file(words[1], self.minidump):
                     fname = words[1]
                     start = int(words[2], 16)
                     yield fname, start
@@ -105,7 +110,7 @@ class AutoDumpInfoDumpInfoTXT(AutoDumpInfo):
         with open(os.path.join(self.autodumpdir, filename)) as f:
             for line in f.readlines():
                 words = line.split()
-                if not words or not is_ramdump_file(words[-1]):
+                if not words or not is_ramdump_file(words[-1], self.minidump):
                     continue
                 fname = words[-1]
                 start = int(words[1], 16)
@@ -622,12 +627,18 @@ class RamDump():
                         'Could not open {0}. Will not be part of dump'.format(file_path))
                     continue
                 self.ebi_files.append((fd, start, end, file_path))
-        elif not options.minidump:
-            if not self.auto_parse(options.autodump):
+        else:
+            if not self.auto_parse(options.autodump, options.minidump):
                 return None
         if options.minidump:
-            file_path = options.ram_elf_addr
+            if not options.autodump:
+                file_path = options.ram_elf_addr
+            else:
+                file_path = os.path.join(options.autodump, 'ap_minidump.elf')
             self.ram_elf_file = file_path
+            if not os.path.exists(file_path):
+                print_out_str("!!! ELF file open failed")
+                sys.exit(1)
             fd = open(file_path, 'rb')
             self.elffile = ELFFile(fd)
             for idx, s in enumerate(self.elffile.iter_segments()):
@@ -1024,10 +1035,10 @@ class RamDump():
 
         return False
 
-    def auto_parse(self, file_path):
+    def auto_parse(self, file_path, minidump):
         for cls in sorted(AutoDumpInfo.__subclasses__(),
                           key=lambda x: x.priority, reverse=True):
-            info = cls(file_path)
+            info = cls(file_path, minidump)
             info.parse()
             if info is not None and len(info.ebi_files) > 0:
                 self.ebi_files = info.ebi_files
