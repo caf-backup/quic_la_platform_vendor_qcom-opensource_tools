@@ -806,7 +806,7 @@ class RamDump():
                 print_out_str('!!! Some features may be disabled!')
 
         self.unwind = self.Unwinder(self)
-        if self.module_table.sym_paths_exist():
+        if not self.minidump and self.module_table.sym_paths_exist():
             self.setup_module_symbols()
             self.gdbmi.setup_module_table(self.module_table)
             if self.dump_global_symbol_table:
