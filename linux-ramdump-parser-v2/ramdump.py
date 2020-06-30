@@ -1469,6 +1469,8 @@ class RamDump():
             name_ptr = module + name_offset
             mod_tbl_ent.name = self.read_cstring(name_ptr)
             mod_tbl_ent.module_offset = self.read_pointer(module + module_core_offset)
+            if mod_tbl_ent.module_offset is None:
+                mod_tbl_ent.module_offset = 0
             mod_tbl_ent.kallsyms_addr = self.read_pointer(module + kallsyms_offset)
             self.module_table.add_entry(mod_tbl_ent)
             next_list_ent = self.read_pointer(next_list_ent + next_offset)
