@@ -1662,6 +1662,22 @@ class RamDump():
         offset = self.gdbmi.sizeof(the_type) * index
         return addr + offset
 
+    def frame_field_offset(self, frame_name, the_type, field):
+        try:
+            return self.gdbmi.frame_field_offset(frame_name, the_type, field)
+        except gdbmi.GdbMIException:
+            pass
+
+    def get_symbol_info1(self,addr):
+        kaslr = self.get_kaslr_offset()
+        if kaslr:
+            addr1 = addr - kaslr
+        else:
+            addr1 = addr
+        #print "hex of address in get_symbol_info1 {0}".format(hex(addr1))
+        symbol_obj =  self.gdbmi.get_symbol_info(addr1)
+        return symbol_obj.symbol
+
     def field_offset(self, the_type, field):
         """Gets the offset of a field from the base of its containing struct.
 
