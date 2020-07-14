@@ -151,8 +151,8 @@ def dump_thread_group(ramdump, thread_group, task_out, taskhighlight_out, check_
             error = 1
             return
 
-        if offset_last_enqueued_ts is None:
-            task_last_enqueued_ts = 0
+        task_last_enqueued_ts = 0
+        if offset_last_enqueued_ts is None and ramdump.is_config_defined('CONFIG_SCHED_WALT'):
             offset_last_enqueued_ts = ramdump.field_offset('struct walt_task_struct', 'last_enqueued_ts')
             walt_task_struct_offset = ramdump.field_offset('struct task_struct', 'wts')
             offset_last_enqueued_ts = offset_last_enqueued_ts + walt_task_struct_offset
