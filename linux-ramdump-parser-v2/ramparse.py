@@ -176,6 +176,7 @@ if __name__ == '__main__':
         default_list.append("DebugImage")
         default_list.append("Watchdog")
         default_list.append("KBootLog")
+        default_list.append("PageTracking")
 
     if options.outdir:
         if not os.path.exists(options.outdir):
