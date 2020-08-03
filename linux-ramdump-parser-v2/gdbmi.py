@@ -166,6 +166,21 @@ class GdbMI(object):
         """Return GDB version"""
         return self._run_for_first('show version')
 
+    def frame_field_offset(self, frame_name, the_type, field):
+        """Returns the offset of a field in a struct or type of selected frame
+        if there are two vairable with same na,e in source code.
+        """
+        print "frame_field_offset 11"
+        cmd = 'frame 0 {0}'.format(frame_name)
+        print cmd
+        self._run_for_one(cmd)
+        print "frame_field_offset 22"
+        cmd = 'print /x (int)&(({0} *)0)->{1}'.format(the_type, field)
+        print "frame_field_offset 44"
+        result = self._run_for_one(cmd)
+        print "frame_field_offset 33"
+        return gdb_hex_to_dec(result)
+
     def field_offset(self, the_type, field):
         """Returns the offset of a field in a struct or type.
 
