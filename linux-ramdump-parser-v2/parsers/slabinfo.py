@@ -15,6 +15,8 @@ from mm import page_address, pfn_to_page
 from print_out import print_out_str
 from parser_util import register_parser, RamParser
 import operator
+import os
+from collections import defaultdict
 
 SLAB_RED_ZONE = 0x400
 SLAB_POISON = 0x800
@@ -484,6 +486,74 @@ class Slabinfo(RamParser):
         slabs_output_summary.close()
 
     def parse(self):
+	if self.ramdump.minidump:
+                addr = self.ramdump.address_of('md_slabowner_dump_addr')
+                if addr is None:
+                    print_out_str("NOTE: " +
+                            "slabowner Minidump is not supported")
+                    return
+                for eb_file in self.ramdump.ebi_files:
+                    path1 = eb_file[3]
+                path = os.path.join(path1.split("MD_S")[0], "md_SLABOWNER.bin")
+                input_file = open(path, 'r')
+		output_file = self.ramdump.open_file("slabowner_dump.txt", 'w')
+		lines = input_file.readlines()
+		i = 0
+		while i < len(lines):
+			functions = defaultdict(list)
+			objs = defaultdict(list)
+			objs_size = defaultdict(list)
+			line = lines[i];
+                        output_file.write(line)
+			i = i+1
+			while (i < len(lines)):
+                            if ('kmalloc-' not in lines[i]):
+                                line = lines[i]
+				try:
+                                    txt = line.split()
+                                    obj =  txt[0]
+                                    handle = int(txt[1])
+                                    n = int(txt[2])
+				    objs[handle].append(obj)
+                                except:
+				    i = i + 1
+                                    continue
+                                i = i+1
+                                j = 0
+				if not functions[handle]:
+				    for j in range(0, n):
+					line = lines[i]
+					try:
+					    int(line, 16)
+					except:
+                                            i = i+1
+					    continue
+					functions[handle].append(line)
+					i = i+1
+                            else:
+                                break
+			j = 0
+			for key in objs:
+			    objs_size[key] = len(objs[key])
+			for key, value in sorted(objs_size.items(), key=lambda item: item[1], reverse = True):
+				output_file.write("No of objects :" + str(value))
+				output_file.write('\n')
+				output_file.write("Objs :" + str(objs[key]))
+				output_file.write('\n')
+				for key2 in functions:
+					if (key == key2):
+					    output_file.write("call stack :\n")
+					    for j in range(0,len(functions[key])):
+						look = self.ramdump.unwind_lookup(int(functions[key][j], 16))
+						if look is None:
+						    continue
+						symname, offset = look
+						unwind_dat = '      [<{0:x}>] {1}+0x{2:x}\n'.format(
+							int(functions[key][j], 16), symname, offset)
+						output_file.write(unwind_dat)
+				output_file.write("\n")
+		output_file.close()
+		return
         global g_Optimization
         slabname = None
         for arg in sys.argv:
