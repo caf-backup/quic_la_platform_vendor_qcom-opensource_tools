@@ -565,6 +565,7 @@ class RamDump():
         self.kernel_version = (0, 0, 0)
         self.linux_banner = None
         self.minidump = options.minidump
+        self.svm = options.svm
         self.elffile = None
         self.ram_elf_file = None
         self.ram_addr = options.ram_addr
@@ -579,6 +580,9 @@ class RamDump():
         self.dump_module_kallsyms = options.dump_module_kallsyms
         self.dump_global_symbol_table = options.dump_global_symbol_table
         self.currentEL = options.currentEL or None
+        self.hyp_dump = None
+        self.ttbr = None
+        self.vttbr = None
         # Add search path for kernel modules under "vendor/qcom" directory
         # Location of this directory in relation to vmlinux changes depending on whether it's a primary or secondary boot.
         # PRIMARY-BOOT case:
@@ -650,15 +654,35 @@ class RamDump():
         if self.phys_offset is None:
             self.get_hw_id()
 
-        if self.kaslr_offset is None:
-            self.determine_kaslr_offset()
-            self.gdbmi.kaslr_offset = self.get_kaslr_offset()
-
         if options.phys_offset is not None:
             print_out_str(
                 '[!!!] Phys offset was set to {0:x}'.format(\
                     options.phys_offset))
             self.phys_offset = options.phys_offset
+        self.s2_walk = False
+        if self.svm:
+            self.gdbmi.close() #closing the previous one with vmlinux
+            from extensions.hyp_trace import HypDump
+            self.hyp = options.hyp
+            hyp_dump = HypDump(self)
+            self.gdbmi = gdbmi.GdbMI(self.gdb_path, self.hyp,
+                                 0)
+            self.gdbmi.open()
+            hyp_dump.determine_kaslr()
+            self.gdbmi.kaslr_offset = hyp_dump.hyp_kaslr_addr_offset
+            hyp_dump.get_trace_phy()
+            hyp_dump.get_ttbr()
+            self.ttbr = hyp_dump.ttbr1
+            self.vttbr = hyp_dump.vttbr
+            self.s2_walk = True
+            self.gdbmi.close() #closing gdb session with hyp elf
+
+            self.gdbmi = gdbmi.GdbMI(self.gdb_path, self.vmlinux,
+                                     self.kaslr_offset or 0)
+            self.gdbmi.open() #openning gdb session with vmlinux
+        if self.kaslr_offset is None:
+            self.determine_kaslr_offset()
+            self.gdbmi.kaslr_offset = self.get_kaslr_offset()
 
         self.wlan = options.wlan
         self.lookup_table = []
@@ -1004,24 +1028,26 @@ class RamDump():
         return False
 
     def print_socinfo(self):
-        if self.read_pointer('socinfo') is None:
-          return None
-        content_socinfo = hex(self.read_pointer('socinfo'))
-        content_socinfo = content_socinfo.strip('L')
+        try:
+            if self.read_pointer('socinfo') is None:
+              return None
+            content_socinfo = hex(self.read_pointer('socinfo'))
+            content_socinfo = content_socinfo.strip('L')
 
-        sernum_offset = self.field_offset('struct socinfo_v10', 'serial_number')
-        if sernum_offset is None:
-            sernum_offset = self.field_offset('struct socinfo_v0_10', 'serial_number')
+            sernum_offset = self.field_offset('struct socinfo_v10', 'serial_number')
             if sernum_offset is None:
-                print_out_str("No serial number information available")
-                return False
-        addr_of_sernum = hex(int(content_socinfo, 16) + sernum_offset)
-        addr_of_sernum = addr_of_sernum.strip('L')
-        serial_number = self.read_u32(int(addr_of_sernum, 16))
-        if serial_number is not None:
-            print_out_str('Serial number %s' % hex(serial_number))
-            return True
-
+                sernum_offset = self.field_offset('struct socinfo_v0_10', 'serial_number')
+                if sernum_offset is None:
+                    print_out_str("No serial number information available")
+                    return False
+            addr_of_sernum = hex(int(content_socinfo, 16) + sernum_offset)
+            addr_of_sernum = addr_of_sernum.strip('L')
+            serial_number = self.read_u32(int(addr_of_sernum, 16))
+            if serial_number is not None:
+                print_out_str('Serial number %s' % hex(serial_number))
+                return True
+        except:
+            pass
         return False
 
     def auto_parse(self, file_path):
