@@ -1,4 +1,4 @@
-# Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+# Copyright (c) 2012-2014, 2020 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -23,7 +23,7 @@ def flush_outfile():
 def set_outfile(path):
     global out_file
     try:
-        out_file = open(path, 'wb')
+        out_file = open(path, 'wt')
     except:
         print_out_str("could not open path {0}".format(path))
         print_out_str("Do you have write/read permissions on the path?")
@@ -34,7 +34,7 @@ def print_out_str(string):
     if out_file is None:
         print (string)
     else:
-        out_file.write((string + '\n').encode('ascii', 'ignore'))
+        out_file.write(string + '\n')
 
 def print_out_exception():
     if out_file is None:

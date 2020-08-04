@@ -22,6 +22,8 @@ import sys
 import os
 import re
 import time
+import platform
+import textwrap
 from optparse import OptionParser
 
 import parser_util
@@ -30,40 +32,18 @@ from print_out import print_out_str, set_outfile, print_out_section, print_out_e
 from sched_info import verify_active_cpus
 # Please update version when something is changed!'
 VERSION = '2.0'
+# Requires Python 3.5 or newer.
+LRDP_PYTHON_VERSION_MAJOR = 3
+LRDP_PYTHON_VERSION_MINOR = 5
 
 # quick check of system requirements:
 major, minor = sys.version_info[:2]
 
-if major != 2:
-    print("This script requires python2 to run!\n")
+if (major, minor) < (LRDP_PYTHON_VERSION_MAJOR, LRDP_PYTHON_VERSION_MINOR):
+    print("This script requires python >=3.5 to run!\n")
     print("You seem to be running: " + sys.version)
     print()
     sys.exit(1)
-if minor != 7 and '--force-26' not in sys.argv:
-    from textwrap import dedent
-    print(dedent("""
-    WARNING! This script is developed and tested with Python 2.7.
-    You might be able to get things working on 2.6 by installing
-    a few dependencies (most notably, OrderedDict [1])
-    and then passing --force-26 to bypass this version check, but
-    the recommended and supported approach is to install python2.7.
-
-    If you already have python2.7 installed but it's not the default
-    python2 interpreter on your system (e.g. if python2 points to
-    python2.6) then you'll need to invoke the scripts with python2.7
-    explicitly, for example:
-
-        $ python2.7 $(which ramparse.py) ...
-
-    instead of:
-
-        $ ramparse.py ...
-
-    [1] https://pypi.python.org/pypi/ordereddict"""))
-    sys.exit(1)
-if '--force-26' in sys.argv:
-    sys.argv.remove('--force-26')
-
 
 def parse_ram_file(option, opt_str, value, parser):
     a = getattr(parser.values, option.dest)
@@ -77,7 +57,7 @@ def parse_ram_file(option, opt_str, value, parser):
             break
         temp.append(arg)
 
-    if len(temp) is not 3:
+    if len(temp) != 3:
         raise OptionValueError(
             "Ram files must be specified in 'name, start, end' format")
 
@@ -169,6 +149,13 @@ if __name__ == '__main__':
     parser.add_option('', '--dump_glb_sym_tbl', action='store_true', dest='dump_global_symbol_table',
                       help='dump all symbols within the global symbol lookup table', default=False)
     parser.add_option('', '--hyp', dest='hyp', help='elf file containing hypervisor symbol information. Required for --svm')
+    parser.add_option('--dbg', '--debug', action='store_true', dest='debug',
+                      help=textwrap.dedent("""\
+                      Enable debug.
+                      Stop ignoring exceptions from running a parser. Intended to be used with:
+                      python -m pdb ramparse.py <args for ramparse.py>
+                      """))
+
     for p in parser_util.get_parsers():
         parser.add_option(p.shortopt or '',
                           p.longopt,
@@ -263,11 +250,12 @@ if __name__ == '__main__':
 
     # offset 4 of vmlinux indcates it's 32 or 64 bits
     # for 64 bits it is 0x2, for 32 bits it is 0x1
-    vm_file = open(options.vmlinux)
+    vm_file = open(options.vmlinux, "rb")
     vm_file.seek(4, 0)
     bin_bits = vm_file.read(1)
     vm_file.close()
-    options.arm64 = ord(bin_bits) == 0x02
+    options.arm64 = (bin_bits == b'\x02')
+
 
     if options.wlan is None:
         options.wlan = "INTEGRATED"
@@ -358,12 +346,17 @@ if __name__ == '__main__':
 
         if do_fallback:
             import code
-            import readline
-            import rlcompleter
             vars = globals()
             vars.update(locals())
-            readline.set_completer(rlcompleter.Completer(vars).complete)
-            readline.parse_and_bind("tab: complete")
+
+            #readline library not available as a standard python libary on windows
+            if platform.system() == 'Linux':
+                import readline
+                import rlcompleter
+
+                readline.set_completer(rlcompleter.Completer(vars).complete)
+                readline.parse_and_bind("tab: complete")
+
             shell = code.InteractiveConsole(vars)
             shell.interact()
         sys.exit(0)
@@ -433,9 +426,13 @@ if __name__ == '__main__':
                 else:
                     p.cls(dump).parse()
             except:
-                print_out_str('!!! Exception while running {0}'.format(p.cls.__name__))
-                print_out_exception()
-                sys.stderr.write("FAILED! ")
+                # log exceptions and continue by default
+                if not options.debug:
+                    print_out_str('!!! Exception while running {0}'.format(p.cls.__name__))
+                    print_out_exception()
+                    sys.stderr.write("FAILED! ")
+                else:
+                    raise
         sys.stderr.write("%fs\n" % (time.time() - before))
         sys.stderr.flush()
         flush_outfile()

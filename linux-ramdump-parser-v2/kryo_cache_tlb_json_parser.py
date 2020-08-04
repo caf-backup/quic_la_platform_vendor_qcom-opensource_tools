@@ -10,6 +10,7 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 
+from __future__ import print_function
 import optparse
 import sys
 import os
@@ -93,21 +94,21 @@ class Field():
     def get_bitfield_width(self):
         display_width = 0
         if DEBUG_LEVEL >= 2:
-            print "func: get_bitfield_width"
-            print "    : name = " + self.name
-            print "    : list = " + str(self.get_bitfield_list())
-            print "    : width = " + str(len(self.get_bitfield_list()))
-            print "    : displayBase = " + str(self.displayBase)
+            print("func: get_bitfield_width")
+            print("    : name = " + self.name)
+            print("    : list = " + str(self.get_bitfield_list()))
+            print("    : width = " + str(len(self.get_bitfield_list())))
+            print("    : displayBase = " + str(self.displayBase))
         width = len(self.get_bitfield_list())  # no. of bits in the field
         if self.post_process_list is not None:
             width = self.get_post_processed_width(width)
 
         if self.displayBase == 16:
-            display_width = int((width + 3) / 4)
+            display_width = (width + 3) // 4
         else:
             display_width = int(math.ceil(math.log10((1 << width))))
         if DEBUG_LEVEL >= 2:
-            print "    : display_width = " + str(display_width)
+            print("    : display_width = " + str(display_width))
         return display_width
 
     def post_process_value(self, res, set_num=None, way_num=None):
@@ -205,7 +206,7 @@ class Field():
             width_string = self.get_width_string()
         ret_str = width_string.format(res)
         if DEBUG_LEVEL == -1:
-            print ret_str
+            print(ret_str)
         return ret_str
 
 
@@ -254,10 +255,10 @@ def verify_json_file_sanity(filename):
 
 def search_json_obj_for_attribute(jsonObj, cacheType, attribute):
     if DEBUG_LEVEL >= 3:
-        print ("\n\nentered function " + "search_json_obj_for_attribute")
-        print "jsonObj = " + "\n" + str(jsonObj)
-        print "cacheType = " + cacheType
-        print "attribute = " + str(attribute)
+        print("\n\nentered function " + "search_json_obj_for_attribute")
+        print("jsonObj = " + "\n" + str(jsonObj))
+        print("cacheType = " + cacheType)
+        print("attribute = " + str(attribute))
 
     ret_val = None
     dict_type = type({})
@@ -271,7 +272,7 @@ def search_json_obj_for_attribute(jsonObj, cacheType, attribute):
                         ret_val = jsonObj[jsonObj[cacheType][_STRUCTURE_STR_][_PARENT_STR_]][_STRUCTURE_STR_][attribute]
             except:
                 if DEBUG_LEVEL >= 2:
-                    print sys.exc_info()[0]
+                    print(sys.exc_info()[0])
                 ret_val = None
     return ret_val
 
@@ -279,12 +280,12 @@ def search_json_obj_for_attribute(jsonObj, cacheType, attribute):
 def search_json_file_for_attribute(filename, target_cpu, cache_type, attribute, json_type):
     ret_val = None
     if DEBUG_LEVEL >= 3:
-        print ("\n\nentered function " + "search_json_file_for_attribute")
-        print "filename = " + filename
-        print "targetCpu = " + target_cpu
-        print "cacheType = " + cache_type
-        print "attribute = " + str(attribute)
-        print "json_type = " + json_type
+        print("\n\nentered function " + "search_json_file_for_attribute")
+        print("filename = " + filename)
+        print("targetCpu = " + target_cpu)
+        print("cacheType = " + cache_type)
+        print("attribute = " + str(attribute))
+        print("json_type = " + json_type)
 
     if json_type == "cpu":
         # we know that the cpu specific json file is sane
@@ -302,10 +303,10 @@ def search_json_file_for_attribute(filename, target_cpu, cache_type, attribute, 
                 if target_cpu.lower() == socCpu.lower():
                     ret_val = search_json_obj_for_attribute(soc_data[socCpu], cache_type, attribute)
         except:
-            print sys.exc_info()[0]
+            print(sys.exc_info()[0])
             ret_val = None
     if DEBUG_LEVEL >= 2:
-        print "retVal = " + str(ret_val)
+        print("retVal = " + str(ret_val))
     return ret_val
 
 
@@ -343,7 +344,7 @@ def get_cache_fields(cpuDataFile, cacheType):
                 fields.append(Field(obj))
     except KeyError:
         sys.stderr.write("Cannot find any 'fields' key in cache description, dumping binary data\n")
-        for i in range(int(cpu_data[cacheType][_STRUCTURE_STR_][_BLOCKSIZE_STR_]) / 4):  # Display groups of 4 Bytes
+        for i in range(cpu_data[cacheType][_STRUCTURE_STR_][_BLOCKSIZE_STR_] // 4):  # Display groups of 4 Bytes
             fields.append(
                 Field(
                     {"name": "{:>8x}".format(i*4),
@@ -368,7 +369,7 @@ def get_cache_structure(cpu_data_file, target_cpu, cache_type, opt_num_sets,
                                                   "soc")
     else:
         num_sets = search_json_file_for_attribute(cpu_data_file, target_cpu, cache_type, _NUMSETS_STR_, "cpu")
-    if isinstance(num_sets, basestring):
+    if isinstance(num_sets, str):
         try:
             num_sets = eval(num_sets)
         except:
@@ -387,7 +388,7 @@ def get_cache_structure(cpu_data_file, target_cpu, cache_type, opt_num_sets,
     else:
         associativity = search_json_file_for_attribute(cpu_data_file, target_cpu, cache_type, _ASSOCIATIVITY_STR_,
                                                        "cpu")
-    if isinstance(associativity, basestring):
+    if isinstance(associativity, str):
         try:
             associativity = eval(associativity)
         except:
@@ -397,7 +398,7 @@ def get_cache_structure(cpu_data_file, target_cpu, cache_type, opt_num_sets,
 
     # number of bytes in each dump element
     block_size = search_json_file_for_attribute(cpu_data_file, target_cpu, cache_type, _BLOCKSIZE_STR_, "cpu")
-    if isinstance(block_size, basestring):
+    if isinstance(block_size, str):
         try:
             block_size = eval(block_size)
         except:
@@ -408,7 +409,7 @@ def get_cache_structure(cpu_data_file, target_cpu, cache_type, opt_num_sets,
     is_sub_cache = search_json_file_for_attribute(cpu_data_file, target_cpu, cache_type, _SUBCACHE_STR_, "cpu")
     if is_sub_cache == 'True':
         offset = search_json_file_for_attribute(cpu_data_file, target_cpu, cache_type, _OFFSET_STR_, "cpu")
-        if isinstance(offset, basestring):
+        if isinstance(offset, str):
             try:
                 offset = eval(offset)
             except:
@@ -477,8 +478,8 @@ def cache_dump_parse(input_filename, output_filename, target_cpu, cpu_data_file,
             for Set in range(num_sets):
                 elem = extract_element_from_file(input_filename, start_offset, block_size, Set, num_sets, way, associativity)
                 field_str = parse_cache_line(elem, cache_fields, Set, way)
-                print '{:>3}'.format(str(way)) + ' ' + '{:>4}'.format(
-                    str(Set)) + ' ' + field_str
+                print('{:>3}'.format(str(way)) + ' ' + '{:>4}'.format(
+                    str(Set)) + ' ' + field_str)
 
         # restore stdout
         if output_filename is not None:

@@ -1,4 +1,4 @@
-# Copyright (c) 2014, The Linux Foundation. All rights reserved.
+# Copyright (c) 2014, 2020 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -132,7 +132,7 @@ def get_size_string(size):
     for s in reversed(size_strings):
         if s < SZ_1K: break
         if (size % s) == 0:
-            b = size / s
+            b = size // s
             return "%s*%d" % (size_strings[s], b)
     return "%d" % size
 

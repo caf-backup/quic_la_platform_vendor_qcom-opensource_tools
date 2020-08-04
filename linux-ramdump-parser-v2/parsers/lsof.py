@@ -145,7 +145,7 @@ def parse_task(self, ramdump, task, lsof_info):
                 continue
             fop, offset = look
             iname = get_pathname_by_file(self, self.ramdump, file)
-            if fop.find("ion_fops", 0, 8) is not -1:
+            if fop.find("ion_fops", 0, 8) != -1:
                 lsof_info.write(ion_str.format(
                         index, file, fop, iname, priv_data))
             else:

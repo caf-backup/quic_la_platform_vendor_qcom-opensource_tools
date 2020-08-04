@@ -41,7 +41,7 @@ class PStore(RamParser):
         sorts the logs in ascending timestamp manner
         '''
         ordered_event_data = collections.OrderedDict(sorted(event_data.items()))
-        for ts, log in ordered_event_data.iteritems():
+        for ts, log in ordered_event_data.items():
             pstore_out.write(log)
 
     def print_event_logs(self, pstore_out, addr, size):

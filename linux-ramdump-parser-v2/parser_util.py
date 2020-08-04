@@ -1,4 +1,4 @@
-# Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
+# Copyright (c) 2013-2015, 2020 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -84,7 +84,7 @@ def register_parser(longopt, desc, shortopt=None, optional=False):
        class BannerParser(RamParser):
 
            def parse(self):
-               print self.ramdump.read_cstring('linux_banner', 256, False)
+               print(self.ramdump.read_cstring('linux_banner', 256, False))
 
     :param longopt: The longopt command line switch for this parser
     :param desc: A short description of the parser (also shown in the

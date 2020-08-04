@@ -133,12 +133,12 @@ class Slabinfo_summary(RamParser):
             total_allocated = nr_total_objects - total_freeobjects
             page_order = oo >> OO_SHIFT
             slab_size = int(math.pow(2, page_order + PAGE_SHIFT))
-            slab_size = slab_size / 1024
+            slab_size = slab_size // 1024
             slab = self.ramdump.read_word(slab + slab_list_offset)
             slab_summary[nCounter] = [
                     slab_name, obj_size, objsize_w_metadata,
                     total_allocated, nr_total_objects,
-                    (objsize_w_metadata * nr_total_objects)/1024,
+                    (objsize_w_metadata * nr_total_objects) // 1024,
                     num_slabs, slab_size]
             nCounter += 1
         sorted_summary = sorted(slab_summary.values(),
