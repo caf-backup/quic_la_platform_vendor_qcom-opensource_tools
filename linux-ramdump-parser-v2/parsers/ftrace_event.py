@@ -14,6 +14,7 @@ import local_settings
 import os
 import subprocess
 import sys
+from collections import OrderedDict
 
 from parser_util import register_parser, RamParser
 from print_out import print_out_str
@@ -390,8 +391,7 @@ class FtraceParser_Event(object):
             event_data = self.fromat_event_map[event_name]
             offset_data = event_data[0]
             temp_a = []
-            for key_idx,item in enumerate(offset_data.keys()):
-                item_list = offset_data[item]
+            for item,item_list in offset_data.items():
                 type_str,offset,size = item_list
                 if 'unsigned char' in type_str or 'long' in type_str or 'int' in type_str or 'u32' in type_str or 'bool' in type_str or 'pid_t' in type_str:
                     v = self.ramdump.read_u32(ftrace_raw_entry + offset)
@@ -523,7 +523,7 @@ class FtraceParser_Event(object):
             elif "workqueue" in event_name:
                 fmt_str =  fmt_str.replace('work struct','work_struct')
             offset_data = event_data[0]
-            fmt_name_value_map = {}
+            fmt_name_value_map = OrderedDict()
             d = str(fmt_str.split('",')[1].replace("'", ''))
             pr = str(fmt_str.split('",')[0].replace("'", ''))
             pr = str(pr.split('",')[0].replace('"', ''))
@@ -552,17 +552,15 @@ class FtraceParser_Event(object):
                     for ki in pr.split(" "):
                         if len(ki) >= 1:
                             pr_f.append(str(ki).replace(" ",""))
-            for key_idx,item in enumerate(offset_data.keys()):
-                item_list = offset_data[item]
+            for item,item_list in offset_data.items():
                 type_str,offset,size = item_list
                 if 'unsigned char' in type_str or 'long' in type_str or 'int' in type_str or 'u32' in type_str or 'bool' in type_str or 'pid_t' in type_str:
                     v = self.ramdump.read_u32(ftrace_raw_entry + offset)
                     fmt_name_value_map[item] = v
                 elif 'char' in type_str or '__data_loc char' in type_str or 'const char *' in type_str or '__data_loc char[]' in type_str:
                     if '__data_loc' in type_str:
-                        v = self.ramdump.read_cstring(ftrace_raw_entry + (offset*2))
-                        if isinstance(v, unicode):
-                            v = self.ramdump.read_cstring(ftrace_raw_entry + (offset*4))
+                        v = self.ramdump.read_u32(ftrace_raw_entry + offset)
+                        v = self.ramdump.read_cstring(ftrace_raw_entry + (v & 0xffff), (v >> 16))
                     else:
                         v = self.ramdump.read_cstring(ftrace_raw_entry + offset)
                     fmt_name_value_map[item] = v
