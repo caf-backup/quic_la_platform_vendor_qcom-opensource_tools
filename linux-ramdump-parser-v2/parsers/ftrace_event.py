@@ -104,8 +104,6 @@ class FtraceParser_Event(object):
         trace_entry_offset = self.ramdump.field_offset('struct trace_entry ', 'type')
         if commit > 0:
             while( rb_event < buffer_data_page_end):
-                if isinstance(rb_event, float):
-                    break
                 time_delta = self.ramdump.read_u32(rb_event + rb_event_timedelta_offset)
                 #print_out_str("time_delta before = {0} {1} ".format(time_delta,hex(rb_event)))
                 time_delta = time_delta >> 5
@@ -127,7 +125,7 @@ class FtraceParser_Event(object):
                     #tr_entry = self.ramdump.read_u64(rb_event + rb_event_array_offset)
                     tr_entry = rb_event + rb_event_array_offset
                     tr_event_type = self.ramdump.read_u16( tr_entry + trace_entry_offset)
-                    if tr_event_type <= self.nr_ftrace_events:
+                    if tr_event_type < self.nr_ftrace_events:
                         self.ftrace_out.write("unknown event \n")
                     else:
                         self.parse_trace_entry(tr_entry,tr_event_type,timestamp+rb_event_timestamp)
@@ -146,7 +144,10 @@ class FtraceParser_Event(object):
                     record_length = 8
                 elif rb_event_length == 31:
                     #print "rb_event_length is 31"
-                    record_length = 16.
+                    record_length = 16
+
+                #print "record_length = {0}".format(record_length)
+                #print "rb_event = {0}".format(hex(rb_event))
                 rb_event = rb_event + record_length
 
     def remaing_space(self,count,text_count):
