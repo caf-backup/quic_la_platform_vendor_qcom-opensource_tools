@@ -84,7 +84,10 @@ def ion_buffer_info(self, ramdump, ion_info):
             ionheap_name_addr = ramdump.read_structure_field(ion_heap, 'struct ion_heap', 'name')
             ionheap_name = ramdump.read_cstring(ionheap_name_addr, TASK_NAME_LENGTH)
         name = ramdump.read_word(dma_buf_addr + name_offset)
-        name = ramdump.read_cstring(name, 48)
+        if not name:
+            name = "None"
+        else:
+            name = ramdump.read_cstring(name, 48)
         dma_buf_info.append([file, f_count, name, hex(size), exp_name,
                              ionheap_name, bytes_to_KB(size)])
         head = ramdump.read_word(head)
@@ -107,7 +110,10 @@ def ion_buffer_info(self, ramdump, ion_info):
                     ionheap_name_addr = ramdump.read_structure_field(ion_heap, 'struct ion_heap', 'name')
                     ionheap_name = ramdump.read_cstring(ionheap_name_addr, TASK_NAME_LENGTH)
                 name = ramdump.read_word(dma_buf_addr + name_offset)
-                name = ramdump.read_cstring(name, 48)
+                if not name:
+                    name = "None"
+                else:
+                    name = ramdump.read_cstring(name, 48)
                 dma_buf_info.append([file, f_count, name, hex(size), exp_name,
                                      ionheap_name, bytes_to_KB(size)])
                 head = ramdump.read_word(head + prev_offset)
@@ -160,7 +166,10 @@ def get_bufs(self, task, bufs, ion_info, ramdump):
             ctime = ctime / 1000000000
             time = stime - ctime
         name = ramdump.read_word(dmabuf + self.name_offset)
-        name = ramdump.read_cstring(name, 48)
+        if not name:
+            name = "None"
+        else:
+            name = ramdump.read_cstring(name, 48)
 
         item = [name, hex(size), bytes_to_KB(size), str(time), hex(file)]
         if item not in bufs:
