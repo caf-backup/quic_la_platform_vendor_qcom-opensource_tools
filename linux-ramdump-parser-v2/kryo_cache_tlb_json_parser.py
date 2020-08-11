@@ -458,7 +458,7 @@ def cache_dump_parse(input_filename, output_filename, target_cpu, cpu_data_file,
         sys.stderr.write("\n" + "Total cache size" + ": " + str(total_bytes))
         sys.stderr.write("\n" + "Input File: " + input_filename)
         sys.stderr.write("\n" + "Seek Offset: " + str(seek_offset))
-	sys.stderr.write("\n" + "Start Offset: " + str(start_offset))
+        sys.stderr.write("\n" + "Start Offset: " + str(start_offset))
         sys.stderr.write("\n" + "Output File: " + output_filename if output_filename is not None else "stdout")
         sys.stderr.write("\n")
 
