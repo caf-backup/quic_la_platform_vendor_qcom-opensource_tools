@@ -198,7 +198,7 @@ class UfsHba():
 
         print_out_ufs("struct ufs_hba = 0x%x {" % (self.ufs_hba_addr))
 
-       ufs_scsi_device_addr = self.ramdump.read_pointer(
+        ufs_scsi_device_addr = self.ramdump.read_pointer(
                             self.ufs_hba_addr + self.ramdump.field_offset('struct ufs_hba', 'sdev_ufs_device'))
         print_out_ufs("\tvendor = %s" %(self.ramdump.read_structure_cstring(
                                         ufs_scsi_device_addr,'struct scsi_device', 'vendor')))
