@@ -1,4 +1,4 @@
-# Copyright (c) 2014, The Linux Foundation. All rights reserved.
+# Copyright (c) 2014, 2020 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -59,7 +59,7 @@ class PmicRegDump():
                 print_out_str("Maximum value of slave id is 0xF but found {0:x}. Aborting PMIC dump!".format(slaveid))
                 return False;
 
-            pmic_num = slaveid/2;
+            pmic_num = slaveid // 2;
 
             if pmic_num not in self.pmic_list:
                 pmic_reg_list = []

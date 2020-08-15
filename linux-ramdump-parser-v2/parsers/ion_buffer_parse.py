@@ -42,7 +42,7 @@ ion_heap_buffers = []
 def bytes_to_KB(bytes):
     kb_val = 0
     if bytes != 0:
-        kb_val = bytes / 1024
+        kb_val = bytes // 1024
     return kb_val
 
 
@@ -163,7 +163,7 @@ def get_bufs(self, task, bufs, ion_info, ramdump):
         time = 0
         if ctime_offset is not None:
             ctime = ramdump.read_word(dmabuf + ctime_offset)
-            ctime = ctime / 1000000000
+            ctime = ctime // 1000000000
             time = stime - ctime
         name = ramdump.read_word(dmabuf + self.name_offset)
         if not name:

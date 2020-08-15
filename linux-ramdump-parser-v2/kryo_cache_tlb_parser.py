@@ -433,15 +433,15 @@ def main(argv):
     try:
         opts, args = getopt.getopt(argv,"hi:o:t:s:c:",["help","ifile=","ofile=","type=","seek=","cpu="])
     except getopt.GetoptError:
-        print 'ERROR: Incorrect arguments. Run with -h for help'
+        print('ERROR: Incorrect arguments. Run with -h for help')
         sys.exit(2)
     for opt, arg in opts:
         if opt in ("-h", "--help"):
-            print 'parse.py -i <inputfile> -c <cpu> -t <cachedump type> -s <offset>'
-            print '    -c can take kryo3gold, kryo3silver'
-            print "    -t can take DCD(for D$ Data), DCT(for D$ Tag), ICD(for I$ Data), ICT(for I$ Tag), TLBD(for TLB Data), TLBT(for TLB Tag)"
-            print '    -s is a byte offset into the input file'
-            print 'All output gets written to stdout'
+            print('parse.py -i <inputfile> -c <cpu> -t <cachedump type> -s <offset>')
+            print('    -c can take kryo3gold, kryo3silver')
+            print("    -t can take DCD(for D$ Data), DCT(for D$ Tag), ICD(for I$ Data), ICT(for I$ Tag), TLBD(for TLB Data), TLBT(for TLB Tag)")
+            print('    -s is a byte offset into the input file')
+            print('All output gets written to stdout')
             sys.exit()
         elif opt in ("-i", "--ifile"):
             inputFileName = arg

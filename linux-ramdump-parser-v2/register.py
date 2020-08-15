@@ -1,4 +1,4 @@
-# Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+# Copyright (c) 2013-2014, 2020 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -89,7 +89,7 @@ class Register(object):
         # these again and would then recurse inifitely)
         object.__setattr__(self, 'value', value)
         object.__setattr__(self, '_regs', {})
-        for (k, v) in kwargs.iteritems():
+        for (k, v) in kwargs.items():
             self.add_field(k, v)
 
     def add_field(self, field, bitrange):

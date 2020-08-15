@@ -27,11 +27,12 @@
 # OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
 # IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import print_function
 import struct
 import os
 import sys
-
-from kryo_cache_tlb_parser import main as kryo_tlb_parser_main
+import subprocess
+from print_out import print_out_str
 
 """dictionary mapping from (hw_id, client_id, version) to class CacheDump"""
 lookuptable = {}
@@ -122,7 +123,7 @@ class TlbDumpType_v1(TlbDumpType):
         self.outfile = outfile
         """kryo tlb parser expects an input file with dump data for the tlb so
            temporarily create file with dump data"""
-        infile_fd = ramdump.open_file(self.infile_name)
+        infile_fd = ramdump.open_file(self.infile_name, mode='rb')
         core_dump_size = end - start
         buf = ramdump.read_physical(start, core_dump_size)
         infile_fd.write(buf)
@@ -193,7 +194,7 @@ class TlbDumpType_v2(TlbDumpType):
             offset = 0
             for nset in range(self.NumSetsRam1):
                 if start > end:
-                    print [nway,nset]
+                    print([nway,nset])
                     raise Exception('past the end of array')
 
                 output = [nway, nset]
@@ -213,7 +214,7 @@ class TlbDumpType_v3(object):
         self.outfile = outfile
         """kryo tlb parser expects an input file with dump data for the tlb so
            temporarily create file with dump data"""
-        infile_fd = ramdump.open_file(self.infile_name)
+        infile_fd = ramdump.open_file(self.infile_name, mode="wb")
         core_dump_size = end - start
         buf = ramdump.read_physical(start, core_dump_size)
         infile_fd.write(buf)
@@ -234,24 +235,26 @@ class TlbDumpType_v3(object):
         offset_str = str(offset)
         opts_params = [infile_path, outfile_path, cmd, cpu_name, offset_str]
         argv = [None] * (2 * len(opts_flgs))
-        for i in xrange(len(opts_flgs)):
+        for i in range(len(opts_flgs)):
             argv[2 * i] = opts_flgs[i]
             argv[(2 * i) + 1] = opts_params[i]
-        """Since the kryo tlb parser expects the data to be parsed and output
-           to be redirected to the outfile, and we're not calling it from the
-           command line to redirect the output, we can do it like this"""
-        outfile_fd = self.ramdump.open_file(outfile_name)
-        sys.stdout.flush()
-        sys.stdout = outfile_fd
-        kryo_tlb_parser_main(argv)
-        sys.stdout.flush()
-        sys.stdout = sys.__stdout__
-        outfile_fd.close()
+
+        with self.ramdump.open_file(outfile_name) as outfile_fd:
+            exec_name = "kryo_cache_tlb_parser.py"
+            exec_abspath = os.path.join(self.ramdump.get_srcdir(), exec_name)
+            args = [sys.executable, exec_abspath]
+            args.extend(argv)
+            p = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                               universal_newlines=True)
+            if p.returncode < 0:
+                print_out_str("{} Failed with error {}".format(p.args, p.returncode))
+            print_out_str(p.stderr)
+            outfile_fd.write(p.stdout)
 
     def post_process(self, datafile_name, tagfile_name=None):
         if(tagfile_name is not None and datafile_name is not None):
-            tagfd = self.ramdump.open_file(tagfile_name, 'r')
-            datafd = self.ramdump.open_file(datafile_name, 'r')
+            tagfd = self.ramdump.open_file(tagfile_name, mode='rt')
+            datafd = self.ramdump.open_file(datafile_name, mode='rt')
 
             #discard first line since it's just a header
             tagfd.readline()
@@ -284,7 +287,7 @@ class TlbDumpType_v3(object):
             self.ramdump.remove_file(datafile_name)
 
         elif(tagfile_name is None and datafile_name is not None):
-            datafd = self.ramdump.open_file(datafile_name, 'r')
+            datafd = self.ramdump.open_file(datafile_name, mode='rt')
 
             #discard first line since it's just a header
             datafd.readline()
@@ -313,7 +316,7 @@ class TlbDumpType_v4(object):
         self.outfile = outfile
         """kryo tlb parser expects an input file with dump data for the tlb so
            temporarily create file with dump data"""
-        infile_fd = ramdump.open_file(self.infile_name)
+        infile_fd = ramdump.open_file(self.infile_name, mode='wb')
         core_dump_size = end - start
         buf = ramdump.read_physical(start, core_dump_size)
         infile_fd.write(buf)
@@ -338,7 +341,7 @@ class TlbDumpType_v4(object):
         exec_path = sys.argv[0].strip("ramparse.py")
         exec_path += "kryo_cache_tlb_json_parser.py"
 
-        for i in xrange(len(opts_flgs)):
+        for i in range(len(opts_flgs)):
             argv[2 * i] = opts_flgs[i]
             argv[(2 * i) + 1] = opts_params[i]
 

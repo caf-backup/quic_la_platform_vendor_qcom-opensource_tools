@@ -362,7 +362,7 @@ class FtraceParser_Event(object):
                     try:
                         temp_data = "                {4}     {0}  {1:.6f}: softirq_raise:        vec={2} [action={3}]\n".format(self.cpu, local_timestamp / 1000000000.0,vector,softirq_action_list[vector],curr_com)
                     except Exception as err:
-                        print "failed vetor =  {0}".format(vector)
+                        print_out_str("failed vetor =  {0}".format(vector))
                         temp_data = "                {4}     {0}  {1:.6f}: softirq_raise:        vec={2} [action={3}]\n".format(self.cpu, local_timestamp / 1000000000.0,vector,"softirq unknonw vector",curr_com)
                     self.ftrace_time_data[t] = temp_data
         elif event_name == "workqueue_activate_work":

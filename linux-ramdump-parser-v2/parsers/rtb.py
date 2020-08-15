@@ -71,7 +71,7 @@ class RTB(RamParser):
         return cycle_count
 
     def print_none(self, rtbout, rtb_ptr, logtype):
-        rtbout.write('{0} No data\n'.format(logtype).encode('ascii', 'ignore'))
+        rtbout.write('{0} No data\n'.format(logtype))
 
     def print_readlwritel(self, rtbout, rtb_ptr, logtype):
         data = self.ramdump.read_structure_field(rtb_ptr, 'struct msm_rtb_layout', 'data')
@@ -91,7 +91,7 @@ class RTB(RamParser):
         timestamp = self.get_timestamp(rtb_ptr)
         cycle_count = self.get_cycle_count(rtb_ptr)
         rtbout.write('[{0}] [{1}] : {2} from address {3:x}({4}) called from addr {5:x} {6} {7}\n'.format(
-            timestamp, cycle_count, logtype, data, physical, caller, func, line).encode('ascii', 'ignore'))
+            timestamp, cycle_count, logtype, data, physical, caller, func, line))
 
     def print_logbuf(self, rtbout, rtb_ptr, logtype):
         data = self.ramdump.read_structure_field(rtb_ptr, 'struct msm_rtb_layout', 'data')
@@ -101,7 +101,7 @@ class RTB(RamParser):
         timestamp = self.get_timestamp(rtb_ptr)
         cycle_count = self.get_cycle_count(rtb_ptr)
         rtbout.write('[{0}] [{1}] : {2} log end {3:x} called from addr {4:x} {5} {6}\n'.format(
-            timestamp, cycle_count, logtype, data, caller, func, line).encode('ascii', 'ignore'))
+            timestamp, cycle_count, logtype, data, caller, func, line))
 
     def print_hotplug(self, rtbout, rtb_ptr, logtype):
         data = self.ramdump.read_structure_field(rtb_ptr, 'struct msm_rtb_layout', 'data')
@@ -111,7 +111,7 @@ class RTB(RamParser):
         timestamp = self.get_timestamp(rtb_ptr)
         cycle_count = self.get_cycle_count(rtb_ptr)
         rtbout.write('[{0}] [{1}] : {2} cpu data {3:x} called from addr {4:x} {5} {6}\n'.format(
-            timestamp, cycle_count, logtype, data, caller, func, line).encode('ascii', 'ignore'))
+            timestamp, cycle_count, logtype, data, caller, func, line))
 
     def print_ctxid(self, rtbout, rtb_ptr, logtype):
         data = self.ramdump.read_structure_field(rtb_ptr, 'struct msm_rtb_layout', 'data')
@@ -121,14 +121,14 @@ class RTB(RamParser):
         timestamp = self.get_timestamp(rtb_ptr)
         cycle_count = self.get_cycle_count(rtb_ptr)
         rtbout.write('[{0}] [{1}] : {2} context id {3:x} called from addr {4:x} {5} {6}\n'.format(
-            timestamp, cycle_count, logtype, data, caller, func, line).encode('ascii', 'ignore'))
+            timestamp, cycle_count, logtype, data, caller, func, line))
 
     def print_timestamp(self, rtbout, rtb_ptr, logtype):
         data = self.ramdump.read_structure_field(rtb_ptr, 'struct msm_rtb_layout', 'data')
         caller = self.ramdump.read_structure_field(rtb_ptr, 'struct msm_rtb_layout', 'caller')
         cycle_count = self.get_cycle_count(rtb_ptr)
         rtbout.write('[{0}] : [{1}] Timestamp: {2:x}{3:x}\n'.format(
-            cycle_count, logtype, data, caller).encode('ascii', 'ignore'))
+            cycle_count, logtype, data, caller))
 
     def print_cp_rw(self, rtbout, rtb_ptr, logtype):
         data = self.ramdump.read_structure_field(rtb_ptr, 'struct msm_rtb_layout', 'data')
@@ -138,7 +138,7 @@ class RTB(RamParser):
         timestamp = self.get_timestamp(rtb_ptr)
         cycle_count = self.get_cycle_count(rtb_ptr)
         rtbout.write('[{0}] [{1}] : {2} from offset {3:x} called from addr {4:x} {5} {6}\n'.format(
-            timestamp, cycle_count, logtype, data, caller, func, line).encode('ascii', 'ignore'))
+            timestamp, cycle_count, logtype, data, caller, func, line))
 
     def print_irq(self, rtbout, rtb_ptr, logtype):
         data = self.ramdump.read_structure_field(rtb_ptr, 'struct msm_rtb_layout', 'data')
@@ -148,7 +148,7 @@ class RTB(RamParser):
         timestamp = self.get_timestamp(rtb_ptr)
         cycle_count = self.get_cycle_count(rtb_ptr)
         rtbout.write('[{0}] [{1}] : {2} interrupt 0x{3:x} handled from addr {4:x} {5} {6}\n'.format(
-            timestamp, cycle_count, logtype, data, caller, func, line).encode('ascii', 'ignore'))
+            timestamp, cycle_count, logtype, data, caller, func, line))
 
     def next_rtb_entry(self, index, step_size, mask):
         unused_buffer_size = (mask + 1) % step_size
@@ -216,7 +216,7 @@ class RTB(RamParser):
                 stamp = self.ramdump.read_int(ptr + rtb_idx_offset)
                 if stamp is None:
                     break
-                rtb_out.write('{0:x} '.format(stamp).encode('ascii', 'ignore'))
+                rtb_out.write('{0:x} '.format(stamp))
                 item = self.ramdump.read_byte(ptr + rtb_logtype_offset)
                 item = item & 0x7F
                 name_str = '(unknown)'
