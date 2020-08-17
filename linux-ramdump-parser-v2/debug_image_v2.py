@@ -1,4 +1,4 @@
-# Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
+# Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -643,11 +643,11 @@ class DebugImage_v2():
                 client_name = self.dump_data_id_lookup_table[client_id]
                 if client_name not in client_table:
                     print_out_str(
-                        '!!! client_id = {0} client_name = {1} Does not have an associated function. Skipping!'.format(client_id,client_name))
+                        '!!! client_id = 0x{0:x} client_name = {1} Does not have an associated function. Skipping!'.format(client_id,client_name))
                     continue
             else:
                 print_out_str(
-                    '!!! Invalid dump client id found {0:x}'.format(client_id))
+                    '!!! Invalid dump client id found 0x{0:x}'.format(client_id))
                 continue
 
             results.append((client_name, client_table[client_name], client_entry))
