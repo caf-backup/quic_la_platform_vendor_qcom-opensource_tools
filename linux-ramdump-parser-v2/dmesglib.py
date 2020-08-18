@@ -1,4 +1,4 @@
-# Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
+# Copyright (c) 2014-2015, 2020 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -127,7 +127,7 @@ class DmesgLib(object):
             text_str = self.ramdump.read_cstring(curr_idx + log_size, text_len)
             for partial in text_str.split('\n'):
                 f = '[{0:>5}.{1:0>6d}] {2}\n'.format(
-                    timestamp / 1000000000, (timestamp % 1000000000) / 1000, partial)
+                    timestamp // 1000000000, (timestamp % 1000000000) // 1000, partial)
                 self.outfile.write(f)
             curr_idx = self.log_next(curr_idx, logbuf_addr)
             curr_idx = self.verify_log(curr_idx, logbuf_addr, last_idx)

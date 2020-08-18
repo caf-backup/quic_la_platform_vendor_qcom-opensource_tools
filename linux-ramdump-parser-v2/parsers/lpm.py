@@ -1,4 +1,4 @@
-# Copyright (c) 2015-2018, The Linux Foundation. All rights reserved.
+# Copyright (c) 2015-2018, 2020 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -78,7 +78,7 @@ class lpm(RamParser):
 
         cluster_level_size = self.ramdump.sizeof('struct lpm_cluster_level')
 
-        for i in xrange(nlevels):
+        for i in range(nlevels):
                 # ToDo: Need a better way to arrive at the next level info.
                 level = levels + (i * cluster_level_size)
 

@@ -1,4 +1,4 @@
-# Copyright (c) 2015, The Linux Foundation. All rights reserved.
+# Copyright (c) 2015, 2020 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -36,7 +36,7 @@ class Thermal_info(RamParser):
                     cpu_sensor_addr + time_stamp + (i * 8), True)
                 self.output_file.write(
                     "Temperature reading -  {0} ".format(int(temp)))
-                self.output_file.write("TimeStamp - {0}\n".format(long(time)))
+                self.output_file.write("TimeStamp - {0}\n".format(int(time)))
 
     def tmdev_data(self, ram_dump):
         sensor_mapping = []

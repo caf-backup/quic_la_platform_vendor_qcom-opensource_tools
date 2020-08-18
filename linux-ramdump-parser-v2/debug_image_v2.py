@@ -168,7 +168,7 @@ class DebugImage_v2():
             input = os.path.join(ram_dump.outdir, input_filename)
         print_out_str(
             'Parsing scandump context start {0:x} end {1:x} {2} {3}'.format(start, end, output, input))
-        header_bin = ram_dump.open_file(input)
+        header_bin = ram_dump.open_file(input, 'wb')
 
         it = range(start, end)
         for i in it:
@@ -317,8 +317,12 @@ class DebugImage_v2():
             print_out_str('Cache dumping not supported for %s on this target'
                           % client_name)
         except:
-            print_out_str('!!! Unhandled exception while running {0}'.format(client_name))
-            print_out_exception()
+            # log exceptions and continue by default
+            if not ramdump.debug:
+                print_out_str('!!! Unhandled exception while running {0}'.format(client_name))
+                print_out_exception()
+            else:
+                raise
         outfile.close()
 
     def parse_system_cache_common(self, version, start, end, client_id, ramdump):
@@ -333,8 +337,12 @@ class DebugImage_v2():
             print_out_str('System cache dumping not supported %s'
                           % client_name)
         except:
-            print_out_str('!!! Unhandled exception while running {0}'.format(client_name))
-            print_out_exception()
+            # log exceptions and continue by default
+            if not ramdump.debug:
+                print_out_str('!!! Unhandled exception while running {0}'.format(client_name))
+                print_out_exception()
+            else:
+                raise
         outfile.close()
 
     def parse_tlb_common(self, version, start, end, client_id, ramdump):
@@ -349,8 +357,12 @@ class DebugImage_v2():
             print_out_str('TLB dumping not supported for %s on this target'
                           % client_name)
         except:
-            print_out_str('!!! Unhandled exception while running {0}'.format(client_name))
-            print_out_exception()
+            # log exceptions and continue by default
+            if not ramdump.debug:
+                print_out_str('!!! Unhandled exception while running {0}'.format(client_name))
+                print_out_exception()
+            else:
+                raise
         outfile.close()
 
     def ftrace_field_func(self, common_list, ram_dump):
@@ -544,7 +556,8 @@ class DebugImage_v2():
             pid = server_proc.pid
             pid = int(pid)
             parent = psutil.Process(pid)
-            for child in parent.children(recursive=True):				# or parent.children() for recursive=False
+            # or parent.children() for recursive=False
+            for child in parent.children(recursive=True):
                 print_out_str("child process = {0} which needs to be killed forcefully after QTF timeout".format(child))
                 if (psutil.pid_exists(child.pid)):
                     try:
@@ -575,14 +588,18 @@ class DebugImage_v2():
 
         if (os.path.isfile(os.path.join(bin_dir, 'DCC_SRAM.BIN'))):
             sram_file = os.path.join(bin_dir, 'DCC_SRAM.BIN')
-            cmd = ["-s ", sram_file, " --out-dir ", out_dir, " --config-offset ", "0x6000", " --v2"]
-            p = subprocess.Popen([sys.executable, dcc_parser_path, cmd], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            cmd = [sys.executable, dcc_parser_path, "-s" , sram_file, "--out-dir", out_dir, "--config-offset", "0x6000", "--v2"]
+            p = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                                 stderr=subprocess.STDOUT,
+                                 universal_newlines=True)
             print_out_str('--------')
             print_out_str(p.communicate()[0])
         elif os.path.isfile(os.path.join(out_dir, 'sram.bin')):
             sram_file = os.path.join(out_dir, 'sram.bin')
             p = subprocess.Popen([sys.executable, dcc_parser_path, '-s', sram_file, '--out-dir', out_dir],
-                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                                 stdout=subprocess.PIPE,
+                                 stderr=subprocess.STDOUT,
+                                 universal_newlines=True)
             print_out_str('--------')
             print_out_str(p.communicate()[0])
         else:
@@ -606,8 +623,9 @@ class DebugImage_v2():
         else:
             return
         p = subprocess.Popen([sys.executable, sysreg_parser_path_minidump, '-s', sysdbg_file, '--out-dir', out_dir],
-                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-
+                             stdout=subprocess.PIPE,
+                             stderr=subprocess.STDOUT,
+                             universal_newlines=True)
         print_out_str('--------')
         print_out_str(p.communicate()[0])
 
@@ -633,7 +651,7 @@ class DebugImage_v2():
 
         client_table = dict(client_types)
         # get first column of client_types
-        client_names = zip(*client_types)[0]
+        client_names = [x[0] for x in client_types]
 
         for j in range(0, table_num_entries):
             client_entry = table + j * dump_entry_size
@@ -652,13 +670,18 @@ class DebugImage_v2():
 
             results.append((client_name, client_table[client_name], client_entry))
 
-        results.sort(key=lambda(x): client_names.index(x[0]))
+        results.sort(key=lambda x: client_names.index(x[0]))
         return results
     def minidump_data_clients(self, ram_dump, client_id,entry_pa_addr,
                                       end_addr):
         results = list()
         client_table = dict(client_types)
         # get first column of client_types
+
+        if client_id not in self.dump_data_id_lookup_table:
+            print_out_str(
+                '!!! {0} Unknown client id. Skipping!'.format(client_id))
+            return None
 
         client_name = self.dump_data_id_lookup_table[client_id]
 
@@ -678,7 +701,7 @@ class DebugImage_v2():
             input = os.path.join(ram_dump.outdir, "mhm_scandump.bin")
         print_out_str(
             'Parsing mhm dump start {0:x} end {1:x} {2}'.format(start, end, input))
-        header_bin = ram_dump.open_file(input)
+        header_bin = ram_dump.open_file(input, mode='wb')
         it = range(start, end)
         for i in it:
             val = ram_dump.read_byte(i, False)
@@ -786,9 +809,8 @@ class DebugImage_v2():
             client.MSM_DUMP_DATA_LOG_BUF_FIRST_IDX] = 'MSM_DUMP_DATA_LOG_BUF_FIRST_IDX'
         self.dump_data_id_lookup_table[
             client.MSM_DUMP_DATA_MHM] = 'MSM_DUMP_DATA_MHM'
-	for i in range(0, cpus):
-		self.dump_data_id_lookup_table[
-		    client.MSM_DUMP_DATA_L2_TLB + i] = 'MSM_DUMP_DATA_L2_TLB'
+        for i in range(0, cpus):
+            self.dump_data_id_lookup_table[client.MSM_DUMP_DATA_L2_TLB + i] = 'MSM_DUMP_DATA_L2_TLB'
 
         if not ram_dump.minidump:
             dump_table_ptr_offset = ram_dump.field_offset(

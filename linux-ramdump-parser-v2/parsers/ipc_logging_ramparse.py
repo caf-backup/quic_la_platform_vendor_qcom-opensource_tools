@@ -1,5 +1,5 @@
 """
-Copyright (c) 2015, The Linux Foundation. All rights reserved.
+Copyright (c) 2015, 2020 The Linux Foundation. All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are
@@ -27,9 +27,10 @@ OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
 IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 
+from __future__ import print_function
 from print_out import print_out_str
 from parser_util import register_parser, RamParser
-import ipc_logging
+import parsers.ipc_logging
 import os
 import sys
 
@@ -160,4 +161,4 @@ class IPCParse(RamParser):
             ipc_logging.cmdTest(options)
             print_out_str("Wrote test output to ipc_logging directory")
         else:
-            print strUsage
+            print(strUsage)
