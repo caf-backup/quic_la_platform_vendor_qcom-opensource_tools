@@ -69,12 +69,12 @@ class GdbMI(object):
     def open(self):
         """Open the connection to the ``gdbmi`` backend. Not needed if using
         ``gdbmi`` as a context manager (recommended).
-
         """
         self._gdbmi = subprocess.Popen(
             [self.gdb_path, '--interpreter=mi2', self.elf],
             stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE
+            stdout=subprocess.PIPE,
+            universal_newlines=True
         )
         self._flush_gdbmi()
 
@@ -83,7 +83,14 @@ class GdbMI(object):
         ``gdbmi`` as a context manager (recommended).
 
         """
-        self._gdbmi.communicate('quit')
+
+        if not self._gdbmi:
+            return
+
+        cmd = 'quit'
+        self._run(cmd)
+        self._gdbmi.kill()
+        self._gdbmi = None
 
     def __enter__(self):
         self.open()
@@ -130,7 +137,15 @@ class GdbMI(object):
         output = []
         oob_output = []
         while True:
-            line = self._gdbmi.stdout.readline().rstrip('\r\n')
+            line = self._gdbmi.stdout.readline()
+            """
+            readline blocks, unless the pipe is closed on the other end, in which case it
+            returns an empty line, without trailing \n.
+            """
+            if not len(line):
+                break
+
+            line = line.rstrip('\r\n')
             if line == GDB_SENTINEL:
                 break
             if line.startswith(GDB_DATA_LINE):
@@ -165,6 +180,16 @@ class GdbMI(object):
     def version(self):
         """Return GDB version"""
         return self._run_for_first('show version')
+
+    def frame_field_offset(self, frame_name, the_type, field):
+        """Returns the offset of a field in a struct or type of selected frame
+        if there are two vairable with same na,e in source code.
+        """
+        cmd = 'frame 0 {0}'.format(frame_name)
+        self._run_for_one(cmd)
+        cmd = 'print /x (int)&(({0} *)0)->{1}'.format(the_type, field)
+        result = self._run_for_one(cmd)
+        return gdb_hex_to_dec(result)
 
     def field_offset(self, the_type, field):
         """Returns the offset of a field in a struct or type.

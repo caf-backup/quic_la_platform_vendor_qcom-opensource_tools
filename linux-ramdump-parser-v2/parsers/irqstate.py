@@ -1,4 +1,4 @@
-# Copyright (c) 2012-2015, 2017 The Linux Foundation. All rights reserved.
+# Copyright (c) 2012-2015, 2017, 2020 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -141,7 +141,7 @@ class IrqParse(RamParser):
             rnode_addr = ram_dump.read_word(parent_addr + slots_offset +
                 (offset * pointer_size))
 
-        if rnode_addr is 0:
+        if rnode_addr == 0:
             return None
 
         return rnode_addr
@@ -268,7 +268,10 @@ class IrqParse(RamParser):
 
             if action != 0:
                 name_addr = ram_dump.read_word(action + action_name_offset)
-                name = ram_dump.read_cstring(name_addr, 48)
+                if not name_addr:
+                    name = "None"
+                else:
+                    name = ram_dump.read_cstring(name_addr, 48)
                 str = "{0:4} {1:12} {2:10} {3} {4:30} {5:15} " \
                        "v.v (struct irq_desc *)0x{6:<20x}"
                 print_out_str(

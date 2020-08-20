@@ -1,4 +1,4 @@
-# Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
+# Copyright (c) 2012-2017, 2020 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -16,6 +16,9 @@ from print_out import print_out_str
 
 
 def minidump_virt_to_phys(ebi_files,addr):
+    if addr is None:
+        return None
+
     pa_addr = None
     for a in ebi_files:
         idx, pa, end_addr, va,size = a
@@ -48,7 +51,7 @@ def read_physical_minidump(ebi_files,ebi_files_ramfile,elffile,addr,length):
             if addr >= start and addr <= end:
                 ebi = a
                 break
-        if ebi[0] is -1:
+        if ebi[0] == -1:
             return None
         offset = addr - ebi[1]
         ebi[0].seek(offset)

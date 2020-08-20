@@ -1,4 +1,4 @@
-# Copyright (c) 2015, 2017, The Linux Foundation. All rights reserved.
+# Copyright (c) 2015, 2017, 2020 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -81,7 +81,7 @@ class DccSramDump():
         if os.path.isfile(self.dcc_bin):
             return self.dump_sram_img_bin(ram_dump, self.dcc_bin)
 
-        if dcc_regs.has_key('DCC_HW_INFO') == False \
+        if 'DCC_HW_INFO' not in dcc_regs \
                         or dcc_regs['DCC_HW_INFO'] == 0:
             print_out_str('DCC HW Info missing! Skipping sram dump...')
             return False

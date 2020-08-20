@@ -35,19 +35,19 @@ class MemStats(RamParser):
     def pages_to_mb(self, pages):
         val = 0
         if pages != 0:
-            val = ((pages * 4) / 1024)
+            val = ((pages * 4) // 1024)
         return val
 
     def bytes_to_mb(self, bytes):
         val = 0
         if bytes != 0:
-            val = (bytes / 1024) / 1024
+            val = (bytes // 1024) // 1024
         return val
 
     def pages_to_mb(self, pages):
         val = 0
         if pages != 0:
-            val = (pages * 4) / 1024
+            val = (pages * 4) // 1024
         return val
 
     def calculate_vmalloc(self):
@@ -104,7 +104,7 @@ class MemStats(RamParser):
         vmstat_kernelstack = self.ramdump.read_word(
                             'vm_zone_stat[NR_KERNEL_STACK_KB]')
         other_mem = (vmstat_anon_pages + vmstat_file_pages + vmstat_pagetbl +
-                     (vmstat_kernelstack/4))
+                     (vmstat_kernelstack // 4))
         other_mem = self.pages_to_mb(other_mem)
         return other_mem
 

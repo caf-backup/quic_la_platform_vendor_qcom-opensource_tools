@@ -1,4 +1,4 @@
-# Copyright (c) 2017, The Linux Foundation. All rights reserved.
+# Copyright (c) 2017, 2020 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -24,7 +24,7 @@ class FCM_Dump():
         if self.start_addr >= self.end_addr:
             return False
         rsz = self.end_addr - self.start_addr
-        fcmfile = ram_dump.open_file('fcm.bin')
+        fcmfile = ram_dump.open_file('fcm.bin', mode='wb')
         for i in range(0, rsz):
             val = ram_dump.read_byte(self.start_addr + i, False)
             fcmfile.write(struct.pack('<B', val))
