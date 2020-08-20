@@ -104,8 +104,8 @@ def page_to_section(page_flags):
 
 def nr_to_section(ramdump, sec_num):
     memsection_struct_size = ramdump.sizeof('struct mem_section')
-    sections_per_root = 4096 / memsection_struct_size
-    sect_nr_to_root = sec_num / sections_per_root
+    sections_per_root = 4096 // memsection_struct_size
+    sect_nr_to_root = sec_num // sections_per_root
     masked = sec_num & (sections_per_root - 1)
     mem_section_addr = ramdump.address_of('mem_section')
     mem_section = ramdump.read_word(mem_section_addr)
@@ -144,7 +144,7 @@ def page_to_pfn_sparse(ramdump, page):
     nr = nr_to_section(ramdump, section)
     addr = section_mem_map_addr(ramdump, nr)
     # divide by struct page size for division fun
-    return (page - addr) / sizeof_page
+    return (page - addr) // sizeof_page
 
 
 def get_vmemmap(ramdump):
@@ -196,7 +196,7 @@ def get_vmemmap(ramdump):
 def page_to_pfn_vmemmap(ramdump, page):
     vmemmap = get_vmemmap(ramdump)
     page_size = ramdump.sizeof('struct page')
-    return ((page - vmemmap) / page_size)
+    return ((page - vmemmap) // page_size)
 
 
 def pfn_to_page_vmemmap(ramdump, pfn):
@@ -211,7 +211,7 @@ def page_to_pfn_flat(ramdump, page):
     page_size = ramdump.sizeof('struct page')
     # XXX Needs to change for LPAE
     pfn_offset = ramdump.phys_offset >> 12
-    return ((page - mem_map) / page_size) + pfn_offset
+    return ((page - mem_map) // page_size) + pfn_offset
 
 
 def pfn_to_page_flat(ramdump, pfn):
@@ -349,8 +349,8 @@ def for_each_pfn(ramdump):
         end = start + ramdump.read_structure_field(
                             region, 'struct memblock_region', 'size')
 
-        pfn = start / page_size
-        end /= page_size
+        pfn = start // page_size
+        end //= page_size
         while pfn < end:
             yield pfn
             pfn += 1
