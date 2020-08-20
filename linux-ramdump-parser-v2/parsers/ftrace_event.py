@@ -562,6 +562,8 @@ class FtraceParser_Event(object):
                     if '__data_loc' in type_str:
                         v = self.ramdump.read_u32(ftrace_raw_entry + offset)
                         v = self.ramdump.read_cstring(ftrace_raw_entry + (v & 0xffff), (v >> 16))
+                        if isinstance(v, bytes):
+                            v = self.ramdump.read_cstring(ftrace_raw_entry + (offset*4))
                     else:
                         v = self.ramdump.read_cstring(ftrace_raw_entry + offset)
                     fmt_name_value_map[item] = v
