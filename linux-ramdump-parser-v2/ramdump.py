@@ -1288,16 +1288,21 @@ class RamDump():
         return self.kaslr_offset
 
     def determine_kaslr_offset(self):
-        self.kaslr_offset = 0
-        if self.kaslr_addr is None:
-            print_out_str('!!!! Kaslr addr is not provided.')
+        if self.svm:
+            self.kaslr_offset = 0x180000
+            self.kaslr_addr = None
+            return
         else:
-            kaslr_magic = self.read_u32(self.kaslr_addr, False)
-            if kaslr_magic != 0xdead4ead:
-                print_out_str('!!!! Kaslr magic does not match.')
+            self.kaslr_offset = 0
+            if self.kaslr_addr is None:
+                print_out_str('!!!! Kaslr addr is not provided.')
             else:
-                self.kaslr_offset = self.read_u64(self.kaslr_addr + 4, False)
-                print_out_str("The kaslr_offset extracted is: " + str(hex(self.kaslr_offset)))
+                kaslr_magic = self.read_u32(self.kaslr_addr, False)
+                if kaslr_magic != 0xdead4ead:
+                    print_out_str('!!!! Kaslr magic does not match.')
+                else:
+                    self.kaslr_offset = self.read_u64(self.kaslr_addr + 4, False)
+                    print_out_str("The kaslr_offset extracted is: " + str(hex(self.kaslr_offset)))
 
     def get_hw_id(self, add_offset=True):
         socinfo_format = -1
