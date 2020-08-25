@@ -1,5 +1,5 @@
 """
-Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
+Copyright (c) 2017-2018, 2020 The Linux Foundation. All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are
@@ -175,8 +175,9 @@ class DumpVidc(RamParser):
         offset_core = self.ramdump.field_offset('struct msm_vidc_core', 'list')
 
         core_walker = llist.ListWalker(self.ramdump, head_core, offset_core)
-        head_core = core_walker.next()
-        core_walker.walk(head_core,self.core_walker)
+        if not core_walker.is_empty():
+            head_core = core_walker.next()
+            core_walker.walk(head_core,self.core_walker)
         self.vidc_info.close()
 
     def core_walker(self,head):
@@ -243,8 +244,9 @@ class DumpVidc(RamParser):
         offset_inst = self.ramdump.field_offset('struct msm_vidc_inst','list')
 
         inst_walker = llist.ListWalker(self.ramdump, head_inst, offset_inst)
-        head_inst = inst_walker.next()
-        inst_walker.walk(head_inst,self.inst_walker)
+        if not inst_walker.is_empty():
+            head_inst = inst_walker.next()
+            inst_walker.walk(head_inst,self.inst_walker)
 
     def inst_walker(self,head):
         self.vidc_info.write('\n========INST STATS========\n')

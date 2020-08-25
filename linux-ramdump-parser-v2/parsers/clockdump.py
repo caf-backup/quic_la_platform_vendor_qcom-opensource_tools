@@ -296,10 +296,10 @@ class ClockDumps(RamParser):
             getfunchw = self.ramdump.read_structure_field(
                             node,'struct of_clk_provider','get_hw')
             getfunchw = self.ramdump.unwind_lookup(getfunchw)
-            if "spmi_pmic_div_clk_hw_get" in getfunchw:
+            if "spmi_pmic_div_clk_hw_get" in getfunchw[0]:
                 self.print_clk_spmi_pmic_data(data)
                 return
-            elif "qcom_cc_clk_hw_get" in getfunchw:
+            elif "qcom_cc_clk_hw_get" in getfunchw[0]:
                 self.print_clk_qcom_cc_data(data)
                 return
             else:

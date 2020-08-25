@@ -1,4 +1,4 @@
-# Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
+# Copyright (c) 2016-2018, 2020 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -11,6 +11,7 @@
 
 from sizes import SZ_4K, SZ_64K, SZ_2M, SZ_32M, SZ_1G, SZ_256G
 from sizes import get_order, order_size_strings
+import re
 
 NUM_PT_LEVEL = 4
 NUM_FL_PTE = 512
@@ -425,7 +426,10 @@ def create_flat_mappings(ramdump, pg_table, level):
 
 
 def parse_aarch64_tables(ramdump, d, domain_num):
-    fname = 'arm_iommu_domain_%02d.txt' % (domain_num)
+    device_name  = re.sub("[^a-zA-Z]+", "_", d.client_name.strip())
+    if device_name is None:
+        device_name = "xxxx"
+    fname = 'arm_iommu_domain_%02d_%s.txt' % (domain_num, device_name)
     with ramdump.open_file(fname) as outfile:
 
         redirect = 'OFF'

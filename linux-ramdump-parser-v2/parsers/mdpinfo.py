@@ -1,4 +1,4 @@
-# Copyright (c) 2016, 2018 The Linux Foundation. All rights reserved.
+# Copyright (c) 2016, 2018, 2020 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -91,7 +91,7 @@ class MDPinfo(RamParser):
             return
 
         # Making length multiple of 16
-        length = int((length + 15) / 16)
+        length = (length + 15) // 16
 
         # Print out registers
         for i in range(0, length):
@@ -192,8 +192,8 @@ class MDPinfo(RamParser):
                               'logs': Struct.get_address,
                               'last_dump': Struct.get_u32})
 
-            SDE_EVTLOG_ENTRY = self.ramdump.sizeof('struct sde_dbg_evtlog')/self.ramdump.sizeof('struct sde_dbg_evtlog_log')
-            SDE_EVTLOG_MAX_DATA = self.ramdump.sizeof('(*(sde_dbg_base.evtlog)).logs[0].data')/4
+            SDE_EVTLOG_ENTRY = self.ramdump.sizeof('struct sde_dbg_evtlog') // self.ramdump.sizeof('struct sde_dbg_evtlog_log')
+            SDE_EVTLOG_MAX_DATA = self.ramdump.sizeof('(*(sde_dbg_base.evtlog)).logs[0].data') // 4
             self.outfile.write('\n %s %40s:%s %35s  %10s %30s \n ' % ("TIME", "NAME", "LINE", "PID", "DATA_CNT", "DATA"))
 
             for i in range(SDE_EVTLOG_ENTRY):

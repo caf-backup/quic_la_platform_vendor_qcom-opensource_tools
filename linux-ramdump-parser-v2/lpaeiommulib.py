@@ -1,4 +1,4 @@
-# Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+# Copyright (c) 2013-2014, 2020 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -27,7 +27,7 @@ def print_lpae_mappings(mappings, outfile):
     """Dump some page tables. `mappings' should already be sorted."""
     fmt = '[0x{vstart:08x}--0x{vend:08x}] [0x{size:08x}] [A:0x{pstart:08x}--0x{pend:08x}] [{attrs}][{sizestring}]\n'
     fmt_unmapped = '[0x{vstart:08x}--0x{vend:08x}] [0x{size:08x}] [UNMAPPED]\n'
-    for ((virt_start, virt_end), info) in mappings.iteritems():
+    for ((virt_start, virt_end), info) in mappings.items():
         if info is None:
             outfile.write(fmt_unmapped.format(
                 vstart=virt_start,
@@ -136,7 +136,7 @@ def get_coalesced_mappings(flat_mappings):
     # the form: (virt_start, virt_end). Still mapping to the same
     # LeafMapping objects.
     cc = dict(((virt_start, virt_start + info.page_size), info)
-              for virt_start,info in coalesced_mappings.iteritems())
+              for virt_start,info in coalesced_mappings.items())
     # maintain order to facilitate finding unmapped gaps
     cc = OrderedDict(sorted(cc.items()))
 
