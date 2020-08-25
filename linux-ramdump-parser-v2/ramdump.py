@@ -9,6 +9,7 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 
+from __future__ import print_function
 import sys
 import re
 import os
@@ -19,6 +20,7 @@ import string
 import random
 import platform
 import stat
+import subprocess
 
 from boards import get_supported_boards, get_supported_ids
 from tempfile import NamedTemporaryFile
@@ -45,18 +47,23 @@ SMEM_PRIVATE_CANARY = 0xa5a5
 PARTITION_MAGIC = 0x54525024
 BUILD_ID_LENGTH = 32
 
-def is_ramdump_file(val):
-    ddr = re.compile(r'(DDR|EBI)[0-9_CS]+[.]BIN', re.IGNORECASE)
-    imem = re.compile(r'.*IMEM.BIN', re.IGNORECASE)
-    if ddr.match(val) or imem.match(val):
-        return True
+def is_ramdump_file(val, minidump):
+    if not minidump:
+        ddr = re.compile(r'(DDR|EBI)[0-9_CS]+[.]BIN', re.IGNORECASE)
+        imem = re.compile(r'.*IMEM.BIN', re.IGNORECASE)
+        if ddr.match(val) or imem.match(val):
+            return True
+    else:
+        if val == 'MD_SMEMINFO.BIN' or val == 'MD_SHRDIMEM.BIN':
+            return True
     return False
 
 class AutoDumpInfo(object):
     priority = 0
 
-    def __init__(self, autodumpdir):
+    def __init__(self, autodumpdir, minidump):
         self.autodumpdir = autodumpdir
+        self.minidump = minidump
         self.ebi_files = []
 
     def parse(self):
@@ -86,7 +93,7 @@ class AutoDumpInfoCMM(AutoDumpInfo):
         with open(os.path.join(self.autodumpdir, filename)) as f:
             for line in f.readlines():
                 words = line.split()
-                if len(words) == 4 and is_ramdump_file(words[1]):
+                if len(words) == 4 and is_ramdump_file(words[1], self.minidump):
                     fname = words[1]
                     start = int(words[2], 16)
                     yield fname, start
@@ -105,7 +112,7 @@ class AutoDumpInfoDumpInfoTXT(AutoDumpInfo):
         with open(os.path.join(self.autodumpdir, filename)) as f:
             for line in f.readlines():
                 words = line.split()
-                if not words or not is_ramdump_file(words[-1]):
+                if not words or not is_ramdump_file(words[-1], self.minidump):
                     continue
                 fname = words[-1]
                 start = int(words[1], 16)
@@ -193,7 +200,7 @@ class RamDump():
             high = (low + mask) & (~mask)
 
             if (fp < low or fp > high or fp & 0xf):
-                return
+                return -1
 
             frame.sp = fp + 0x10
             frame.fp = self.ramdump.read_word(fp)
@@ -520,8 +527,8 @@ class RamDump():
                 val = self.read_u32(addr, False)
             if val is None:
                 val = 0
-            val = long(val)
-            if (long(kimage_voffset) == val):
+            val = int(val)
+            if (int(kimage_voffset) == val):
                 return kimage_load_addr
             kimage_load_addr = kimage_load_addr + min_image_align
 
@@ -554,6 +561,7 @@ class RamDump():
         self.qtf_path = options.qtf_path
         self.qtf = options.qtf
         self.skip_qdss_bin = options.skip_qdss_bin
+        self.debug = options.debug
         self.dcc = False
         self.sysreg = False
         self.t32_host_system = options.t32_host_system or None
@@ -565,6 +573,7 @@ class RamDump():
         self.kernel_version = (0, 0, 0)
         self.linux_banner = None
         self.minidump = options.minidump
+        self.svm = options.svm
         self.elffile = None
         self.ram_elf_file = None
         self.ram_addr = options.ram_addr
@@ -579,6 +588,9 @@ class RamDump():
         self.dump_module_kallsyms = options.dump_module_kallsyms
         self.dump_global_symbol_table = options.dump_global_symbol_table
         self.currentEL = options.currentEL or None
+        self.hyp_dump = None
+        self.ttbr = None
+        self.vttbr = None
         # Add search path for kernel modules under "vendor/qcom" directory
         # Location of this directory in relation to vmlinux changes depending on whether it's a primary or secondary boot.
         # PRIMARY-BOOT case:
@@ -610,7 +622,7 @@ class RamDump():
                 mod = import_module('elftools.common.py3compat')
                 bytes2str = mod.bytes2str
             except ImportError:
-                print "Oops, missing required library for minidump. Check README"
+                print("Oops, missing required library for minidump. Check README")
                 sys.exit(1)
 
         if options.ram_addr is not None:
@@ -623,11 +635,18 @@ class RamDump():
                     continue
                 self.ebi_files.append((fd, start, end, file_path))
         elif not options.minidump:
-            if not self.auto_parse(options.autodump):
-                return None
+            if not self.auto_parse(options.autodump, options.minidump):
+                print("Oops, auto-parse option failed. Please specify vmlinux & DDR files manually.")
+                sys.exit(1)
         if options.minidump:
-            file_path = options.ram_elf_addr
+            if not options.autodump:
+                file_path = options.ram_elf_addr
+            else:
+                file_path = os.path.join(options.autodump, 'ap_minidump.elf')
             self.ram_elf_file = file_path
+            if not os.path.exists(file_path):
+                print_out_str("!!! ELF file open failed")
+                sys.exit(1)
             fd = open(file_path, 'rb')
             self.elffile = ELFFile(fd)
             for idx, s in enumerate(self.elffile.iter_segments()):
@@ -650,15 +669,35 @@ class RamDump():
         if self.phys_offset is None:
             self.get_hw_id()
 
-        if self.kaslr_offset is None:
-            self.determine_kaslr_offset()
-            self.gdbmi.kaslr_offset = self.get_kaslr_offset()
-
         if options.phys_offset is not None:
             print_out_str(
                 '[!!!] Phys offset was set to {0:x}'.format(\
                     options.phys_offset))
             self.phys_offset = options.phys_offset
+        self.s2_walk = False
+        if self.svm:
+            self.gdbmi.close() #closing the previous one with vmlinux
+            from extensions.hyp_trace import HypDump
+            self.hyp = options.hyp
+            hyp_dump = HypDump(self)
+            self.gdbmi = gdbmi.GdbMI(self.gdb_path, self.hyp,
+                                 0)
+            self.gdbmi.open()
+            hyp_dump.determine_kaslr()
+            self.gdbmi.kaslr_offset = hyp_dump.hyp_kaslr_addr_offset
+            hyp_dump.get_trace_phy()
+            hyp_dump.get_ttbr()
+            self.ttbr = hyp_dump.ttbr1
+            self.vttbr = hyp_dump.vttbr
+            self.s2_walk = True
+            self.gdbmi.close() #closing gdb session with hyp elf
+
+            self.gdbmi = gdbmi.GdbMI(self.gdb_path, self.vmlinux,
+                                     self.kaslr_offset or 0)
+            self.gdbmi.open() #openning gdb session with vmlinux
+        if self.kaslr_offset is None:
+            self.determine_kaslr_offset()
+            self.gdbmi.kaslr_offset = self.get_kaslr_offset()
 
         self.wlan = options.wlan
         self.lookup_table = []
@@ -806,7 +845,7 @@ class RamDump():
                 print_out_str('!!! Some features may be disabled!')
 
         self.unwind = self.Unwinder(self)
-        if self.module_table.sym_paths_exist():
+        if not self.minidump and self.module_table.sym_paths_exist():
             self.setup_module_symbols()
             self.gdbmi.setup_module_table(self.module_table)
             if self.dump_global_symbol_table:
@@ -815,7 +854,7 @@ class RamDump():
     def __del__(self):
         self.gdbmi.close()
 
-    def open_file(self, file_name, mode='wb'):
+    def open_file(self, file_name, mode='wt'):
         """Open a file in the out directory.
 
         Example:
@@ -837,14 +876,18 @@ class RamDump():
         return f
 
     def remove_file(self, file_name):
-	file_path = os.path.join(self.outdir, file_name)
-	try:
-	    if (os.path.exists(file_path)):
-		os.remove(file_path)
-	except:
-	    print_out_str('Could not remove file {0}'.format(file_path))
-	    print_out_str('Do you have write/read permissions on the path?')
-	    sys.exit(1)
+        file_path = os.path.join(self.outdir, file_name)
+        try:
+            if (os.path.exists(file_path)):
+                os.remove(file_path)
+        except:
+            print_out_str('Could not remove file {0}'.format(file_path))
+            print_out_str('Do you have write/read permissions on the path?')
+            sys.exit(1)
+
+    def get_srcdir(self):
+        """ Returns absolute path of directory containing ramdump.py """
+        return os.path.dirname(os.path.abspath(__file__))
 
     def get_config(self):
         kconfig_addr = self.address_of('kernel_config_data')
@@ -874,7 +917,7 @@ class RamDump():
             zconfig.write(struct.pack('<B', val))
 
         zconfig.close()
-        zconfig_in = gzip.open(zconfig.name, 'rb')
+        zconfig_in = gzip.open(zconfig.name, 'rt')
         try:
             t = zconfig_in.readlines()
         except:
@@ -882,7 +925,7 @@ class RamDump():
         zconfig_in.close()
         os.remove(zconfig.name)
         for l in t:
-            self.config.append(l.rstrip().decode('ascii', 'ignore'))
+            self.config.append(l.rstrip())
             if not l.startswith('#') and l.strip() != '':
                 eql = l.find('=')
                 cfg = l[:eql]
@@ -1004,30 +1047,32 @@ class RamDump():
         return False
 
     def print_socinfo(self):
-        if self.read_pointer('socinfo') is None:
-          return None
-        content_socinfo = hex(self.read_pointer('socinfo'))
-        content_socinfo = content_socinfo.strip('L')
+        try:
+            if self.read_pointer('socinfo') is None:
+              return None
+            content_socinfo = hex(self.read_pointer('socinfo'))
+            content_socinfo = content_socinfo.strip('L')
 
-        sernum_offset = self.field_offset('struct socinfo_v10', 'serial_number')
-        if sernum_offset is None:
-            sernum_offset = self.field_offset('struct socinfo_v0_10', 'serial_number')
+            sernum_offset = self.field_offset('struct socinfo_v10', 'serial_number')
             if sernum_offset is None:
-                print_out_str("No serial number information available")
-                return False
-        addr_of_sernum = hex(int(content_socinfo, 16) + sernum_offset)
-        addr_of_sernum = addr_of_sernum.strip('L')
-        serial_number = self.read_u32(int(addr_of_sernum, 16))
-        if serial_number is not None:
-            print_out_str('Serial number %s' % hex(serial_number))
-            return True
-
+                sernum_offset = self.field_offset('struct socinfo_v0_10', 'serial_number')
+                if sernum_offset is None:
+                    print_out_str("No serial number information available")
+                    return False
+            addr_of_sernum = hex(int(content_socinfo, 16) + sernum_offset)
+            addr_of_sernum = addr_of_sernum.strip('L')
+            serial_number = self.read_u32(int(addr_of_sernum, 16))
+            if serial_number is not None:
+                print_out_str('Serial number %s' % hex(serial_number))
+                return True
+        except:
+            pass
         return False
 
-    def auto_parse(self, file_path):
+    def auto_parse(self, file_path, minidump):
         for cls in sorted(AutoDumpInfo.__subclasses__(),
                           key=lambda x: x.priority, reverse=True):
-            info = cls(file_path)
+            info = cls(file_path, minidump)
             info.parse()
             if info is not None and len(info.ebi_files) > 0:
                 self.ebi_files = info.ebi_files
@@ -1045,7 +1090,7 @@ class RamDump():
 
         t32_host_system = self.t32_host_system or platform.system()
 
-        launch_config = open(out_path + '/t32_config.t32', 'wb')
+        launch_config = self.open_file('t32_config.t32')
         launch_config.write('OS=\n')
         launch_config.write('ID=T32_1000002\n')
         if t32_host_system != 'Linux':
@@ -1076,136 +1121,135 @@ class RamDump():
 
         launch_config.close()
 
-        startup_script = open(out_path + '/t32_startup_script.cmm', 'wb')
+        startup_script = self.open_file('t32_startup_script.cmm')
 
-        startup_script.write(('title \"' + out_path + '\"\n').encode('ascii', 'ignore'))
+        startup_script.write('title \"' + out_path + '\"\n')
 
         is_cortex_a53 = self.hw_id in ["8916", "8939", "8936", "bengal", "scuba"]
 
         if self.arm64 and is_cortex_a53:
-            startup_script.write('sys.cpu CORTEXA53\n'.encode('ascii', 'ignore'))
+            startup_script.write('sys.cpu CORTEXA53\n')
         else:
-            startup_script.write('sys.cpu {0}\n'.format(self.cpu_type).encode('ascii', 'ignore'))
-        startup_script.write('sys.up\n'.encode('ascii', 'ignore'))
+            startup_script.write('sys.cpu {0}\n'.format(self.cpu_type))
+        startup_script.write('sys.up\n')
 
         if is_cortex_a53 and not self.arm64:
             startup_script.write('r.s m 0x13\n')
         for ram in self.ebi_files:
             ebi_path = os.path.abspath(ram[3])
             startup_script.write('data.load.binary {0} 0x{1:x}\n'.format(
-                ebi_path, ram[1]).encode('ascii', 'ignore'))
+                ebi_path, ram[1]))
         if self.minidump:
             dload_ram_elf = 'data.load.elf {} /LOGLOAD /nosymbol\n'.format(os.path.abspath(self.ram_elf_file))
-            startup_script.write(dload_ram_elf.encode('ascii', 'ignore'))
+            startup_script.write(dload_ram_elf)
 
         if not self.minidump:
             if self.arm64:
-                startup_script.write('Register.Set NS 1\n'.encode('ascii', 'ignore'))
+                startup_script.write('Register.Set NS 1\n')
                 startup_script.write('Data.Set SPR:0x30201 %Quad 0x{0:x}\n'.format(
-                    self.kernel_virt_to_phys(self.swapper_pg_dir_addr))
-                    .encode('ascii', 'ignore'))
+                    self.kernel_virt_to_phys(self.swapper_pg_dir_addr)))
 
                 if is_cortex_a53:
-                    startup_script.write('Data.Set SPR:0x30202 %Quad 0x00000012B5193519\n'.encode('ascii', 'ignore'))
-                    startup_script.write('Data.Set SPR:0x30A20 %Quad 0x000000FF440C0400\n'.encode('ascii', 'ignore'))
-                    startup_script.write('Data.Set SPR:0x30A30 %Quad 0x0000000000000000\n'.encode('ascii', 'ignore'))
-                    startup_script.write('Data.Set SPR:0x30100 %Quad 0x0000000034D5D91D\n'.encode('ascii', 'ignore'))
+                    startup_script.write('Data.Set SPR:0x30202 %Quad 0x00000012B5193519\n')
+                    startup_script.write('Data.Set SPR:0x30A20 %Quad 0x000000FF440C0400\n')
+                    startup_script.write('Data.Set SPR:0x30A30 %Quad 0x0000000000000000\n')
+                    startup_script.write('Data.Set SPR:0x30100 %Quad 0x0000000034D5D91D\n')
                 else:
-                    startup_script.write('Data.Set SPR:0x30202 %Quad 0x00000032B5193519\n'.encode('ascii', 'ignore'))
-                    startup_script.write('Data.Set SPR:0x30A20 %Quad 0x000000FF440C0400\n'.encode('ascii', 'ignore'))
-                    startup_script.write('Data.Set SPR:0x30A30 %Quad 0x0000000000000000\n'.encode('ascii', 'ignore'))
-                    startup_script.write('Data.Set SPR:0x30100 %Quad 0x0000000004C5D93D\n'.encode('ascii', 'ignore'))
+                    startup_script.write('Data.Set SPR:0x30202 %Quad 0x00000032B5193519\n')
+                    startup_script.write('Data.Set SPR:0x30A20 %Quad 0x000000FF440C0400\n')
+                    startup_script.write('Data.Set SPR:0x30A30 %Quad 0x0000000000000000\n')
+                    startup_script.write('Data.Set SPR:0x30100 %Quad 0x0000000004C5D93D\n')
 
-                startup_script.write('Register.Set CPSR 0x3C5\n'.encode('ascii', 'ignore'))
-                startup_script.write('MMU.Delete\n'.encode('ascii', 'ignore'))
-                startup_script.write('MMU.SCAN PT 0xFFFFFF8000000000--0xFFFFFFFFFFFFFFFF\n'.encode('ascii', 'ignore'))
-                startup_script.write('mmu.on\n'.encode('ascii', 'ignore'))
-                startup_script.write('mmu.pt.list 0xffffff8000000000\n'.encode('ascii', 'ignore'))
+                startup_script.write('Register.Set CPSR 0x3C5\n')
+                startup_script.write('MMU.Delete\n')
+                startup_script.write('MMU.SCAN PT 0xFFFFFF8000000000--0xFFFFFFFFFFFFFFFF\n')
+                startup_script.write('mmu.on\n')
+                startup_script.write('mmu.pt.list 0xffffff8000000000\n')
             else:
                 # ARM-32: MMU is enabled by default on most platforms.
                 mmu_enabled = 1
                 if self.mmu is None:
                     mmu_enabled = 0
                 startup_script.write(
-                    'PER.S.simple C15:0x1 %L 0x{0:x}\n'.format(mmu_enabled).encode('ascii', 'ignore'))
+                    'PER.S.simple C15:0x1 %L 0x{0:x}\n'.format(mmu_enabled))
                 startup_script.write(
-                    'PER.S.simple C15:0x2 %L 0x{0:x}\n'.format(self.mmu.ttbr).encode('ascii', 'ignore'))
+                    'PER.S.simple C15:0x2 %L 0x{0:x}\n'.format(self.mmu.ttbr))
                 if isinstance(self.mmu, Armv7LPAEMMU):
                     # TTBR1. This gets setup once and never change again even if TTBR0
                     # changes
                     startup_script.write('PER.S.F C15:0x102 %L 0x{0:x}\n'.format(
-                        self.mmu.ttbr + 0x4000).encode('ascii', 'ignore'))
+                        self.mmu.ttbr + 0x4000))
                     # TTBCR with EAE and T1SZ set approprately
                     startup_script.write(
-                        'PER.S.F C15:0x202 %L 0x80030000\n'.encode('ascii', 'ignore'))
-                startup_script.write('mmu.on\n'.encode('ascii', 'ignore'))
-                startup_script.write('mmu.scan\n'.encode('ascii', 'ignore'))
+                        'PER.S.F C15:0x202 %L 0x80030000\n')
+                startup_script.write('mmu.on\n')
+                startup_script.write('mmu.scan\n')
 
         where = os.path.abspath(self.vmlinux)
         kaslr_offset = self.get_kaslr_offset()
         if kaslr_offset != 0:
             where += ' 0x{0:x}'.format(kaslr_offset)
         dloadelf = 'data.load.elf {} /nocode\n'.format(where)
-        startup_script.write(dloadelf.encode('ascii', 'ignore'))
+        startup_script.write(dloadelf)
 
         if t32_host_system != 'Linux':
             if self.arm64:
                 startup_script.write(
-                     'task.config C:\\T32\\demo\\arm64\\kernel\\linux\\linux-3.x\\linux3.t32\n'.encode('ascii', 'ignore'))
+                     'task.config C:\\T32\\demo\\arm64\\kernel\\linux\\linux-3.x\\linux3.t32\n')
                 startup_script.write(
-                     'menu.reprogram C:\\T32\\demo\\arm64\\kernel\\linux\\linux-3.x\\linux.men\n'.encode('ascii', 'ignore'))
+                     'menu.reprogram C:\\T32\\demo\\arm64\\kernel\\linux\\linux-3.x\\linux.men\n')
             else:
                 if self.kernel_version > (3, 0, 0):
                     startup_script.write(
-                        'task.config c:\\t32\\demo\\arm\\kernel\\linux\\linux-3.x\\linux3.t32\n'.encode('ascii', 'ignore'))
+                        'task.config c:\\t32\\demo\\arm\\kernel\\linux\\linux-3.x\\linux3.t32\n')
                     startup_script.write(
-                        'menu.reprogram c:\\t32\\demo\\arm\\kernel\\linux\\linux-3.x\\linux.men\n'.encode('ascii', 'ignore'))
+                        'menu.reprogram c:\\t32\\demo\\arm\\kernel\\linux\\linux-3.x\\linux.men\n')
                 else:
                     startup_script.write(
-                        'task.config c:\\t32\\demo\\arm\\kernel\\linux\\linux.t32\n'.encode('ascii', 'ignore'))
+                        'task.config c:\\t32\\demo\\arm\\kernel\\linux\\linux.t32\n')
                     startup_script.write(
-                        'menu.reprogram c:\\t32\\demo\\arm\\kernel\\linux\\linux.men\n'.encode('ascii', 'ignore'))
+                        'menu.reprogram c:\\t32\\demo\\arm\\kernel\\linux\\linux.men\n')
         else:
             if self.arm64:
                 startup_script.write(
-                    'task.config /opt/t32/demo/arm64/kernel/linux/linux-3.x/linux3.t32\n'.encode('ascii', 'ignore'))
+                    'task.config /opt/t32/demo/arm64/kernel/linux/linux-3.x/linux3.t32\n')
                 startup_script.write(
-                    'menu.reprogram /opt/t32/demo/arm64/kernel/linux/linux-3.x/linux.men\n'.encode('ascii', 'ignore'))
+                    'menu.reprogram /opt/t32/demo/arm64/kernel/linux/linux-3.x/linux.men\n')
             else:
                 if self.kernel_version > (3, 0, 0):
                     startup_script.write(
-                        'task.config /opt/t32/demo/arm/kernel/linux/linux-3.x/linux3.t32\n'.encode('ascii', 'ignore'))
+                        'task.config /opt/t32/demo/arm/kernel/linux/linux-3.x/linux3.t32\n')
                     startup_script.write(
-                        'menu.reprogram /opt/t32/demo/arm/kernel/linux/linux-3.x/linux.men\n'.encode('ascii', 'ignore'))
+                        'menu.reprogram /opt/t32/demo/arm/kernel/linux/linux-3.x/linux.men\n')
                 else:
                     startup_script.write(
-                        'task.config /opt/t32/demo/arm/kernel/linux/linux.t32\n'.encode('ascii', 'ignore'))
+                        'task.config /opt/t32/demo/arm/kernel/linux/linux.t32\n')
                     startup_script.write(
-                        'menu.reprogram /opt/t32/demo/arm/kernel/linux/linux.men\n'.encode('ascii', 'ignore'))
+                        'menu.reprogram /opt/t32/demo/arm/kernel/linux/linux.men\n')
 
         for mod_tbl_ent in self.module_table.module_table:
             mod_sym_path = mod_tbl_ent.get_sym_path()
             if mod_sym_path != '':
                 where = os.path.abspath(mod_sym_path)
                 ld_mod_sym = 'task.symbol.loadmod "{}"\n'.format(where)
-                startup_script.write(ld_mod_sym.encode('ascii', 'ignore'))
+                startup_script.write(ld_mod_sym)
 
         if not self.minidump:
-            startup_script.write('task.dtask\n'.encode('ascii', 'ignore'))
+            startup_script.write('task.dtask\n')
 
         startup_script.write(
-            'v.v  %ASCII %STRING linux_banner\n'.encode('ascii', 'ignore'))
-        if os.path.exists(out_path + '/regs_panic.cmm'):
+            'v.v  %ASCII %STRING linux_banner\n')
+        if os.path.exists(os.path.join(out_path, 'regs_panic.cmm')):
             startup_script.write(
-                'do {0}\n'.format(out_path + '/regs_panic.cmm').encode('ascii', 'ignore'))
-        elif os.path.exists(out_path + '/core0_regs.cmm'):
+                'do {0}\n'.format(out_path + '/regs_panic.cmm'))
+        elif os.path.exists(os.path.join(out_path, '/core0_regs.cmm')):
             startup_script.write(
-                'do {0}\n'.format(out_path + '/core0_regs.cmm').encode('ascii', 'ignore'))
+                'do {0}\n'.format(out_path + '/core0_regs.cmm'))
         startup_script.close()
 
         if t32_host_system != 'Linux':
-            launch_file = os.path.join(out_path, 'launch_t32.bat')
-            t32_bat = open(launch_file, 'wb')
+            launch_file = 'launch_t32.bat'
+            t32_bat = self.open_file(launch_file)
             if self.arm64:
                 t32_binary = 'C:\\T32\\bin\\windows64\\t32MARM64.exe'
             elif is_cortex_a53:
@@ -1213,11 +1257,11 @@ class RamDump():
             else:
                 t32_binary = 'c:\\t32\\t32MARM.exe'
             t32_bat.write(('start '+ t32_binary + ' -c ' + out_path + '/t32_config.t32, ' +
-                          out_path + '/t32_startup_script.cmm').encode('ascii', 'ignore'))
+                          out_path + '/t32_startup_script.cmm'))
             t32_bat.close()
         else:
-            launch_file = os.path.join(out_path, 'launch_t32.sh')
-            t32_sh = open(launch_file, 'wb')
+            launch_file = 'launch_t32.sh'
+            t32_sh = self.open_file(launch_file)
             if self.arm64:
                 t32_binary = '/opt/t32/bin/pc_linux64/t32marm64-qt'
             elif is_cortex_a53:
@@ -1244,16 +1288,21 @@ class RamDump():
         return self.kaslr_offset
 
     def determine_kaslr_offset(self):
-        self.kaslr_offset = 0
-        if self.kaslr_addr is None:
-            print_out_str('!!!! Kaslr addr is not provided.')
+        if self.svm:
+            self.kaslr_offset = 0x180000
+            self.kaslr_addr = None
+            return
         else:
-            kaslr_magic = self.read_u32(self.kaslr_addr, False)
-            if kaslr_magic != 0xdead4ead:
-                print_out_str('!!!! Kaslr magic does not match.')
+            self.kaslr_offset = 0
+            if self.kaslr_addr is None:
+                print_out_str('!!!! Kaslr addr is not provided.')
             else:
-                self.kaslr_offset = self.read_u64(self.kaslr_addr + 4, False)
-                print_out_str("The kaslr_offset extracted is: " + str(hex(self.kaslr_offset)))
+                kaslr_magic = self.read_u32(self.kaslr_addr, False)
+                if kaslr_magic != 0xdead4ead:
+                    print_out_str('!!!! Kaslr magic does not match.')
+                else:
+                    self.kaslr_offset = self.read_u64(self.kaslr_addr + 4, False)
+                    print_out_str("The kaslr_offset extracted is: " + str(hex(self.kaslr_offset)))
 
     def get_hw_id(self, add_offset=True):
         socinfo_format = -1
@@ -1402,7 +1451,7 @@ class RamDump():
         """Takes a virtual address or variable name, returns a virtual
         address
         """
-        if not isinstance(virt_or_name, basestring):
+        if not isinstance(virt_or_name, str):
             return virt_or_name
         return self.address_of(virt_or_name)
 
@@ -1415,8 +1464,9 @@ class RamDump():
             return self.mmu.virt_to_phys(self.resolve_virt(virt_or_name))
 
     def setup_symbol_tables(self):
-        stream = os.popen(self.nm_path + ' -n ' + self.vmlinux)
-        symbols = stream.readlines()
+        args = [self.nm_path, '-n', self.vmlinux]
+        p = subprocess.run(args, stdout=subprocess.PIPE)
+        symbols = p.stdout.decode().splitlines()
         kaslr = self.get_kaslr_offset()
 
         # The beginning and ending of kernel image, from vmlinux.lds.S
@@ -1440,7 +1490,6 @@ class RamDump():
                 continue
 
             self.lookup_table.append(entry)
-        stream.close()
 
         if not len(self.lookup_table):
             print_out_str('!!! Unable to retrieve symbols... Exiting')
@@ -1469,6 +1518,8 @@ class RamDump():
             name_ptr = module + name_offset
             mod_tbl_ent.name = self.read_cstring(name_ptr)
             mod_tbl_ent.module_offset = self.read_pointer(module + module_core_offset)
+            if mod_tbl_ent.module_offset is None:
+                mod_tbl_ent.module_offset = 0
             mod_tbl_ent.kallsyms_addr = self.read_pointer(module + kallsyms_offset)
             self.module_table.add_entry(mod_tbl_ent)
             next_list_ent = self.read_pointer(next_list_ent + next_offset)
@@ -1481,8 +1532,9 @@ class RamDump():
         if not mod_tbl_ent.set_sym_path(ko_file_list[mod_tbl_ent.name]):
             return
 
-        stream = os.popen(self.nm_path + ' -n ' + mod_tbl_ent.get_sym_path())
-        symbols = stream.readlines()
+        args = [self.nm_path, '-n', mod_tbl_ent.get_sym_path()]
+        p = subprocess.run(args, stdout=subprocess.PIPE)
+        symbols = p.stdout.decode().splitlines()
 
         if self.is_config_defined("CONFIG_KALLSYMS"):
             symtab_offset = self.field_offset('struct mod_kallsyms', 'symtab')
@@ -1529,16 +1581,12 @@ class RamDump():
             if self.dump_module_kallsyms:
                 self.dump_mod_kallsyms_sym_table(mod_tbl_ent.name, mod_tbl_ent.kallsyms_table)
         else:
-            stream = os.popen(self.nm_path + ' -n ' + mod_tbl_ent.get_sym_path())
-            symbols = stream.readlines()
-
             for line in symbols:
                 s = line.split(' ')
                 if len(s) == 3:
                     mod_tbl_ent.sym_lookup_table.append(
                         (int(s[0], 16) + mod_tbl_ent.module_offset,
                         s[2].rstrip() + '[' + mod_tbl_ent.name + ']'))
-            stream.close()
             mod_tbl_ent.sym_lookup_table.sort()
             if self.dump_module_symbol_table:
                 self.dump_mod_sym_table(mod_tbl_ent.name, mod_tbl_ent.sym_lookup_table)
@@ -1660,6 +1708,22 @@ class RamDump():
         offset = self.gdbmi.sizeof(the_type) * index
         return addr + offset
 
+    def frame_field_offset(self, frame_name, the_type, field):
+        try:
+            return self.gdbmi.frame_field_offset(frame_name, the_type, field)
+        except gdbmi.GdbMIException:
+            pass
+
+    def get_symbol_info1(self,addr):
+        kaslr = self.get_kaslr_offset()
+        if kaslr:
+            addr1 = addr - kaslr
+        else:
+            addr1 = addr
+        #print "hex of address in get_symbol_info1 {0}".format(hex(addr1))
+        symbol_obj =  self.gdbmi.get_symbol_info(addr1)
+        return symbol_obj.symbol
+
     def field_offset(self, the_type, field):
         """Gets the offset of a field from the base of its containing struct.
 
@@ -1741,6 +1805,9 @@ class RamDump():
             return (table[low][1], size)
 
     def read_physical(self, addr, length):
+        if not isinstance(addr, int) or not isinstance(length, int):
+            return None
+
         if self.minidump:
             addr_data = minidump_util.read_physical_minidump(
                         self.ebi_files_minidump, self.ebi_files,self.elffile,
@@ -1753,7 +1820,7 @@ class RamDump():
                 if addr >= start and addr <= end:
                     ebi = a
                     break
-            if ebi[0] is -1:
+            if ebi[0] == -1:
                 return None
             offset = addr - ebi[1]
             ebi[0].seek(offset)
@@ -1940,7 +2007,7 @@ class RamDump():
         parser_util.xxd(
             address,
             [self.read_byte(address + i, virtual=virtual) or 0
-             for i in xrange(length)],
+             for i in range(length)],
             file_object=sio)
         ret = sio.getvalue()
         sio.close()
@@ -1980,7 +2047,7 @@ class RamDump():
         >>> list(dump.iter_cpus())
         [0, 1, 2, 3]
         """
-        return xrange(self.get_num_cpus())
+        return range(self.get_num_cpus())
 
     def is_thread_info_in_task(self):
         return self.is_config_defined('CONFIG_THREAD_INFO_IN_TASK')
@@ -2293,7 +2360,7 @@ class Struct(object):
             };
         """
         ptr_size = self.ramdump.sizeof('void *')
-        length = self.get_struct_sizeof(key) / ptr_size
+        length = self.get_struct_sizeof(key) // ptr_size
         address = self.get_address(key)
         arr = []
         for i in range(0, length - 1):

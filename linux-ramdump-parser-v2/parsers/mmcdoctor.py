@@ -1,4 +1,4 @@
-# Copyright (c) 2017, The Linux Foundation. All rights reserved.
+# Copyright (c) 2017, 2020 The Linux Foundation. All rights reserved.
 #
 #
 # This program is free software; you can redistribute it and/or modify
@@ -74,7 +74,7 @@ class ParseMmcLog():
     def check_for_error(self, line):
         if (self.error):
             return
-        for key, item in card_err_data.iteritems():
+        for key, item in card_err_data.items():
             if (item[0] in line or item[1] in line):
                 self.error = key
                 self.error_line = line
@@ -109,7 +109,7 @@ class ParseMmcLog():
 #
 
 def get_sdhci_irqs(ram_dump):
-    irqs = IrqParse(RamParser)
+    irqs = IrqParse(ram_dump)
     count = 0
     global MMC0_IRQ
     global MMC1_IRQ
@@ -147,7 +147,7 @@ def find_sdhci_host(ramdump, irq):
     irq_desc_tree = ramdump.address_of('irq_desc_tree')
     irq_action_offset = ramdump.field_offset('struct irq_desc', 'action')
     dev_id = ramdump.field_offset('struct irqaction', 'dev_id')
-    irqs = IrqParse(RamParser)
+    irqs = IrqParse(ramdump)
     if (ramdump.kernel_version >= (4,9,0)):
         sdhci_irq_desc = irqs.radix_tree_lookup_element_v2(
             ramdump, irq_desc_tree, irq)
@@ -283,7 +283,7 @@ class MmcDataStructure():
         return
 
     def dump_trace_buf(self, fd):
-        if (not self.mmc_host or (fd <= 0) or (self.ramdump.kernel_version < (4, 4))):
+        if (not self.mmc_host or (fd == None) or (self.ramdump.kernel_version < (4, 4))):
             return
         mmc_host = self.mmc_host
         ramdump = self.ramdump
@@ -308,14 +308,14 @@ class MmcDataStructure():
             return
 
         datastr = []
-        for i in xrange(MMC_TRACE_BUF_EVENTS):
+        for i in range(MMC_TRACE_BUF_EVENTS):
             trace_str = ramdump.read_cstring(dataptr, MMC_TRACE_EVENT_SIZE)
             dataptr += MMC_TRACE_EVENT_SIZE
             datastr.append(trace_str)
         num = MMC_TRACE_BUF_EVENTS - 1
         idx = wr_idx & num
         cur_idx = (idx + 1) & num
-        for i in xrange(MMC_TRACE_BUF_EVENTS):
+        for i in range(MMC_TRACE_BUF_EVENTS):
             fd.write("event[%d] = %s" %(cur_idx, datastr[cur_idx]))
             cur_idx = (cur_idx + 1 ) & num
 

@@ -231,7 +231,7 @@ class QDSSDump():
 
         print_out_str('Now printing TMC-ETF registers to file')
         tmc_etf_out = ram_dump.open_file('tmc_etf.txt')
-        for a, b in tmc_registers.iteritems():
+        for a, b in tmc_registers.items():
             offset, name = b
             tmc_etf_out.write('{0} ({1}): {2:x}\n'.format(
                 a, name, ram_dump.read_u32(self.tmc_etf_start + offset, False)))
@@ -245,7 +245,7 @@ class QDSSDump():
 
         print_out_str('Now printing TMC-ETR registers to file')
         tmc_etf_out = ram_dump.open_file('tmc_etr.txt')
-        for a, b in tmc_registers.iteritems():
+        for a, b in tmc_registers.items():
             offset, name = b
             tmc_etf_out.write('{0} ({1}): {2:x}\n'.format(
                 a, name, ram_dump.read_u32(self.tmc_etr_start + offset, False)))
@@ -253,7 +253,7 @@ class QDSSDump():
 
     def print_etm_registers(self, ram_dump, base, fname):
         etm_out = ram_dump.open_file(fname)
-        for a, b in etm_registers.iteritems():
+        for a, b in etm_registers.items():
             offset, name = b
             etm_out.write('{0} ({1}): {2:x})\n'.format(
                 a, name, ram_dump.read_u32(base + offset * 4, False)))
@@ -285,7 +285,7 @@ class QDSSDump():
             self.print_etm_registers(ram_dump, self.etm_regs3, 'etm_regs3')
 
     def save_etf_bin(self, ram_dump):
-        tmc_etf = ram_dump.open_file('tmc-etf.bin')
+        tmc_etf = ram_dump.open_file('tmc-etf.bin', mode='wb')
         if self.tmc_etf_start is None or self.etf_start is None:
             print_out_str('!!! ETF was not the current sink!')
             tmc_etf.close()
@@ -311,7 +311,7 @@ class QDSSDump():
         tmc_etf.close()
 
     def save_etf_swao_bin(self, ram_dump):
-        tmc_etf_swao = ram_dump.open_file('tmc-etf-swao.bin')
+        tmc_etf_swao = ram_dump.open_file('tmc-etf-swao.bin', mode='wb')
         if self.tmc_etf_swao_reg_start is None or self.tmc_etf_swao_start is None:
             print_out_str('!!! ETF SWAO was not the current sink!')
             tmc_etf_swao.close()
@@ -440,7 +440,7 @@ class QDSSDump():
         return False
 
     def save_etr_bin(self, ram_dump):
-        tmc_etr = ram_dump.open_file('tmc-etr.bin')
+        tmc_etr = ram_dump.open_file('tmc-etr.bin', mode='wb')
         if self.tmc_etr_start is None:
             print_out_str('!!! ETR was not enabled!')
             tmc_etr.close()
@@ -505,7 +505,7 @@ class QDSSDump():
 
         print_out_str('Now printing DBGUI registers to file')
         dbgui_out = ram_dump.open_file('dbgui.txt')
-        for a, b in dbgui_registers.iteritems():
+        for a, b in dbgui_registers.items():
             offset, name = b
             dbgui_out.write('{0} ({1}): {2:x}\n'.format(
                 a, name, ram_dump.read_u32(self.dbgui_start + offset, False)))
