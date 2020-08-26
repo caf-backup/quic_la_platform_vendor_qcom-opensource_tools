@@ -1,4 +1,4 @@
-# Copyright (c) 2018-2019 The Linux Foundation. All rights reserved.
+# Copyright (c) 2018-2020 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -305,9 +305,9 @@ def print_cma_areas(ramdump):
         cma_index = cma_index + 1
 
 
-def print_tasklet_info(ramdump, core):
-    print_out_str("Pending Tasklet info :")
-    tasklet_vec_addr = ramdump.address_of('tasklet_vec')
+def print_tasklet_info(ramdump, core, tasklet):
+    print_out_str("Pending Tasklet info for {0}:".format(tasklet))
+    tasklet_vec_addr = ramdump.address_of(tasklet)
     tasklet_head = tasklet_vec_addr + ramdump.per_cpu_offset(core)
     tasklet_head = ramdump.read_word(tasklet_head)
     next_offset = ramdump.field_offset('struct tasklet_struct', 'next')
@@ -351,7 +351,8 @@ def parse_softirq_stat(ramdump):
         print_out_str("core {0} : __softirq_pending = {1}".format(
                                 index, pending))
         if "TASKLET" in pending:
-            print_tasklet_info(ramdump, index)
+            print_tasklet_info(ramdump, index, 'tasklet_vec')
+            print_tasklet_info(ramdump, index, 'tasklet_hi_vec')
         index = index + 1
 
 
