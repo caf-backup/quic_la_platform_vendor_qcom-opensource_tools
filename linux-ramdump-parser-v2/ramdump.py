@@ -579,6 +579,7 @@ class RamDump():
         self.ram_addr = options.ram_addr
         self.autodump = options.autodump
         self.module_table = module_table.module_table_class()
+        self.hyp = options.hyp
         # Save all paths given from --mod_path option. These will be searched for .ko.unstripped files
         if options.mod_path_list:
             for path in options.mod_path_list:
@@ -875,6 +876,25 @@ class RamDump():
             sys.exit(1)
         return f
 
+    def gdmi_switch_open(self):
+        self.gdbmi.close() #closing the previous one with vmlinux
+        try:
+            self.gdbmi = gdbmi.GdbMI(self.gdb_path, self.hyp,
+                                 0)
+            self.gdbmi.open()
+        except Exception as err:
+            self.gdbmi.open() #openning gdb session with vmlinux
+            if self.kaslr_offset is None:
+                self.determine_kaslr_offset()
+                self.gdbmi.kaslr_offset = self.get_kaslr_offset()
+    def gdmi_switch_close(self):
+        self.gdbmi.close() #closing gdb session with hyp elf
+        self.gdbmi = gdbmi.GdbMI(self.gdb_path, self.vmlinux,
+                                 self.kaslr_offset or 0)
+        self.gdbmi.open() #openning gdb session with vmlinux
+        if self.kaslr_offset is None:
+            self.determine_kaslr_offset()
+            self.gdbmi.kaslr_offset = self.get_kaslr_offset()
     def remove_file(self, file_name):
         file_path = os.path.join(self.outdir, file_name)
         try:
