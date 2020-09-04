@@ -27,11 +27,12 @@
 # OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
 # IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import print_function
 import struct
 import os
 import sys
-
-from kryo_cache_tlb_parser import main as kryo_tlb_parser_main
+import subprocess
+from print_out import print_out_str
 
 """dictionary mapping from (hw_id, client_id, version) to class CacheDump"""
 lookuptable = {}
@@ -115,25 +116,55 @@ class TlbDumpType(TlbDump):
 
 class TlbDumpType_v1(TlbDumpType):
     def __init__(self):
-        super(TlbDumpType_v1, self).__init__()
+            self.infile_name = "scratch.bin"
 
     def parse(self, start, end, ramdump, outfile):
         self.ramdump = ramdump
-        self.add_table_data_columns()
+        self.outfile = outfile
+        """kryo tlb parser expects an input file with dump data for the tlb so
+           temporarily create file with dump data"""
+        infile_fd = ramdump.open_file(self.infile_name, mode='rb')
+        core_dump_size = end - start
+        buf = ramdump.read_physical(start, core_dump_size)
+        infile_fd.write(buf)
+        infile_fd.close()
+        self.parse_dump()
+        ramdump.remove_file(self.infile_name)
 
-        offset = 0
-        for nway in range(self.NumWays):
-            for nset in range(self.NumSets):
-                if start > end:
-                    raise Exception('past the end of array')
+    def parse_dump(self):
+        #child class should implement this method
+        raise NotImplementedError
 
-                output = [nway, nset]
-                line = self.read_line(start)
-                self.parse_tag_fn(output, line, nset, nway, offset)
-                output.extend(line)
-                self.tableformat.printline(output, outfile)
-                start = start + self.LineSize * 0x4
-                offset = offset + self.LineSize * 0x4
+    def kryo_tlb_parse(self, cmd, offset, outfile_name):
+        #expected cmdline arguments for kryo tlb parser.
+        opts_flgs = ["-i", "-o", "-t", "-c", "-s"]
+        infile_path = os.path.join(self.ramdump.outdir, self.infile_name)
+        outfile_path = os.path.join(self.ramdump.outdir, outfile_name)
+        cpu_name = self.cpu_name
+        offset_str = str(offset)
+        opts_params = [infile_path, outfile_path, cmd, cpu_name, offset_str]
+        argv = [None] * (2 * len(opts_flgs))
+        #get the path for the kryo_cache_tlb_parser.py in this directory
+        exec_path = sys.argv[0].strip("ramparse.py")
+        exec_path += "kryo_cache_tlb_json_parser.py"
+
+        for i in xrange(len(opts_flgs)):
+            argv[2 * i] = opts_flgs[i]
+            argv[(2 * i) + 1] = opts_params[i]
+
+        argv_str = " ".join(str(x) for x in argv)
+        """Since the kryo tlb parser expects the data to be redirected to the
+           outfile, and we're not calling it from the
+           command line to redirect the output, we can do it like this"""
+        outfile_fd = self.ramdump.open_file(outfile_name)
+        sys.stdout.flush()
+        sys.stdout = outfile_fd
+        """We must do this, since the parser's main() function does not take
+           any arguments; they must be passed through the command line"""
+        os.system("python " + exec_path + " " + argv_str)
+        sys.stdout.flush()
+        sys.stdout = sys.__stdout__
+        outfile_fd.close()
 
 class TlbDumpType_v2(TlbDumpType):
     def __init__(self):
@@ -163,7 +194,7 @@ class TlbDumpType_v2(TlbDumpType):
             offset = 0
             for nset in range(self.NumSetsRam1):
                 if start > end:
-                    print [nway,nset]
+                    print([nway,nset])
                     raise Exception('past the end of array')
 
                 output = [nway, nset]
@@ -183,7 +214,7 @@ class TlbDumpType_v3(object):
         self.outfile = outfile
         """kryo tlb parser expects an input file with dump data for the tlb so
            temporarily create file with dump data"""
-        infile_fd = ramdump.open_file(self.infile_name)
+        infile_fd = ramdump.open_file(self.infile_name, mode="wb")
         core_dump_size = end - start
         buf = ramdump.read_physical(start, core_dump_size)
         infile_fd.write(buf)
@@ -204,24 +235,26 @@ class TlbDumpType_v3(object):
         offset_str = str(offset)
         opts_params = [infile_path, outfile_path, cmd, cpu_name, offset_str]
         argv = [None] * (2 * len(opts_flgs))
-        for i in xrange(len(opts_flgs)):
+        for i in range(len(opts_flgs)):
             argv[2 * i] = opts_flgs[i]
             argv[(2 * i) + 1] = opts_params[i]
-        """Since the kryo tlb parser expects the data to be parsed and output
-           to be redirected to the outfile, and we're not calling it from the
-           command line to redirect the output, we can do it like this"""
-        outfile_fd = self.ramdump.open_file(outfile_name)
-        sys.stdout.flush()
-        sys.stdout = outfile_fd
-        kryo_tlb_parser_main(argv)
-        sys.stdout.flush()
-        sys.stdout = sys.__stdout__
-        outfile_fd.close()
+
+        with self.ramdump.open_file(outfile_name) as outfile_fd:
+            exec_name = "kryo_cache_tlb_parser.py"
+            exec_abspath = os.path.join(self.ramdump.get_srcdir(), exec_name)
+            args = [sys.executable, exec_abspath]
+            args.extend(argv)
+            p = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                               universal_newlines=True)
+            if p.returncode < 0:
+                print_out_str("{} Failed with error {}".format(p.args, p.returncode))
+            print_out_str(p.stderr)
+            outfile_fd.write(p.stdout)
 
     def post_process(self, datafile_name, tagfile_name=None):
         if(tagfile_name is not None and datafile_name is not None):
-            tagfd = self.ramdump.open_file(tagfile_name, 'r')
-            datafd = self.ramdump.open_file(datafile_name, 'r')
+            tagfd = self.ramdump.open_file(tagfile_name, mode='rt')
+            datafd = self.ramdump.open_file(datafile_name, mode='rt')
 
             #discard first line since it's just a header
             tagfd.readline()
@@ -254,7 +287,7 @@ class TlbDumpType_v3(object):
             self.ramdump.remove_file(datafile_name)
 
         elif(tagfile_name is None and datafile_name is not None):
-            datafd = self.ramdump.open_file(datafile_name, 'r')
+            datafd = self.ramdump.open_file(datafile_name, mode='rt')
 
             #discard first line since it's just a header
             datafd.readline()
@@ -283,7 +316,7 @@ class TlbDumpType_v4(object):
         self.outfile = outfile
         """kryo tlb parser expects an input file with dump data for the tlb so
            temporarily create file with dump data"""
-        infile_fd = ramdump.open_file(self.infile_name)
+        infile_fd = ramdump.open_file(self.infile_name, mode='wb')
         core_dump_size = end - start
         buf = ramdump.read_physical(start, core_dump_size)
         infile_fd.write(buf)
@@ -308,7 +341,7 @@ class TlbDumpType_v4(object):
         exec_path = sys.argv[0].strip("ramparse.py")
         exec_path += "kryo_cache_tlb_json_parser.py"
 
-        for i in xrange(len(opts_flgs)):
+        for i in range(len(opts_flgs)):
             argv[2 * i] = opts_flgs[i]
             argv[(2 * i) + 1] = opts_params[i]
 
@@ -539,76 +572,53 @@ class L2_TLB_KRYO3XX_GOLD(TlbDumpType_v2):
             else:
                 return "1GB"
 
+
+class L2_TLB_KRYOBXX_SILVER(TlbDumpType_v1):
+    def __init__(self):
+        super(L2_TLB_KRYOBXX_SILVER, self).__init__()
+        self.cpu_name = "KryoBSilver"
+
+    def parse_dump(self):
+        datafile_name = "data_scratch" + self.outfile.name[-4:]
+        data_offset = 0
+        self.kryo_tlb_parse("CACHEDUMP_CACHE_ID_L2_TLB_DATA", data_offset,\
+                                datafile_name)
+
 class L2_TLB_KRYO3XX_SILVER(TlbDumpType_v1):
     def __init__(self):
         super(L2_TLB_KRYO3XX_SILVER, self).__init__()
-        self.tableformat.addColumn('Type')
-        self.tableformat.addColumn('Valid')
-        self.tableformat.addColumn('NS')
-        self.tableformat.addColumn('ASID')
-        self.tableformat.addColumn('VMID')
-        self.tableformat.addColumn('VA/IPA', '{0:016x}', 16)
-        self.tableformat.addColumn('PA', '{0:016x}', 16)
-        self.tableformat.addColumn('DBM')
-        self.unsupported_header_offset = 0
-        self.LineSize = 5
-        self.NumSets = 0x120
+        self.cpu_name = "Kryo3Silver"
         self.NumWays = 4
+        self.NumSets = 0x100
+        self.NumTagRegs = 3
+        self.RegSize = 4
+        self.tlbsubcache = []
+        self.datasubcache = []
+        #represet subcache in this form ['name', set, ways, blocksize]
+        self.tlbsubcache.append(["CACHEDUMP_CACHE_ID_L2_TLB_TAG_WALK",16, 4, 12])
+        self.tlbsubcache.append([ "CACHEDUMP_CACHE_ID_L2_TLB_TAG_IPA",16 , 4, 12])
+        self.datasubcache.append(["CACHEDUMP_CACHE_ID_L2_TLB_DATA_WALK", 16, 4, 8])
+        self.datasubcache.append(["CACHEDUMP_CACHE_ID_L2_TLB_DATA_IPA",16, 4, 8])
 
-    def parse_tag_fn(self, output, data, nset, nway, offset):
-        # data[0-2] is tag
-        # data[3-4] is data
-        if offset >= 0x5500:
-            type = "IPA"
-        elif offset >= 0x5000:
-            type = "WALK"
-        else:
-            type = "MAIN"
+    def parse_dump(self):
+        tagfile_name = "tag_scratch" + self.outfile.name[-4:]
+        self.kryo_tlb_parse("CACHEDUMP_CACHE_ID_L2_TLB_TAG", 0, tagfile_name)
 
-        valid = data[0] & 0x1
-        ns          = (data[0] >> 1) & 0x1
-        asid        = (data[0] >> 2) & 0xffff
-        vmid        = (data[0] >> 18) & 0xffff
-        if type is "MAIN":
-            size        = (data[1] >> 2) & 0x7
-            nG          = (data[1] >> 5) & 0x1
-            ap          = (data[1] >> 6) & 0x7
-            s2ap        = (data[1] >> 9) & 0x3
-            domain      = (data[1] >> 11) & 0xf
-            s1_size     = (data[1] >> 15) & 0x7
-            addr_sign   = (data[1] >> 18) & 0x1
-            va_l        = (data[1] >> 19) & 0x1fff
-            va_h        = data[2] & 0x7FFF
-            va          = (va_h << 13) | va_l
-            dbm         = (data[2] >> 15) & 0x1
-            parity      = (data[2] >> 16) & 0x3
-            pa_l = data[3] >> 17
-            pa_h = data[4] & 0x1fff
-            pa = (pa_h << 15) | pa_l
-        elif type is "WALK":
-            dbm = 0
-            va_l = (data[1] >> 14)
-            va_h = (data[2]) & 0x3f
-            va = (va_h << 18) | va_l
-            pa_l = data[3] >> 13
-            pa_h = data[4] & 0x7ff
-            pa = (pa_h << 19) | pa_l
-        else:
-              asid = 0
-              dbm = (data[0] >> 9) & 0x1
-              va = (data[1] >> 2) & 0xffffff
-              pa_l = (data[3] >> 10)
-              pa_h = data[4] & 0x3f
-              pa = (pa_h << 22) | pa_l
+        datafile_name = "data_scratch" + self.outfile.name[-4:]
+        """the input file is the dump for this TLB, and this is divided into
+           two parts: the tag contents for all of the TLB, followed by the data
+           contents for all of the TLB. As such, you must calculate the size of
+           the tag content for the TLB to get the offset into the dump where the
+           data contents start."""
+        data_offset = 0
+        if self.tlbsubcache:
+            for x in self.tlbsubcache:
+                data_offset = data_offset + (int(x[1]) * int(x[2]) * int(x[3]))
+            data_offset = data_offset + self.NumWays * self.NumSets * self.RegSize *\
+                          self.NumTagRegs
+            self.kryo_tlb_parse("CACHEDUMP_CACHE_ID_L2_TLB_DATA", data_offset,\
+                                datafile_name)
 
-        output.append(type)
-        output.append(valid)
-        output.append(ns)
-        output.append(asid)
-        output.append(vmid)
-        output.append(va)
-        output.append(pa)
-        output.append(dbm)
 
 class L1_ITLB_KRYO4XX_GOLD(TlbDumpType_v3):
     def __init__(self):
@@ -884,17 +894,17 @@ lookuptable[("8998", 0x46, 0x14)] = L1_TLB_KRYO2XX_GOLD()
 lookuptable[("8998", 0x47, 0x14)] = L1_TLB_KRYO2XX_GOLD()
 
 # "bengal"
-lookuptable[("bengal", 0x120, 0x14)] = L1_TLB_A53()
-lookuptable[("bengal", 0x121, 0x14)] = L1_TLB_A53()
-lookuptable[("bengal", 0x122, 0x14)] = L1_TLB_A53()
-lookuptable[("bengal", 0x123, 0x14)] = L1_TLB_A53()
+lookuptable[("bengal", 0x120, 0x14)] = L2_TLB_KRYOBXX_SILVER()
+lookuptable[("bengal", 0x121, 0x14)] = L2_TLB_KRYOBXX_SILVER()
+lookuptable[("bengal", 0x122, 0x14)] = L2_TLB_KRYOBXX_SILVER()
+lookuptable[("bengal", 0x123, 0x14)] = L2_TLB_KRYOBXX_SILVER()
 lookuptable[("bengal", 0x124, 0x14)] = L1_TLB_KRYO2XX_GOLD()
 lookuptable[("bengal", 0x125, 0x14)] = L1_TLB_KRYO2XX_GOLD()
 lookuptable[("bengal", 0x126, 0x14)] = L1_TLB_KRYO2XX_GOLD()
 lookuptable[("bengal", 0x127, 0x14)] = L1_TLB_KRYO2XX_GOLD()
 
 # "scuba"
-lookuptable[("scuba", 0x120, 0x14)] = L1_TLB_A53()
-lookuptable[("scuba", 0x121, 0x14)] = L1_TLB_A53()
-lookuptable[("scuba", 0x122, 0x14)] = L1_TLB_A53()
-lookuptable[("scuba", 0x123, 0x14)] = L1_TLB_A53()
+lookuptable[("scuba", 0x120, 0x14)] = L2_TLB_KRYOBXX_SILVER()
+lookuptable[("scuba", 0x121, 0x14)] = L2_TLB_KRYOBXX_SILVER()
+lookuptable[("scuba", 0x122, 0x14)] = L2_TLB_KRYOBXX_SILVER()
+lookuptable[("scuba", 0x123, 0x14)] = L2_TLB_KRYOBXX_SILVER()

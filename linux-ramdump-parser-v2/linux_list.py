@@ -1,4 +1,4 @@
-# Copyright (c) 2013-2014, 2016-2017, The Linux Foundation. All rights reserved.
+# Copyright (c) 2013-2014, 2016-2017, 2020 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -36,7 +36,7 @@ class ListWalker(object):
     def __iter__(self):
         return self
 
-    def next(self):
+    def __next__(self):
         next_node_addr = self.curr_node + \
             self.ram_dump.field_offset('struct list_head', 'next')
         next_node = self.ram_dump.read_word(next_node_addr)
@@ -52,6 +52,9 @@ class ListWalker(object):
             self.seen_nodes.append(next_node)
 
             return next_node - self.list_elem_offset
+
+    def next(self):
+        return self.__next__()
 
     def is_empty(self):
         """Return True if the list is empty, False otherwise.

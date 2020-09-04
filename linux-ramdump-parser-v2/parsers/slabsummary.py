@@ -1,4 +1,4 @@
-# Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
+# Copyright (c) 2012-2018, 2020, The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -44,11 +44,11 @@ class Slabinfo_summary(RamParser):
             seen.append(page)
             page = page - slab_lru_offset
             if (self.ramdump.kernel_version <= (4, 14)):
-	            count = self.ramdump.read_structure_field(
-		                page, 'struct page', '_mapcount')
-	    else:
-	            count = self.ramdump.read_structure_field(
-		                page, 'struct page', 'counters')
+                    count = self.ramdump.read_structure_field(
+                                page, 'struct page', '_mapcount')
+            else:
+                    count = self.ramdump.read_structure_field(
+                                page, 'struct page', 'counters')
             inuse = count & 0x0000FFFF
             total_objects = (count >> 16) & 0x00007FFF
             freeobj = total_objects - inuse
@@ -133,12 +133,12 @@ class Slabinfo_summary(RamParser):
             total_allocated = nr_total_objects - total_freeobjects
             page_order = oo >> OO_SHIFT
             slab_size = int(math.pow(2, page_order + PAGE_SHIFT))
-            slab_size = slab_size / 1024
+            slab_size = slab_size // 1024
             slab = self.ramdump.read_word(slab + slab_list_offset)
             slab_summary[nCounter] = [
                     slab_name, obj_size, objsize_w_metadata,
                     total_allocated, nr_total_objects,
-                    (objsize_w_metadata * nr_total_objects)/1024,
+                    (objsize_w_metadata * nr_total_objects) // 1024,
                     num_slabs, slab_size]
             nCounter += 1
         sorted_summary = sorted(slab_summary.values(),

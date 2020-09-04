@@ -1,4 +1,4 @@
-# Copyright (c) 2012,2014-2015,2017-2019 The Linux Foundation. All rights reserved.
+# Copyright (c) 2012,2014-2015,2017-2020 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -33,8 +33,8 @@ class FileTracking(RamParser):
         cycle_flag = 0
         cycle_detection = 12
         while True:
-            if name is '/' or name is '':
-                break
+            if name == '/' or name == '':
+                return name, cycle_flag
             path = '/' + name + path
             parent = self.ramdump.read_structure_field(parent, 'struct dentry', 'd_parent')
             if parent is not None:
@@ -89,11 +89,11 @@ class FileTracking(RamParser):
         return name, path, a_ops, addr_space, cycle_flag
 
     def update_file_list(self, name, path, a_ops, addr_space, cycle_flag):
-        if not files.has_key(addr_space):
+        if addr_space not in files:
             files[addr_space] = {}
             files[addr_space]['total_pages'] = 0
             files[addr_space]['total_size'] = 0
-        if not files[addr_space].has_key('filename'):
+        if 'filename' not in files[addr_space]:
             files[addr_space]['filename'] = name
             if cycle_flag == 1:
                 files[addr_space]['filepath'] = 'PATH CYCLE DETECTED: ' + path
@@ -156,9 +156,9 @@ class FileTracking(RamParser):
 
             out_str =  'File       : {0}\nPath       : {1}\na_ops      : {2}\nAddr Space : 0x{3:x}\nNo. Pages  : {4}\nSize (KB)  : {5}\n\n\n'
             out_tracking.write(out_str.format(name, path, a_ops, addr_space, pages, size))
-            if not total_sizes.has_key(files[file_list[file]]['a_ops']):
-                total_sizes[files[file_list[file]]['a_ops']] = 0
-            total_sizes[files[file_list[file]]['a_ops']] += files[file_list[file]]['total_size']
+            if a_ops not in total_sizes:
+                total_sizes[a_ops] = 0
+            total_sizes[a_ops] += size
 
         out_tracking.write('-----------= Total Sizes (KB) =-----------\n\n')
         total_sizes_list = sorted(total_sizes, key=lambda x: (total_sizes[x]), reverse=True)

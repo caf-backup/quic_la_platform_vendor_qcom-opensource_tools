@@ -1,4 +1,4 @@
-# Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+# Copyright (c) 2012-2015, 2020 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -19,7 +19,7 @@ cache_way = 8
 
 
 def save_l1_dump(ram_dump, cache_base, size):
-    with ram_dump.open_file('l1_cache_dump.bin') as cache_file:
+    with ram_dump.open_file('l1_cache_dump.bin', 'wb') as cache_file:
 
         for i in range(0, size):
             val = ram_dump.read_byte(cache_base + i, False)
@@ -59,7 +59,7 @@ def parse_cache_dump(ram_dump, cache_base):
     cache_file.write('line size = {0:x}\n'.format(line_size))
 
     select = 0
-    lines = total_lines / cache_way
+    lines = total_lines // cache_way
 
     header_str = '({0:4},{1:1}) {2:5} {3:8} '.format(
         'Set', 'Way', 'valid', 'Address')
