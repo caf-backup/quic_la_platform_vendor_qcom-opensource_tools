@@ -203,7 +203,7 @@ class DebugImage_v2():
             val = ram_dump.read_byte(i, False)
             header_bin.write(struct.pack("<B", val))
         header_bin.close()
-        subprocess.call('python {0} -d {1} -o {2} -f {3} -c {4}'.format(scan_wrapper_path, input, output, arch, chipset))
+        subprocess.call('py -2 {0} -d {1} -o {2} -f {3} -c {4}'.format(scan_wrapper_path, input, output, arch, chipset))
         sv2 = Scandump_v2(core_num,ram_dump,version)
         reg_info = sv2.prepare_dict()
         if reg_info is not None:
@@ -230,7 +230,7 @@ class DebugImage_v2():
         if offset is None:
             print_out_str("parse_cpuss start address {0} not found".format(start))
         print_out_str("parse_cpuss offset address = {0} input = {1} cpuss_parser_json = {2}".format(hex(int(offset)),input,cpuss_parser_json))
-        subprocess.call('python {0} -i {1} -O {2} -o {3} -j {4}'.format(cpuss_parser_path, input, hex(int(offset)), ram_dump.outdir, cpuss_parser_json))
+        subprocess.call('py -2 {0} -i {1} -O {2} -o {3} -j {4}'.format(cpuss_parser_path, input, hex(int(offset)), ram_dump.outdir, cpuss_parser_json))
 
     def parse_fcmdump(self, version, start, end, client_id, ram_dump):
         client_name = self.dump_data_id_lookup_table[client_id]
