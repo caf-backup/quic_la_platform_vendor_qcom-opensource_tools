@@ -860,6 +860,8 @@ class RamDump():
                                  0)
             self.gdbmi.open()
         except Exception as err:
+            self.gdbmi = gdbmi.GdbMI(self.gdb_path, self.vmlinux,
+                                 self.kaslr_offset or 0)
             self.gdbmi.open() #openning gdb session with vmlinux
             if self.kaslr_offset is None:
                 self.determine_kaslr_offset()
