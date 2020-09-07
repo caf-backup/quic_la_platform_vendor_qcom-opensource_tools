@@ -1,4 +1,4 @@
-# Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+# Copyright (c) 2012-2015, 2020 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -307,6 +307,8 @@ class TZRegDump(RamParser):
 
     def parse(self):
         if self.ramdump.address_of('memdump'):
+            print_out_str(
+                '!!! No memdump')
             return None
 
         ebi_addr = self.ramdump.read_tz_offset()
@@ -357,14 +359,14 @@ def get_wdog_timing(ramdump):
         diff = last_ns - last_pet
 
         print_out_str('Most recent time that the watchdog was pet: {0}.{1:6}'.format(
-            last_pet / 1000000000, last_pet % 1000000000))
+            last_pet // 1000000000, last_pet % 1000000000))
         print_out_str('Most recent timestamp read from the timer hardware: {0}.{1:6}'.format(
-            last_ns / 1000000000, last_ns % 1000000000))
+            last_ns // 1000000000, last_ns % 1000000000))
         if (last_ns > last_pet):
             print_out_str(
-                'Pet delay time in this build is {0} seconds'.format((pet_delay_time * 10) / 1000))
+                'Pet delay time in this build is {0} seconds'.format((pet_delay_time * 10) // 1000))
             print_out_str('The watchdog was not pet for at least {0}.{1:6} seconds'.format(
-                diff / 1000000000, diff % 1000000000))
+                diff // 1000000000, diff % 1000000000))
 
         print_out_str(
             '!!! The difference between the two timestamps above is NOT')
@@ -374,6 +376,6 @@ def get_wdog_timing(ramdump):
     elif (last_pet_addr):
         last_pet = ramdump.read_dword(last_pet_addr)
         print_out_str('Most recent time that the watchdgo was pet: {0}.{1:6}'.format(
-            last_pet / 1000000000, last_pet % 1000000000))
+            last_pet // 1000000000, last_pet % 1000000000))
         print_out_str('The watchdog was not pet for at least {0}.{1:6} seconds'.format(
-            pet_delay_diff / 1000000000, pet_delay_diff % 1000000000))
+            pet_delay_diff // 1000000000, pet_delay_diff % 1000000000))

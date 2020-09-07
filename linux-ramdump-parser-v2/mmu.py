@@ -1,4 +1,4 @@
-# Copyright (c) 2013-2017, The Linux Foundation. All rights reserved.
+# Copyright (c) 2013-2020, The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -40,11 +40,17 @@ class MMU(object):
     def __init__(self, ramdump, ttbr=None):
         self._tlb = {}
         self.ramdump = ramdump
-        if ttbr is not None:
-            self.ttbr = ttbr
+        self.s2_walk = self.ramdump.s2_walk
+        if self.s2_walk:
+            self._tlbv2 = {}
+            self.ttbr = self.ramdump.ttbr
+            self.vttbr = self.ramdump.vttbr
         else:
-            self.ttbr = self.ramdump.kernel_virt_to_phys(
-                    self.ramdump.swapper_pg_dir_addr)
+            if ttbr is not None:
+                self.ttbr = ttbr
+            else:
+                self.ttbr = self.ramdump.kernel_virt_to_phys(
+                        self.ramdump.swapper_pg_dir_addr)
         self.load_page_tables()
 
     def virt_to_phys(self, addr, skip_tlb=False, save_in_tlb=True):
@@ -66,10 +72,20 @@ class MMU(object):
         if phys_addr is None:
             return None
 
-        if save_in_tlb:
-            self._tlb[page_addr] = phys_addr
+        if self.s2_walk:
+            ipa = phys_addr + page_offset
+            phys_addr = (ipa >> 12) << 12
+            page_offset = ipa & 0xFFF
+            ipa2 = self.page_table_walkel2(phys_addr)
+            pa = ipa2 + page_offset
+            if save_in_tlb:
+                self._tlb[phys_addr] = pa
 
-        return phys_addr + page_offset
+            return pa
+        else:
+            if save_in_tlb:
+                self._tlb[page_addr] = phys_addr
+            return phys_addr + page_offset
 
     def load_page_tables(self):
         raise NotImplementedError
@@ -514,18 +530,96 @@ class Armv8MMU(MMU):
                % (str(descriptor), str(addr))
             )
         return descriptor
+    def do_fl_sl_level_lookupel2v2(self, table_base_address, table_index,
+                              input_addr_split, block_split):
+        #print "====do_fl_sl_level_lookupel2v2"
+        #print hex(table_base_address)
+        #print hex(table_index)
+        #print input_addr_split
+        #print block_split
+        descriptor, addr = self.do_level_lookupel2v2(
+            table_base_address, table_index,
+            input_addr_split)
+        #print "descriptor do_fl_sl_level_lookupel2v2"
+        #print descriptor
+        if descriptor.dtype == Armv8MMU.DESCRIPTOR_BLOCK:
+            descriptor.add_field('output_address', (47, block_split))
+        elif descriptor.dtype == Armv8MMU.DESCRIPTOR_TABLE:
+            # we have bits 39:12 of the next-level table in
+            # next_level_base_addr_upper
+            descriptor.add_field('next_level_base_addr_upper', (47, 12))
+            #print "descriptor  addeding filed"
+            #print descriptor
+        else:
+            raise Exception(
+                'Invalid stage 1 first- or second-level translation\ndescriptor: (%s)\naddr: (%s)'
+               % (str(descriptor), str(addr))
+            )
+        return descriptor
+    def do_fl_sl_level_lookupel2(self, table_base_address, table_index,
+                              input_addr_split, block_split):
+        #print "===="
+        #print hex(table_base_address)
+        #print hex(table_index)
+        #print input_addr_split
+        #print block_split
+        descriptor, addr = self.do_level_lookupel2(
+            table_base_address, table_index,
+            input_addr_split)
+        #print "descriptor do_fl_sl_level_lookupel2"
+        #print descriptor
+        if descriptor.dtype == Armv8MMU.DESCRIPTOR_BLOCK:
+            descriptor.add_field('output_address', (47, block_split))
+        elif descriptor.dtype == Armv8MMU.DESCRIPTOR_TABLE:
+            # we have bits 39:12 of the next-level table in
+            # next_level_base_addr_upper
+            descriptor.add_field('next_level_base_addr_upper', (47, 12))
+            #print "descriptor  addeding filed"
+            #print descriptor
+        else:
+            raise Exception(
+                'Invalid stage 1 first- or second-level translation\ndescriptor: (%s)\naddr: (%s)'
+               % (str(descriptor), str(addr))
+            )
+        return descriptor
 
     def do_fl_level_lookup(self, table_base_address, table_index,
                            input_addr_split):
         return self.do_fl_sl_level_lookup(table_base_address, table_index,
                                      input_addr_split, 30)
 
+    def do_fl_level_lookupel2(self, table_base_address, table_index,
+                           input_addr_split):
+        return self.do_fl_sl_level_lookupel2(table_base_address, table_index,
+                                     input_addr_split, 30)
+
     def do_sl_level_lookup(self, table_base_address, table_index):
         return self.do_fl_sl_level_lookup(table_base_address, table_index,
                                      12, 21)
+    def do_sl_level_lookupel2(self, table_base_address, table_index):
+        #print "do_sl_level_lookupel2 entry"
+        return self.do_fl_sl_level_lookupel2v2(table_base_address, table_index,
+                                     12, 21)
 
     def do_tl_level_lookup(self, table_base_address, table_index):
+        #print "+++++ do_tl_level_lookup entry"
         descriptor, addr = self.do_level_lookup(
+            table_base_address, table_index, 12)
+        #print "descriptor in do_tl_level_lookup"
+        #print descriptor
+        #print descriptor.dtype
+        if descriptor.dtype == Armv8MMU.TL_DESCRIPTOR_PAGE:
+            #print "output_address in do_tl_level_lookup"
+            descriptor.add_field('output_address', (47, 12))
+        else:
+            raise Exception(
+                'Invalid stage 1 third-level translation\ndescriptor: (%s)\naddr: (%s)'
+                % (str(descriptor), str(addr))
+            )
+        return descriptor
+
+    def do_tl_level_lookupel2(self, table_base_address, table_index):
+        descriptor, addr = self.do_level_lookupel2(
             table_base_address, table_index, 12)
         if descriptor.dtype == Armv8MMU.TL_DESCRIPTOR_PAGE:
             descriptor.add_field('output_address', (47, 12))
@@ -535,7 +629,43 @@ class Armv8MMU(MMU):
                 % (str(descriptor), str(addr))
             )
         return descriptor
+    def do_level_lookupel2v2(self, table_base_address, table_index,
+                        input_addr_split):
+        """Does a base + index descriptor lookup.
 
+        Returns a tuple with the Register object representing the found
+        descriptor and a Register object representing the the computed
+        descriptor address.
+
+        """
+        n = input_addr_split
+        # these Registers are overkill but nice documentation:).
+        table_base = Register(table_base_address, base=(47, n))
+        descriptor_addr = Register(table_base_address, base=(47, n),
+                                   offset=(n - 1, 3))
+
+        descriptor_addr.offset = table_index
+        descriptor_val = self.read_phys_dword(descriptor_addr.value)
+        descriptor = Register(descriptor_val,
+                              dtype=(1, 0))
+        return descriptor, descriptor_addr
+    def do_level_lookupel2(self, table_base_address, table_index,
+                        input_addr_split):
+        """Does a base + index descriptor lookup.
+
+        Returns a tuple with the Register object representing the found
+        descriptor and a Register object representing the the computed
+        descriptor address.
+
+        """
+        n = input_addr_split
+        table_base = Register(table_base_address, base=(47, n))
+        descriptor_addr = Register(table_base_address, base=(47, n),
+                                   offset=(n - 1, 3))
+        descriptor_val = self.read_phys_dword(descriptor_addr.value)
+        descriptor = Register(descriptor_val,
+                              dtype=(1, 0))
+        return descriptor, descriptor_addr
     def do_level_lookup(self, table_base_address, table_index,
                         input_addr_split):
         """Does a base + index descriptor lookup.
@@ -546,6 +676,9 @@ class Armv8MMU(MMU):
 
         """
         n = input_addr_split
+        if self.s2_walk:
+            ttbr_phy = self.virt_to_physel2(table_base_address)
+            table_base_address = ttbr_phy
         # these Registers are overkill but nice documentation:).
         table_base = Register(table_base_address, base=(47, n))
         descriptor_addr = Register(table_base_address, base=(47, n),
@@ -563,8 +696,19 @@ class Armv8MMU(MMU):
         virt_r.add_field('rest', (n - 1, 0))
         phys.page_offset |= virt_r.rest
         return phys.value
+    def block_or_page_desc_2_physel2(self, desc, virt_r, n):
+        phys = Register(output_address=(38, n),
+                        page_offset=(n - 1, 0))
+        phys.output_address = desc.output_address
+        virt_r.add_field('rest', (n - 1, 0))
+        phys.page_offset |= virt_r.rest
+        return phys.value
 
     def fl_block_desc_2_phys(self, desc, virt_r):
+        """Block descriptor to physical address."""
+        return self.block_or_page_desc_2_phys(desc, virt_r, 30)
+
+    def fl_block_desc_2_physel2(self, desc, virt_r):
         """Block descriptor to physical address."""
         return self.block_or_page_desc_2_phys(desc, virt_r, 30)
 
@@ -572,7 +716,15 @@ class Armv8MMU(MMU):
         """Block descriptor to physical address."""
         return self.block_or_page_desc_2_phys(desc, virt_r, 21)
 
+    def sl_block_desc_2_physel2(self, desc, virt_r):
+        """Block descriptor to physical address."""
+        return self.block_or_page_desc_2_phys(desc, virt_r, 21)
+
     def tl_page_desc_2_phys(self, desc, virt_r):
+        """Page descriptor to physical address."""
+        return self.block_or_page_desc_2_phys(desc, virt_r, 12)
+
+    def tl_page_desc_2_physel2(self, desc, virt_r):
         """Page descriptor to physical address."""
         return self.block_or_page_desc_2_phys(desc, virt_r, 12)
 
@@ -618,6 +770,86 @@ class Armv8MMU(MMU):
 
         r = self.tl_page_desc_2_phys(tl_desc, virt_r)
         return r
+    def page_table_walkel2(self, virt):
+        #print "page_table_walkel2 virt address = {0}".format(hex(virt))
+        virt_r = Register(virt,
+            zl_index=(47,39),
+            fl_index=(38,30),
+            sl_index=(29,21),
+            tl_index=(20,12),
+            page_index=(11,0))
+        #print "page_table_walk entry"
+        try:
+          fl_desc = self.do_fl_sl_level_lookupel2(self.vttbr, virt_r.fl_index, 12, 30)
+          #print "fl_desc.."
+          #print fl_desc
+          #print fl_desc.dtype
+        except Exception as err:
+          #print "err"
+          #print err
+          return None
+
+        if fl_desc.dtype == Armv8MMU.DESCRIPTOR_BLOCK:
+            #print "return from here ....."
+            return self.fl_block_desc_2_physel2(fl_desc, virt_r)
+
+        base = Register(base=(47, 12))
+        #print "fl_desc.next_level_base_addr_upper = {0}".format(hex(fl_desc.next_level_base_addr_upper))
+        base.base = fl_desc.next_level_base_addr_upper
+        try:
+            sl_desc = self.do_sl_level_lookupel2(
+                base.value, virt_r.sl_index)
+        except Exception as err:
+            #print "err...+++"
+            #print err
+            return None
+
+        if sl_desc.dtype == Armv8MMU.DESCRIPTOR_BLOCK:
+            r = self.sl_block_desc_2_physel2(sl_desc, virt_r)
+            return r
+
+        base.base = sl_desc.next_level_base_addr_upper
+        try:
+            tl_desc = self.do_tl_level_lookupel2(base.value, virt_r.tl_index)
+        except:
+            return None
+
+        r = self.tl_page_desc_2_physel2(tl_desc, virt_r)
+        return r
+
+    def virt_to_physel2(self, addr, skip_tlb=False, save_in_tlb=True):
+        """Do a virtual to physical address lookup and possibly cache the
+        result in the "TLB".
+
+        """
+        #print "virt_to_physel2 entry.. "
+        if addr is None:
+            return None
+
+        page_addr = (addr >> 12) << 12
+        page_offset = addr & 0xFFF
+
+        if not skip_tlb:
+            if page_addr in self._tlbv2:
+                ##print "return from here..."
+                return self._tlbv2[page_addr] + page_offset
+
+        #print "page_addr virt_to_physel2 = {0}".format(hex(page_addr))
+        phys_addr = self.page_table_walkel2(page_addr)
+        if phys_addr is None:
+            return None
+
+        if save_in_tlb:
+            self._tlbv2[page_addr] = phys_addr
+
+        return phys_addr + page_offset
+    def stage2_translation(self,ipa_addr,pa_page_offset):
+        #print "stage2_translation.... {0}".format(hex(ipa_addr))
+        pa = self.page_table_walkel2(ipa_addr)
+        #print "stage2_translation.. {0}".format(hex(pa))
+        pa2 = pa + pa_page_offset
+        #print "stage2_translation.. pa2 = {0}".format(hex(pa2))
+        return pa2
 
     def dump_page_tables(self, f):
         f.write(

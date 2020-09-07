@@ -11,8 +11,8 @@
 import struct
 import os
 import sys
-
-from kryo_cache_tlb_parser import main as kryo_cache_parser_main
+import subprocess
+from print_out import print_out_str
 
 """dictionary mapping from (hw_id, client_id, version) to class CacheDump"""
 lookuptable = {}
@@ -89,8 +89,8 @@ struct_CacheDumpType_v1 = [
     ('I', '__reserved2'),
     ('I', '__reserved3'),
 ]
-CacheDumpFormatStr_v1 = ''.join(zip(*struct_CacheDumpType_v1)[0])
-CacheDumpKeys_v1 = zip(*struct_CacheDumpType_v1)[1]
+CacheDumpFormatStr_v1 = ''.join([x[0] for x in struct_CacheDumpType_v1])
+CacheDumpKeys_v1 = [x[1] for x in struct_CacheDumpType_v1]
 
 
 class CacheDumpType_v1(CacheDump):
@@ -177,7 +177,7 @@ class CacheDumpType_v2(object):
         self.outfile = outfile
         """kryo cache parser expects an input file with dump data for the
            caches so temporarily create file with dump data"""
-        infile_fd = ramdump.open_file(self.infile_name)
+        infile_fd = ramdump.open_file(self.infile_name, 'wb')
         core_dump_size = end - start
         buf = ramdump.read_physical(start, core_dump_size)
         infile_fd.write(buf)
@@ -198,24 +198,26 @@ class CacheDumpType_v2(object):
         offset_str = str(offset)
         opts_params = [infile_path, outfile_path, cmd, cpu_name, offset_str]
         argv = [None] * (2 * len(opts_flgs))
-        for i in xrange(len(opts_flgs)):
+        for i in range(len(opts_flgs)):
             argv[2 * i] = opts_flgs[i]
             argv[(2 * i) + 1] = opts_params[i]
-        """Since the kryo cache parser expects the data to be parsed and
-           output to be redirected to the outfile, and we're not calling it
-           from the command line to redirect the output, we can do it like
-           this"""
-        outfile_fd = self.ramdump.open_file(outfile_name)
-        sys.stdout.flush()
-        sys.stdout = outfile_fd
-        kryo_cache_parser_main(argv)
-        sys.stdout.flush()
-        sys.stdout = sys.__stdout__
-        outfile_fd.close()
+
+        with self.ramdump.open_file(outfile_name) as outfile_fd:
+            exec_name = "kryo_cache_tlb_parser.py"
+            exec_abspath = os.path.join(self.ramdump.get_srcdir(), exec_name)
+            args = [sys.executable, exec_abspath]
+            args.extend(argv)
+            p = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                               universal_newlines=True)
+            if p.returncode < 0:
+                print_out_str("{} Failed with error {}".format(p.args, p.returncode))
+            print_out_str(p.stderr)
+            outfile_fd.write(p.stdout)
+
 
     def post_process(self, datafile_name, tagfile_name):
-        tagfd = self.ramdump.open_file(tagfile_name, 'r')
-        datafd = self.ramdump.open_file(datafile_name, 'r')
+        tagfd = self.ramdump.open_file(tagfile_name, 'rt')
+        datafd = self.ramdump.open_file(datafile_name, 'rt')
 
         #discard first line since it's just a header
         tagfd.readline()
@@ -256,7 +258,7 @@ class CacheDumpType_v3(object):
         self.outfile = outfile
         """kryo cache parser expects an input file with dump data for the
            caches so temporarily create file with dump data"""
-        infile_fd = ramdump.open_file(self.infile_name)
+        infile_fd = ramdump.open_file(self.infile_name, 'wb')
         core_dump_size = end - start
         buf = ramdump.read_physical(start, core_dump_size)
         infile_fd.write(buf)
@@ -281,7 +283,7 @@ class CacheDumpType_v3(object):
         exec_path = sys.argv[0].strip("ramparse.py")
         exec_path += "kryo_cache_tlb_json_parser.py"
 
-        for i in xrange(len(opts_flgs)):
+        for i in range(len(opts_flgs)):
             argv[2 * i] = opts_flgs[i]
             argv[(2 * i) + 1] = opts_params[i]
 

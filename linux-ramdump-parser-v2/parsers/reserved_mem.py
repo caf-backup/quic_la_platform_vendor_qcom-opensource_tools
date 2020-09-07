@@ -34,7 +34,7 @@ def print_reserved_mem(ramdump):
         size = ramdump.read_structure_field(
                             reserved_mem, 'struct reserved_mem', 'size')
         output_file.write("\t{\n\t\t")
-        output_file.write(str.format(name_addr, name, base, size, size/1024,
+        output_file.write(str.format(name_addr, name, base, size, size // 1024,
                                      base, base+size))
         output_file.write("}\n")
         index = index + 1
@@ -79,7 +79,7 @@ def page_trace(ramdump, pfn):
         page_owner_ops_offset = ramdump.read_structure_field(
                 'page_owner_ops', 'struct page_ext_operations', 'offset')
     phys = pfn << 12
-    if phys is None or phys is 0:
+    if phys == None or phys == 0:
         return
 
     if ramdump.is_config_defined('CONFIG_MEMORY_HOTPLUG'):
@@ -221,7 +221,7 @@ def cma_region_dump(ramdump, cma, cma_name):
                         cma, 'struct cma', 'count')
     bitmap = ramdump.read_structure_field(
                         cma, 'struct cma', 'bitmap')
-    bitmap_end = bitmap + cma_count / 8
+    bitmap_end = bitmap + cma_count // 8
     in_system = 1
     end_pfn = base_pfn + cma_count
     name = "cma_report_" + cma_name + ".txt"
@@ -238,7 +238,7 @@ def cma_region_dump(ramdump, cma, cma_name):
 
     byte_index = 0
     PFNS_PER_BYTE = 8
-    COUNT_TO_BYTE = cma_count / PFNS_PER_BYTE
+    COUNT_TO_BYTE = cma_count // PFNS_PER_BYTE
 
     while byte_index < COUNT_TO_BYTE:
         pfn_index = 0
@@ -258,7 +258,7 @@ def cma_region_dump(ramdump, cma, cma_name):
                 pfn_to_avance = parse_pfn(ramdump, pfn, cma, op_file)
                 pfn_index = pfn_index+pfn_to_avance
                 if pfn_index >= PFNS_PER_BYTE:
-                    byte_to_advance = pfn_index / PFNS_PER_BYTE
+                    byte_to_advance = pfn_index // PFNS_PER_BYTE
                     pfn_index = pfn_index % 8
                     byte_index = byte_index + byte_to_advance
                     if byte_index >= COUNT_TO_BYTE:
@@ -325,7 +325,7 @@ def parse_softirq_stat(ramdump):
     irq_stat_addr = ramdump.address_of('irq_stat')
     softirq_name_addr = ramdump.address_of('softirq_to_name')
     sizeof_softirq_name = ramdump.sizeof('softirq_to_name')
-    sofrirq_name_arr_size = sizeof_softirq_name / ramdump.sizeof('char *')
+    sofrirq_name_arr_size = sizeof_softirq_name // ramdump.sizeof('char *')
     no_of_cpus = ramdump.get_num_cpus()
     index = 0
     size_of_irq_stat = ramdump.sizeof('irq_cpustat_t')

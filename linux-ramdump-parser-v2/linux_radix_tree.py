@@ -52,7 +52,7 @@ class RadixTreeWalker(object):
 
         shift = self.ramdump.read_byte(radix_tree_node + rnode_shift_offset)
 
-        height = (shift / RADIX_TREE_MAP_SHIFT) + 1
+        height = (shift // RADIX_TREE_MAP_SHIFT) + 1
         for off in range(0, RADIX_TREE_MAP_SIZE):
             slot = 0
             shift = (height - 1) * RADIX_TREE_MAP_SHIFT
