@@ -841,6 +841,35 @@ sysdbg_neon128_register_type_v2_0 = ''.join([
     'Q',  # q15-upper
 ])
 
+cpu_per_regiter_no_format = ['pstate']
+
+cpu_per_regiter_format = {}
+cpu_per_regiter_format['tpidr_el0'] = 'Data.Set SPR:0x33D02 %Quad '
+cpu_per_regiter_format['tpidrro_el0'] = 'Data.Set SPR:0x33D03 %Quad '
+cpu_per_regiter_format['cpacr_el1'] = 'Data.Set SPR:0x30102 %Quad '
+cpu_per_regiter_format['csselr_el1'] = 'Data.Set SPR:0x32000 %Quad '
+cpu_per_regiter_format['esr_el1'] = 'Data.Set SPR:0x30520 %Quad '
+cpu_per_regiter_format['far_el1'] = 'Data.Set SPR:0x30600 %Quad '
+cpu_per_regiter_format['isr_el1'] = 'Data.Set SPR:0x30C10 %Quad '
+cpu_per_regiter_format['par_el1'] = 'Data.Set SPR:0x30740 %Quad '
+cpu_per_regiter_format['mair_el1'] = 'Data.Set SPR:0x30A20 %Quad '
+cpu_per_regiter_format['sctlr_el1'] = 'Data.Set SPR:0x30100 %Quad '
+cpu_per_regiter_format['tcr_el1'] = 'Data.Set SPR:0x30202 %Quad '
+cpu_per_regiter_format['tpidr_el1'] = 'Data.Set SPR:0x30D04 %Quad '
+cpu_per_regiter_format['ttbr0_el1'] = 'Data.Set SPR:0x30200 %Quad '
+cpu_per_regiter_format['ttbr1_el1'] = 'Data.Set SPR:0x30201 %Quad '
+cpu_per_regiter_format['vbar_el1'] = 'Data.Set SPR:0x30C00 %Quad '
+cpu_per_regiter_format['cptr_el2'] = 'Data.Set SPR:0x34112 %Quad '
+cpu_per_regiter_format['hcr_el2'] = 'Data.Set SPR:0x34110 %Quad '
+cpu_per_regiter_format['mdcr_el2'] = 'Data.Set SPR:0x34111 %Quad '
+cpu_per_regiter_format['vtcr_el2'] = 'Data.Set SPR:0x34212 %Quad '
+cpu_per_regiter_format['vttbr_el2'] = 'Data.Set SPR:0x34210 %Quad '
+cpu_per_regiter_format['cntkctl_el1'] = 'Data.Set SPR:0x30E10 %Quad '
+cpu_per_regiter_format['cntv_ctl_el0'] = 'Data.Set SPR:0x33E31 %Quad '
+cpu_per_regiter_format['cntv_cval_el0'] = 'Data.Set SPR:0x33E32 %Quad '
+cpu_per_regiter_format['cntv_tval_el0'] = 'Data.Set SPR:0x33E30 %Quad '
+
+
 cpu_name = (
     'Invalid',
     'A53',
@@ -1062,10 +1091,14 @@ class TZCpuCtx_v2():
                 print_out_str('   {0:8} = 0x{1:016x}'.format(
                               reg_name, self.regs[reg_name]))
             if t32_name is not None:
-                if reg_name.startswith('cpu_state_'):
+                if reg_name.startswith('cpu_state_') or reg_name.startswith('pstate') :
                     continue
-                outfile.write(
-                    'r.s {0} 0x{1:x}\n'.format(t32_name, self.regs[reg_name]))
+                if t32_name in cpu_per_regiter_format.keys():
+                    outfile.write(
+                        '{0} 0x{1:x}\n'.format(cpu_per_regiter_format[t32_name], self.regs[reg_name]))
+                else:
+                    outfile.write(
+                        'r.s {0} 0x{1:x}\n'.format(t32_name, self.regs[reg_name]))
 
 
 class TZRegDump_v2():
