@@ -87,23 +87,24 @@ class FtraceParser_Event(object):
         #local_t_commita = self.ramdump.read_u64(buffer_data_page_commit + local_t_commita_offset)
         #commit = self.ramdump.read_u64(local_t_commita + atomic64_t_counter_offset)
         commit = buffer_data_page_commit
-        buffer_data_page_end = buffer_data_page + commit
-        if self.ramdump.arm64:
-            timestamp = self.ramdump.read_u64(buffer_data_page + buffer_data_page_time_stamp_offset)
-        else:
-            timestamp = self.ramdump.read_u32(buffer_data_page + buffer_data_page_time_stamp_offset)
+        
+        if commit and commit > 0:
+            buffer_data_page_end = buffer_data_page + commit
+            if self.ramdump.arm64:
+                timestamp = self.ramdump.read_u64(buffer_data_page + buffer_data_page_time_stamp_offset)
+            else:
+                timestamp = self.ramdump.read_u32(buffer_data_page + buffer_data_page_time_stamp_offset)
 
-        rb_event = buffer_data_page + buffer_data_page_data_offset
-        #print "buffer_data_page_end = {0}".format(hex(buffer_data_page_end))
-        #print "rb_event = {0}".format(hex(rb_event))
-        rb_event_array_offset = self.ramdump.field_offset(
-            'struct ring_buffer_event', 'array')
-        rb_event_timedelta_offset = self.ramdump.field_offset(
-            'struct ring_buffer_event', 'time_delta')
-        rb_event_typelen_offset = self.ramdump.field_offset(
-            'struct ring_buffer_event', 'type_len')
-        trace_entry_offset = self.ramdump.field_offset('struct trace_entry ', 'type')
-        if commit > 0:
+            rb_event = buffer_data_page + buffer_data_page_data_offset
+            #print "buffer_data_page_end = {0}".format(hex(buffer_data_page_end))
+            #print "rb_event = {0}".format(hex(rb_event))
+            rb_event_array_offset = self.ramdump.field_offset(
+                'struct ring_buffer_event', 'array')
+            rb_event_timedelta_offset = self.ramdump.field_offset(
+                'struct ring_buffer_event', 'time_delta')
+            rb_event_typelen_offset = self.ramdump.field_offset(
+                'struct ring_buffer_event', 'type_len')
+            trace_entry_offset = self.ramdump.field_offset('struct trace_entry ', 'type')
             while( rb_event < buffer_data_page_end):
                 time_delta = self.ramdump.read_u32(rb_event + rb_event_timedelta_offset)
                 #print_out_str("time_delta before = {0} {1} ".format(time_delta,hex(rb_event)))
@@ -647,15 +648,16 @@ class FtraceParser_Event(object):
         if self.nr_pages > NR_TO_REWIND:
             while page_index < self.nr_pages:
                 #buffer_page_entry_list = self.ramdump.read_u64(buffer_page_entry + buffer_page_list_offset)
-                self.parse_buffer_page_entry(buffer_page_entry)
-                #print "buffer_page_list_offset = {0}".format(buffer_page_list_offset)
-                buffer_page_entry_list = buffer_page_entry + buffer_page_list_offset
-                #print "buffer_page_entry_list = {0}".format(buffer_page_entry_list)
-                if self.ramdump.arm64:
-                    buffer_page_entry = self.ramdump.read_u64(buffer_page_entry_list + buffer_page_list_prev_offset)
-                else:
-                    buffer_page_entry = self.ramdump.read_u32(buffer_page_entry_list + buffer_page_list_prev_offset)
-                #print "buffer_page_entry inside loop = {0}".format(hex(buffer_page_entry))
+                if buffer_page_entry:
+                    self.parse_buffer_page_entry(buffer_page_entry)
+                    #print "buffer_page_list_offset = {0}".format(buffer_page_list_offset)
+                    buffer_page_entry_list = buffer_page_entry + buffer_page_list_offset
+                    #print "buffer_page_entry_list = {0}".format(buffer_page_entry_list)
+                    if self.ramdump.arm64:
+                        buffer_page_entry = self.ramdump.read_u64(buffer_page_entry_list + buffer_page_list_prev_offset)
+                    else:
+                        buffer_page_entry = self.ramdump.read_u32(buffer_page_entry_list + buffer_page_list_prev_offset)
+                    #print "buffer_page_entry inside loop = {0}".format(hex(buffer_page_entry))
                 page_index = page_index + 1
                 #print "page_index = %d" % page_index
                 #if (page_index == ( NR_TO_REWIND + 1)):
