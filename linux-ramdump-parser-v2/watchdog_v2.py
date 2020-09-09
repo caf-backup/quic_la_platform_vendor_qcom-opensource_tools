@@ -1289,6 +1289,7 @@ def ns_to_sec(ns):
 
 def get_wdog_timing(ramdump):
     logical_map = []
+    runq_online_bits = 0
     jiffies = ramdump.read_word('jiffies')
     last_jiffies_update = ramdump.read_s64('last_jiffies_update')
     tick_do_timer_cpu = ramdump.read_s32('tick_do_timer_cpu')
@@ -1336,6 +1337,16 @@ def get_wdog_timing(ramdump):
             tick_bc_evt_dev, 'struct clock_event_device', 'cpumask')
         tick_bc_cpumask_bits = ramdump.read_structure_field(
             tick_bc_cpumask, 'struct cpumask', 'bits')
+
+    if ramdump.is_config_defined('CONFIG_SMP'):
+        runqueues_addr = ramdump.address_of('runqueues')
+        online_offset = ramdump.field_offset('struct rq', 'online')
+
+        for i in ramdump.iter_cpus():
+            rq_addr = runqueues_addr + ramdump.per_cpu_offset(i)
+            online = ramdump.read_int(rq_addr + online_offset)
+            runq_online_bits |= (online << i)
+
     if (ramdump.kernel_version >= (4, 9, 0)):
         cpu_online_bits = ramdump.read_word('__cpu_online_mask')
     else:
@@ -1402,6 +1413,7 @@ def get_wdog_timing(ramdump):
                 print_out_str('Current jiffies crossed pet_timer expires jiffies')
 
     print_out_str('CPU online bits: {0:08b}'.format(cpu_online_bits))
+    print_out_str('CPU runqueue online bits: {0:08b}'.format(runq_online_bits))
     print_out_str('CPU isolated bits: {0:08b}'.format(cpu_isolated_bits))
     print_out_str('pet_timer_expires: {0}'.format(pet_timer_expires))
     print_out_str('Current jiffies  : {0}'.format(jiffies))
