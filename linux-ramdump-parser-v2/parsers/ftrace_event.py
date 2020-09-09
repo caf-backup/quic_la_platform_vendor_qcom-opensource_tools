@@ -331,24 +331,45 @@ class FtraceParser_Event(object):
                 prev_pid = self.ramdump.read_u32(ftrace_raw_entry + trace_event_raw_prev_pid)
                 prev_prio = self.ramdump.read_u32(ftrace_raw_entry + trace_event_raw_prev_prio)
                 prev_state1 = self.ramdump.read_u32(ftrace_raw_entry + trace_event_raw_prev_state)
-                if ( prev_state1 == 0) or ( prev_state1 == 0x400):
+                '''if ( prev_state1 == 0) or ( prev_state1 == 0x400):
                     prev_state1 = "R";
                 elif ( prev_state1 == 1):
                     prev_state1 = "S";
                 elif ( prev_state1 == 2):
                     prev_state1 = "D";
                 else:
-                    prev_state1 = "T";
-
+                    prev_state1 = "T";'''
+                prev_state_info = (prev_state1 & ((((0x0000 | 0x0001 | 0x0002 | 0x0004 | 0x0008 | 0x0010 | 0x0020 | 0x0040) + 1) << 1) - 1))
+                if ( prev_state_info == 0):
+                    prev_state_info = "R"
+                elif ( prev_state_info == 1):
+                    prev_state_info = "S"
+                elif ( prev_state_info == 2):
+                    prev_state_info = "D"
+                elif ( prev_state_info == 4):
+                    prev_state_info = "T"
+                elif ( prev_state_info == 8):
+                    prev_state_info = "t"
+                elif ( prev_state_info == 16):
+                    prev_state_info = "X"
+                elif ( prev_state_info == 32):
+                    prev_state_info = "Z"
+                elif ( prev_state_info == 64):
+                    prev_state_info = "P"
+                elif ( prev_state_info == 128):
+                    prev_state_info = "I"
+                prev_state_info2 = ""
+                if prev_state_info:
+                    prev_state_info2 = "+"
                 space_data = self.remaing_space(space_count,len("sched_switch:"))
                 if DEBUG_ENABLE == 1:
                     self.ftrace_out.write(
                         "                <TBD>   {0}  {1}: sched_switch:{2}{3}:{4}     [{5}]     {6} ==> {7}:{8}     [{9}]\n".format(self.cpu, round(local_timestamp/1000000000.0,6),
-                                                                                                                                           space_data,prev_comm,prev_pid,prev_prio,prev_state1,next_comm,next_pid,next_prio))
+                                                                                                                                           space_data,prev_comm,prev_pid,prev_prio,prev_state_info,next_comm,next_pid,next_prio))
 
                 ##t = local_timestamp / 1000000000.0
                 temp_data = "                {10}   {0}  {1:.6f}: sched_switch:{2}{3}:{4}     [{5}]     {6} ==> {7}:{8}     [{9}]\n".format(self.cpu, round(local_timestamp/1000000000.0,6),
-                                                                                                                                       space_data,prev_comm,prev_pid,prev_prio,prev_state1,next_comm,next_pid,next_prio,curr_com)
+                                                                                                                                       space_data,prev_comm,prev_pid,prev_prio,prev_state_info,next_comm,next_pid,next_prio,curr_com)
                 self.ftrace_time_data[t] = temp_data
         elif event_name == "softirq_raise":
                 trace_event_softirq_vec_offset = self.ramdump.field_offset('struct ' + 'trace_event_raw_softirq', "vec")
