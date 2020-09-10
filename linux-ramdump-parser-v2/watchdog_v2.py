@@ -414,6 +414,162 @@ sysdbg_cpu64_ctxt_regs_type_v1_4 = ''.join([
     'Q',  # __reserved3
 ])
 
+
+
+sysdbg_cpu64_gprs_register_names_v2_0 = [
+    ('x0', 'x0', False),
+    ('x1', 'x1', False),
+    ('x2', 'x2', False),
+    ('x3', 'x3', False),
+    ('x4', 'x4', False),
+    ('x5', 'x5', False),
+    ('x6', 'x6', False),
+    ('x7', 'x7', False),
+    ('x8', 'x8', False),
+    ('x9', 'x9', False),
+    ('x10', 'x10', False),
+    ('x11', 'x11', False),
+    ('x12', 'x12', False),
+    ('x13', 'x13', False),
+    ('x14', 'x14', False),
+    ('x15', 'x15', False),
+    ('x16', 'x16', False),
+    ('x17', 'x17', False),
+    ('x18', 'x18', False),
+    ('x19', 'x19', False),
+    ('x20', 'x20', False),
+    ('x21', 'x21', False),
+    ('x22', 'x22', False),
+    ('x23', 'x23', False),
+    ('x24', 'x24', False),
+    ('x25', 'x25', False),
+    ('x26', 'x26', False),
+    ('x27', 'x27', False),
+    ('x28', 'x28', False),
+    ('x29', 'x29', False),
+    ('x30', 'x30', True),
+    ('pc', 'pc', True),
+    ('sp_el0', 'sp_el0', False),
+    ('pstate', 'pstate', False),    
+]
+
+sysdbg_cpu64_gprs_ctxt_regs_type_v2_0 = ''.join([
+    'Q',  # x0
+    'Q',  # x1
+    'Q',  # x2
+    'Q',  # x3
+    'Q',  # x4
+    'Q',  # x5
+    'Q',  # x6
+    'Q',  # x7
+    'Q',  # x8
+    'Q',  # x9
+    'Q',  # x10
+    'Q',  # x11
+    'Q',  # x12
+    'Q',  # x13
+    'Q',  # x14
+    'Q',  # x15
+    'Q',  # x16
+    'Q',  # x17
+    'Q',  # x18
+    'Q',  # x19
+    'Q',  # x20
+    'Q',  # x21
+    'Q',  # x22
+    'Q',  # x23
+    'Q',  # x24
+    'Q',  # x25
+    'Q',  # x26
+    'Q',  # x27
+    'Q',  # x28
+    'Q',  # x29
+    'Q',  # x30
+    'Q',  # pc
+    'Q',  # sp_el0
+    'Q',  # pstate
+])
+
+sysdbg_cpu64_el1_register_names_v2_0 = [
+    ('cpacr_el1', 'cpacr_el1', False),
+    ('csselr_el1', 'csselr_el1', False),
+    ('elr_el1', 'elr_el1', False),
+    ('esr_el1', 'esr_el1', False),
+    ('far_el1', 'far_el1', False),
+    ('isr_el1', 'isr_el1', False),
+    ('par_el1', 'par_el1', False),
+    ('mair_el1', 'mair_el1', False),
+    ('sctlr_el1', 'sctlr_el1', False),
+    ('sp_el1', 'sp_el1', False),
+    ('spsr_el1', 'spsr_el1', False),
+    ('tcr_el1', 'tcr_el1', False),
+    ('tpidr_el1', 'tpidr_el1', False),
+    ('ttbr0_el1', 'ttbr0_el1', False),
+    ('ttbr1_el1', 'ttbr1_el1', False),
+    ('vbar_el1', 'vbar_el1', False),
+        
+]
+
+sysdbg_cpu64_el1_ctxt_regs_type_v2_0 = ''.join([
+    'Q',  # x0
+    'Q',  # x1
+    'Q',  # x2
+    'Q',  # x3
+    'Q',  # x4
+    'Q',  # x5
+    'Q',  # x6
+    'Q',  # x7
+    'Q',  # x8
+    'Q',  # x9
+    'Q',  # x10
+    'Q',  # x11
+    'Q',  # x12
+    'Q',  # x13
+    'Q',  # x14
+    'Q',  # x15    
+])
+
+sysdbg_cpu64_el0_register_names_v2_0 = [
+    ('tpidr_el0', 'tpidr_el0', False),
+    ('tpidrro_el0', 'tpidrro_el0', False),        
+]
+
+sysdbg_cpu64_el0_ctxt_regs_type_v2_0 = ''.join([
+    'Q',  # x0
+    'Q',  # x1    
+])
+
+sysdbg_cpu64_vm_el2_register_names_v2_0 = [
+    ('cptr_el2', 'cptr_el2', False),
+    ('hcr_el2', 'hcr_el2', False),
+    ('mdcr_el2', 'mdcr_el2', False),
+    ('vtcr_el2', 'vtcr_el2', False),
+    ('vttbr_el2', 'vttbr_el2', False),
+    
+]
+
+sysdbg_cpu64_vm_el2_ctxt_regs_type_v2_0 = ''.join([
+    'Q',
+    'Q',
+    'Q',
+    'Q',
+    'Q',    
+])
+
+sysdbg_cpu64_cntv_el10_register_names_v2_0 = [
+    ('cntkctl_el1', 'cntkctl_el1', False),
+    ('cntv_ctl_el0', 'cntv_ctl_el0', False),
+    ('cntv_cval_el0', 'cntv_cval_el0', False),
+    ('cntv_tval_el0', 'cntv_tval_el0', False),
+]
+
+sysdbg_cpu64_cntv_el10_ctxt_regs_type_v2_0 = ''.join([
+    'Q',
+    'Q',
+    'Q',
+    'Q',    
+])
+
 sysdbg_neon128_register_names_v1_4 = [
     ('q0-lower', 'v0-lower', False),
     ('q0-upper', 'v0-upper', False),
@@ -548,6 +704,143 @@ sysdbg_neon128_register_type_v1_4 = ''.join([
     'Q',  # q31-upper
 ])
 
+
+
+sysdbg_neon128_register_names_v2_0 = [
+    ('v0-lower', 'v0-lower', False),
+    ('v0-upper', 'v0-upper', False),
+    ('v1-lower', 'v1-lower', False),
+    ('v1-upper', 'v1-upper', False),
+    ('v2-lower', 'v2-lower', False),
+    ('v2-upper', 'v2-upper', False),
+    ('v3-lower', 'v3-lower', False),
+    ('v3-upper', 'v3-upper', False),
+    ('v4-lower', 'v4-lower', False),
+    ('v4-upper', 'v4-upper', False),
+    ('v5-lower', 'v5-lower', False),
+    ('v5-upper', 'v5-upper', False),
+    ('v6-lower', 'v6-lower', False),
+    ('v6-upper', 'v6-upper', False),
+    ('v7-lower', 'v7-lower', False),
+    ('v7-upper', 'v7-upper', False),
+    ('v8-lower', 'v8-lower', False),
+    ('v8-upper', 'v8-upper', False),
+    ('v9-lower', 'v9-lower', False),
+    ('v9-upper', 'v9-upper', False),
+    ('v10-lower', 'v10-lower', False),
+    ('v10-upper', 'v10-upper', False),
+    ('v11-lower', 'v11-lower', False),
+    ('v11-upper', 'v11-upper', False),
+    ('v12-lower', 'v12-lower', False),
+    ('v12-upper', 'v12-upper', False),
+    ('v13-lower', 'v13-lower', False),
+    ('v13-upper', 'v13-upper', False),
+    ('v14-lower', 'v14-lower', False),
+    ('v14-upper', 'v14-upper', False),
+    ('v15-lower', 'v15-lower', False),
+    ('v15-upper', 'v15-upper', False),
+    ('v16-lower', 'v16-lower', False),
+    ('v16-upper', 'v16-upper', False),
+    ('v17-lower', 'v17-lower', False),
+    ('v17-upper', 'v17-upper', False),
+    ('v18-lower', 'v18-lower', False),
+    ('v18-upper', 'v18-upper', False),
+    ('v19-lower', 'v19-lower', False),
+    ('v19-upper', 'v19-upper', False),
+    ('v20-lower', 'v20-lower', False),
+    ('v20-upper', 'v20-upper', False),
+    ('v21-lower', 'v21-lower', False),
+    ('v21-upper', 'v21-upper', False),
+    ('v22-lower', 'v22-lower', False),
+    ('v22-upper', 'v22-upper', False),
+    ('v23-lower', 'v23-lower', False),
+    ('v23-upper', 'v23-upper', False),
+    ('v24-lower', 'v24-lower', False),
+    ('v24-upper', 'v24-upper', False),
+    ('v25-lower', 'v25-lower', False),
+    ('v25-upper', 'v25-upper', False),
+    ('v26-lower', 'v26-lower', False),
+    ('v26-upper', 'v26-upper', False),
+    ('v27-lower', 'v27-lower', False),
+    ('v27-upper', 'v27-upper', False),
+    ('v28-lower', 'v28-lower', False),
+    ('v28-upper', 'v28-upper', False),
+    ('v29-lower', 'v29-lower', False),
+    ('v29-upper', 'v29-upper', False),
+    ('v30-lower', 'v30-lower', False),
+    ('v30-upper', 'v30-upper', False),
+    ('v31-lower', 'v31-lower', False),
+    ('v31-upper', 'v31-upper', False),
+    
+]
+
+sysdbg_neon128_register_type_v2_0 = ''.join([
+    'Q',  # q0-upper
+    'Q',  # q1-lower
+    'Q',  # q1-upper
+    'Q',  # q2-lower
+    'Q',  # q2-upper
+    'Q',  # q3-lower
+    'Q',  # q3-upper
+    'Q',  # q4-lower
+    'Q',  # q4-upper
+    'Q',  # q5-lower
+    'Q',  # q5-upper
+    'Q',  # q6-lower
+    'Q',  # q6-upper
+    'Q',  # q7-lower
+    'Q',  # q7-upper
+    'Q',  # q8-lower
+    'Q',  # q8-upper
+    'Q',  # q9-lower
+    'Q',  # q9-upper
+    'Q',  # q10-lower
+    'Q',  # q10-upper
+    'Q',  # q11-lower
+    'Q',  # q11-upper
+    'Q',  # q12-lower
+    'Q',  # q12-upper
+    'Q',  # q13-lower
+    'Q',  # q13-upper
+    'Q',  # q14-lower
+    'Q',  # q14-upper
+    'Q',  # q15-lower
+    'Q',  # q15-upper
+    'Q',  # q16-lower
+    'Q',  # q0-lower
+    'Q',  # q0-upper
+    'Q',  # q1-lower
+    'Q',  # q1-upper
+    'Q',  # q2-lower
+    'Q',  # q2-upper
+    'Q',  # q3-lower
+    'Q',  # q3-upper
+    'Q',  # q4-lower
+    'Q',  # q4-upper
+    'Q',  # q5-lower
+    'Q',  # q5-upper
+    'Q',  # q6-lower
+    'Q',  # q6-upper
+    'Q',  # q7-lower
+    'Q',  # q7-upper
+    'Q',  # q8-lower
+    'Q',  # q8-upper
+    'Q',  # q9-lower
+    'Q',  # q9-upper
+    'Q',  # q10-lower
+    'Q',  # q10-upper
+    'Q',  # q11-lower
+    'Q',  # q11-upper
+    'Q',  # q12-lower
+    'Q',  # q12-upper
+    'Q',  # q13-lower
+    'Q',  # q13-upper
+    'Q',  # q14-lower
+    'Q',  # q14-upper
+    'Q',  # q15-lower
+    'Q',  # q15-upper
+])
+
 cpu_name = (
     'Invalid',
     'A53',
@@ -555,10 +848,22 @@ cpu_name = (
     'Hydra',
 )
 
+msm_dump_regset_ids = []
+msm_dump_regset_ids.append('MSM_DUMP_REGSET_IDS_AARCH64_GPRS')
+msm_dump_regset_ids.append('MSM_DUMP_REGSET_IDS_AARCH64_NEON')
+msm_dump_regset_ids.append('MSM_DUMP_REGSET_IDS_AARCH64_SYSREGS_EL0')
+msm_dump_regset_ids.append('MSM_DUMP_REGSET_IDS_AARCH64_EL1')
+msm_dump_regset_ids.append('MSM_DUMP_REGSET_IDS_AARCH64_VM_EL2')
+msm_dump_regset_ids.append('MSM_DUMP_REGSET_IDS_AARCH64_CNTV_EL10')
+
 sysdbg_cpu64_register_names = {}
 sysdbg_cpu64_ctxt_regs_type = {}
 sysdbg_cpu32_register_names = {}
 sysdbg_cpu32_ctxt_regs_type = {}
+
+sysdbg_cpu64_register_namesv20 = {}
+sysdbg_cpu64_ctxt_regs_typev20 = {}
+
 
 sysdbg_cpu64_register_names['default'] = sysdbg_cpu64_register_names_default
 sysdbg_cpu64_ctxt_regs_type['default'] = sysdbg_cpu64_ctxt_regs_type_default
@@ -574,6 +879,27 @@ sysdbg_cpu64_register_names['1.4'] = sysdbg_cpu64_register_names_v1_4
 sysdbg_cpu64_ctxt_regs_type['1.4'] = sysdbg_cpu64_ctxt_regs_type_v1_4
 
 
+# Version 2.0
+sysdbg_cpu64_register_namesv20['MSM_DUMP_REGSET_IDS_AARCH64_GPRS'] = sysdbg_cpu64_gprs_register_names_v2_0
+sysdbg_cpu64_ctxt_regs_typev20['MSM_DUMP_REGSET_IDS_AARCH64_GPRS'] = sysdbg_cpu64_gprs_ctxt_regs_type_v2_0
+
+sysdbg_cpu64_register_namesv20['MSM_DUMP_REGSET_IDS_AARCH64_EL1'] = sysdbg_cpu64_el1_register_names_v2_0
+sysdbg_cpu64_ctxt_regs_typev20['MSM_DUMP_REGSET_IDS_AARCH64_EL1'] = sysdbg_cpu64_el1_ctxt_regs_type_v2_0
+
+sysdbg_cpu64_register_namesv20['MSM_DUMP_REGSET_IDS_AARCH64_SYSREGS_EL0'] = sysdbg_cpu64_el0_register_names_v2_0
+sysdbg_cpu64_ctxt_regs_typev20['MSM_DUMP_REGSET_IDS_AARCH64_SYSREGS_EL0'] = sysdbg_cpu64_el0_ctxt_regs_type_v2_0
+
+sysdbg_cpu64_register_namesv20['MSM_DUMP_REGSET_IDS_AARCH64_VM_EL2'] = sysdbg_cpu64_vm_el2_register_names_v2_0
+sysdbg_cpu64_ctxt_regs_typev20['MSM_DUMP_REGSET_IDS_AARCH64_VM_EL2'] = sysdbg_cpu64_vm_el2_ctxt_regs_type_v2_0
+
+sysdbg_cpu64_register_namesv20['MSM_DUMP_REGSET_IDS_AARCH64_CNTV_EL10'] = sysdbg_cpu64_cntv_el10_register_names_v2_0
+sysdbg_cpu64_ctxt_regs_typev20['MSM_DUMP_REGSET_IDS_AARCH64_CNTV_EL10'] = sysdbg_cpu64_cntv_el10_ctxt_regs_type_v2_0
+
+sysdbg_cpu64_register_namesv20['MSM_DUMP_REGSET_IDS_AARCH64_NEON'] = sysdbg_neon128_register_names_v2_0
+sysdbg_cpu64_ctxt_regs_typev20['MSM_DUMP_REGSET_IDS_AARCH64_NEON'] = sysdbg_neon128_register_type_v2_0
+sysdbg_cpu64_register_names['2.0'] = sysdbg_cpu64_register_namesv20
+sysdbg_cpu64_ctxt_regs_type['2.0'] = sysdbg_cpu64_ctxt_regs_typev20
+
 class NeonCtxType():
 
     def __init__(self, regs_t, ramdump):
@@ -588,6 +914,19 @@ class NeonCtxType():
             self.regs[register_name[i][0]] = r
             i += 1
 
+class NeonCtxTypev2():
+
+    def __init__(self, regs_t, ramdump):
+        i = 0
+        self.regs = {}
+
+        if ramdump.arm64 is None:
+            return
+
+        register_name = sysdbg_neon128_register_names_v2_0
+        for r in regs_t:
+            self.regs[register_name[i][0]] = r
+            i += 1
 
 class TZCpuCtx_v2():
 
@@ -641,28 +980,66 @@ class TZCpuCtx_v2():
             print_out_str(
                 '!!! PC computed by SDI {0} and Parser {1} are different!'
                 .format(hex(pc), hex(self.regs['pc'])))
+    
+    def compute_pcv2(self, neon_regs):
+        pstate = self.regs['pstate']
+        pc = self.regs['pc']
+        if is_set(cpu_state_3, 30):
+            self.regs['pc'] = self.regs['x30']
+        else:
+            val = (pstate >> 2) & 0x3
+            if val == 0x0:
+                self.regs['pc'] = self.regs['elr_el1']
+            elif val == 0x1:
+                self.regs['pc'] = self.regs['elr_el1']
+            else:
+                print_out_str('!!! AArch64 PC Approximation Logic Failed!')
+
+        if pc and pc != self.regs['pc']:
+            print_out_str(
+                '!!! PC computed by SDI {0} and Parser {1} are different!'
+                .format(hex(pc), hex(self.regs['pc'])))
 
     def __init__(self, version, regs_t, neon_regs, ramdump):
         i = 0
         self.regs = {}
         self.version = version
         if ramdump.arm64:
-            register_name = sysdbg_cpu64_register_names[self.version]
+            if self.version == '2.0':
+                register_names = sysdbg_cpu64_register_names[self.version]
+                register_name = []
+                for item in msm_dump_regset_ids:
+                    if item in register_names and 'MSM_DUMP_REGSET_IDS_AARCH64_NEON' not in item:
+                        for each_reg in register_names[item]:
+                            register_name.append(each_reg)
+            else:
+                register_name = sysdbg_cpu64_register_names[self.version]
         else:
             register_name = sysdbg_cpu32_register_names[self.version]
-
+        
         for r in regs_t:
-            self.regs[register_name[i][0]] = r
+            self.regs[register_name[i][0]] = r      
             i += 1
-
         if self.version == '1.4' and self.regs['cpu_state_0'] == 0x1:
             print_out_str(
                 '!!! PC is invalid, applying "PC Approximation Logic"!')
             self.compute_pc(neon_regs)
+        if self.version == '2.0' and self.regs['pstate'] == 0x1:
+            print_out_str(
+                '!!! PC is invalid, applying "PC Approximation Logic....++++++"!')
+            self.compute_pcv2(neon_regs)
 
     def print_regs(self, outfile, ramdump):
         if ramdump.arm64:
-            register_names = sysdbg_cpu64_register_names[self.version]
+            if self.version == '2.0':
+                register_name_all = sysdbg_cpu64_register_names[self.version]
+                register_names = []
+                for item in msm_dump_regset_ids:
+                    if item in register_name_all and 'MSM_DUMP_REGSET_IDS_AARCH64_NEON' not in item:
+                        for each_reg in register_name_all[item]:
+                            register_names.append(each_reg)
+            else:
+                register_names = sysdbg_cpu64_register_names[self.version]
         else:
             register_names = sysdbg_cpu32_register_names[self.version]
         for reg_name, t32_name, print_pc in register_names:
@@ -753,7 +1130,81 @@ class TZRegDump_v2():
         print_out_str('')
         ram_dump.unwind.unwind_backtrace(bt, fp, pc, lr, '')
         print_out_str('')
+    
+    def dump_all_regs_gprs(self, ram_dump):
+        coren_regs = ram_dump.open_file('core{0}_regs.cmm'.format(self.core))
 
+        print_out_str('core{0} regs:'.format(self.core))
+        self.core_regs.print_regs(coren_regs, ram_dump)
+        coren_regs.close()
+
+    def dump_core_pc_gprs(self, ram_dump):
+        pc = self.core_regs.regs['pc']
+        if ram_dump.arm64:
+            lr = self.core_regs.regs['x30']
+            if self.core_regs.regs['pstate'] & 1 == 1: 
+                bt = self.core_regs.regs['sp_el1']
+            elif self.core_regs.regs['pstate'] & 1 == 0: 
+                bt = self.core_regs.regs['sp_el0']
+            fp = self.core_regs.regs['x29']
+        else:
+            lr = self.core_regs.regs['r14_svc']
+            bt = self.core_regs.regs['r13_svc']
+            fp = self.core_regs.regs['r11']
+
+        a = ram_dump.unwind_lookup(pc)
+        if a is not None:
+            symname, offset = a
+        else:
+            symname = 'UNKNOWN'
+            offset = 0
+        print_out_str(
+            'Core {3} PC: {0}+{1:x} <{2:x}>'.format(symname, offset,
+                                                    pc, self.core))
+        a = ram_dump.unwind_lookup(lr)
+        if a is not None:
+            symname, offset = a
+        else:
+            symname = 'UNKNOWN'
+            offset = 0
+        print_out_str(
+            'Core {3} LR: {0}+{1:x} <{2:x}>'.format(symname, offset,
+                                                    lr, self.core))
+        print_out_str('')
+        ram_dump.unwind.unwind_backtrace(bt, fp, pc, lr, '')
+        print_out_str('')
+    def init_regs_v2(self, version, regset_name_addr, core, ram_dump):
+        self.version = '{0}.{1}'.format(version >> 4, version & 0xF)
+        sc_regs = []
+        if ram_dump.arm64:
+            register_names = sysdbg_cpu64_register_names[self.version]
+            ctx_types = sysdbg_cpu64_ctxt_regs_type[self.version]
+            for regset_key_name in regset_name_addr:
+                start_addr = regset_name_addr[regset_key_name][0]
+                end_addr = regset_name_addr[regset_key_name][1]
+                self.start_addr = start_addr
+                self.end_addr = end_addr
+                self.core = core
+                if 'MSM_DUMP_REGSET_IDS_AARCH64_NEON' in regset_key_name:
+                    neon_ctx_regs = ram_dump.read_string(
+                        self.start_addr,
+                        sysdbg_neon128_register_type_v2_0,
+                        False)
+                    neon = NeonCtxTypev2(neon_ctx_regs, ram_dump)
+                    self.neon_regs = neon.regs
+                else:
+                    temp_sc_regs = ram_dump.read_string(
+                        self.start_addr,
+                        ctx_types[regset_key_name],
+                        False)
+                    for each_addr_item in temp_sc_regs:
+                        sc_regs.append(each_addr_item)
+                
+                
+            self.core_regs = TZCpuCtx_v2(self.version, sc_regs,
+                                     self.neon_regs, ram_dump)
+        return True
+    
     def init_regs(self, version, start_addr, end_addr, core, ram_dump):
         self.start_addr = start_addr
         self.end_addr = end_addr

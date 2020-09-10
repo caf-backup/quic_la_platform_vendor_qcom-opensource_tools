@@ -21,6 +21,7 @@ import sys
 import time
 import local_settings
 from scandump_reader import Scandump_v2
+from collections import OrderedDict
 
 from dcc import DccRegDump, DccSramDump
 from pmic import PmicRegDump
@@ -34,8 +35,35 @@ from sysregs import SysRegDump
 from fcmdump import FCM_Dump
 
 MEMDUMPV2_MAGIC = 0x42445953
-MAX_NUM_ENTRIES = 0x162
+MEMDUMPV_HYP_MAGIC = 0x42444832
+MAX_NUM_ENTRIES = 0x164
 IMEM_OFFSET_MEM_DUMP_TABLE = 0x3f010
+
+msm_dump_cpu_type = ['MSM_DUMP_CPU_TYPE_INVALID',
+        'MSM_DUMP_CPU_TYPE_AARCH32',
+        'MSM_DUMP_CPU_TYPE_AARCH64',
+         'MSM_DUMP_CPU_TYPE_HYDRA']
+
+msm_dump_ctx_type= [
+        'MSM_DUMP_CTX_TYPE_PHYS_NS_CPU_CTX',
+        'MSM_DUMP_CTX_TYPE_PHYS_SEC_CPU_CTX',
+        'MSM_DUMP_CTX_TYPE_NS_VCPU_EL10_CTX',
+        'MSM_DUMP_CTX_TYPE_SEC_VCPU_EL10_CTX',
+        'MSM_DUMP_CTX_TYPE_NS_VCPU_NESTED_EL2_CTX']
+
+msm_dump_regset_ids = {}
+msm_dump_regset_ids[0] = 'MSM_DUMP_REGSET_IDS_INVALID'
+msm_dump_regset_ids[16] = 'MSM_DUMP_REGSET_IDS_AARCH64_GPRS'
+msm_dump_regset_ids[17] = 'MSM_DUMP_REGSET_IDS_AARCH64_NEON'
+msm_dump_regset_ids[18] = 'MSM_DUMP_REGSET_IDS_AARCH64_SVE'
+msm_dump_regset_ids[19] = 'MSM_DUMP_REGSET_IDS_AARCH64_SYSREGS_EL0'
+msm_dump_regset_ids[20] = 'MSM_DUMP_REGSET_IDS_AARCH64_EL1'
+msm_dump_regset_ids[21] = 'MSM_DUMP_REGSET_IDS_AARCH64_EL2'
+msm_dump_regset_ids[22] = 'MSM_DUMP_REGSET_IDS_AARCH64_VM_EL2'
+msm_dump_regset_ids[23] = 'MSM_DUMP_REGSET_IDS_AARCH64_EL3'
+msm_dump_regset_ids[24] = 'MSM_DUMP_REGSET_IDS_AARCH64_DBG_EL1'
+msm_dump_regset_ids[25] = 'MSM_DUMP_REGSET_IDS_AARCH64_CNTV_EL10'
+
 
 class client(object):
     MSM_DUMP_DATA_CPU_CTX = 0x00
@@ -168,14 +196,14 @@ class DebugImage_v2():
             input = os.path.join(ram_dump.outdir, input_filename)
         print_out_str(
             'Parsing scandump context start {0:x} end {1:x} {2} {3}'.format(start, end, output, input))
-        header_bin = ram_dump.open_file(input)
+        header_bin = ram_dump.open_file(input, 'wb')
 
         it = range(start, end)
         for i in it:
             val = ram_dump.read_byte(i, False)
             header_bin.write(struct.pack("<B", val))
         header_bin.close()
-        subprocess.call('python {0} -d {1} -o {2} -f {3} -c {4}'.format(scan_wrapper_path, input, output, arch, chipset))
+        subprocess.call('py -2 {0} -d {1} -o {2} -f {3} -c {4}'.format(scan_wrapper_path, input, output, arch, chipset))
         sv2 = Scandump_v2(core_num,ram_dump,version)
         reg_info = sv2.prepare_dict()
         if reg_info is not None:
@@ -202,7 +230,7 @@ class DebugImage_v2():
         if offset is None:
             print_out_str("parse_cpuss start address {0} not found".format(start))
         print_out_str("parse_cpuss offset address = {0} input = {1} cpuss_parser_json = {2}".format(hex(int(offset)),input,cpuss_parser_json))
-        subprocess.call('python {0} -i {1} -O {2} -o {3} -j {4}'.format(cpuss_parser_path, input, hex(int(offset)), ram_dump.outdir, cpuss_parser_json))
+        subprocess.call('py -2 {0} -i {1} -O {2} -o {3} -j {4}'.format(cpuss_parser_path, input, hex(int(offset)), ram_dump.outdir, cpuss_parser_json))
 
     def parse_fcmdump(self, version, start, end, client_id, ram_dump):
         client_name = self.dump_data_id_lookup_table[client_id]
@@ -220,14 +248,66 @@ class DebugImage_v2():
         core = client_id - client.MSM_DUMP_DATA_CPU_CTX
 
         print_out_str(
-            'Parsing CPU{2} context start {0:x} end {1:x}'.format(start, end, core))
+            'Parsing CPU{2} context start {0:x} end {1:x} version {3} client_id-> {4}'.format(start, end, core,version,client_id))
+        if version == 32 or version == "32":
+            ram_dump.gdmi_switch_open()
+            cpu_type_offset  = ram_dump.field_offset(
+                            'struct msm_dump_cpu_ctx', 'cpu_type')
+            ctx_type_offset  = ram_dump.field_offset(
+                            'struct msm_dump_cpu_ctx', 'ctx_type')
+            cpu_id_offset  = ram_dump.field_offset(
+                            'struct msm_dump_cpu_ctx', 'cpu_id')
+            cpu_index_offset  = ram_dump.field_offset(
+                            'struct msm_dump_cpu_ctx', 'affinity')
+            machine_id_offset  = ram_dump.field_offset(
+                            'struct msm_dump_cpu_ctx', 'machine_id')
+            registers_offset   = ram_dump.field_offset(
+                            'struct msm_dump_cpu_ctx', 'registers')
+            regset_num_register_offset  = ram_dump.field_offset(
+                            'struct msm_dump_cpu_ctx', 'num_register_sets')
+            regset_id_offset  = ram_dump.field_offset(
+                            'struct msm_dump_cpu_register_entry', 'regset_id')
+            regset_addr_offset  = ram_dump.field_offset(
+                            'struct msm_dump_cpu_register_entry', 'regset_addr')
 
-        regs = TZRegDump_v2()
-        if regs.init_regs(version, start, end, core, ram_dump) is False:
-            print_out_str('!!! Could not get registers from TZ dump')
-            return
-        regs.dump_core_pc(ram_dump)
-        regs.dump_all_regs(ram_dump)
+            cpu_type = ram_dump.read_u32(start + cpu_type_offset,False)
+            print_out_str("cpu_type = {0}".format(msm_dump_cpu_type[cpu_type]))
+            ctx_type = ram_dump.read_u32(start + ctx_type_offset,False)
+            print_out_str("ctx_type = {0}".format(msm_dump_ctx_type[ctx_type]))
+            cpu_index = ram_dump.read_u32(start + cpu_index_offset,False)
+            print_out_str("cpu_index = {0}".format(cpu_index))
+            regset_num_register = ram_dump.read_u32(start + regset_num_register_offset,False)
+            registers = start + registers_offset
+            registers_size = ram_dump.sizeof('struct msm_dump_cpu_register_entry')
+            regset_name_addr = OrderedDict()
+            for i in range(0,regset_num_register):
+                registers_addr = registers + registers_size * i
+                regset_id = ram_dump.read_u32(registers_addr + regset_id_offset,False)
+                if regset_id == 0:
+                    break
+                regset_name = msm_dump_regset_ids[regset_id]
+                print_out_str("regset_name = {0}".format(regset_name))
+                regset_addr = ram_dump.read_u32(registers_addr + regset_addr_offset,False)
+                regset_size = ram_dump.sizeof('struct msm_dump_aarch64_gprs')
+                regset_end = regset_addr + regset_size
+                regset_name_addr[regset_name] = [regset_addr,regset_end]
+            regs = TZRegDump_v2()
+            cpu_index_num = "{0:x}".format(cpu_index)
+            core = "vcpu"+str(cpu_index_num)
+            regs_flag = regs.init_regs_v2(version, regset_name_addr, core, ram_dump)
+            if regs_flag == False:
+                print_out_str('!!! Could not get registers from TZ dump')
+                return
+            regs.dump_core_pc_gprs(ram_dump)
+            regs.dump_all_regs_gprs(ram_dump)
+            ram_dump.gdmi_switch_close()
+        else:
+            regs = TZRegDump_v2()
+            if regs.init_regs(version, start, end, core, ram_dump) is False:
+                print_out_str('!!! Could not get registers from TZ dump')
+                return
+            regs.dump_core_pc(ram_dump)
+            regs.dump_all_regs(ram_dump)
 
     def parse_pmic(self, version, start, end, client_id, ram_dump):
         client_name = self.dump_data_id_lookup_table[client_id]
@@ -317,8 +397,12 @@ class DebugImage_v2():
             print_out_str('Cache dumping not supported for %s on this target'
                           % client_name)
         except:
-            print_out_str('!!! Unhandled exception while running {0}'.format(client_name))
-            print_out_exception()
+            # log exceptions and continue by default
+            if not ramdump.debug:
+                print_out_str('!!! Unhandled exception while running {0}'.format(client_name))
+                print_out_exception()
+            else:
+                raise
         outfile.close()
 
     def parse_system_cache_common(self, version, start, end, client_id, ramdump):
@@ -333,8 +417,12 @@ class DebugImage_v2():
             print_out_str('System cache dumping not supported %s'
                           % client_name)
         except:
-            print_out_str('!!! Unhandled exception while running {0}'.format(client_name))
-            print_out_exception()
+            # log exceptions and continue by default
+            if not ramdump.debug:
+                print_out_str('!!! Unhandled exception while running {0}'.format(client_name))
+                print_out_exception()
+            else:
+                raise
         outfile.close()
 
     def parse_tlb_common(self, version, start, end, client_id, ramdump):
@@ -349,8 +437,12 @@ class DebugImage_v2():
             print_out_str('TLB dumping not supported for %s on this target'
                           % client_name)
         except:
-            print_out_str('!!! Unhandled exception while running {0}'.format(client_name))
-            print_out_exception()
+            # log exceptions and continue by default
+            if not ramdump.debug:
+                print_out_str('!!! Unhandled exception while running {0}'.format(client_name))
+                print_out_exception()
+            else:
+                raise
         outfile.close()
 
     def ftrace_field_func(self, common_list, ram_dump):
@@ -544,7 +636,8 @@ class DebugImage_v2():
             pid = server_proc.pid
             pid = int(pid)
             parent = psutil.Process(pid)
-            for child in parent.children(recursive=True):				# or parent.children() for recursive=False
+            # or parent.children() for recursive=False
+            for child in parent.children(recursive=True):
                 print_out_str("child process = {0} which needs to be killed forcefully after QTF timeout".format(child))
                 if (psutil.pid_exists(child.pid)):
                     try:
@@ -575,14 +668,18 @@ class DebugImage_v2():
 
         if (os.path.isfile(os.path.join(bin_dir, 'DCC_SRAM.BIN'))):
             sram_file = os.path.join(bin_dir, 'DCC_SRAM.BIN')
-            cmd = ["-s ", sram_file, " --out-dir ", out_dir, " --config-offset ", "0x6000", " --v2"]
-            p = subprocess.Popen([sys.executable, dcc_parser_path, cmd], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            cmd = [sys.executable, dcc_parser_path, "-s" , sram_file, "--out-dir", out_dir, "--config-offset", "0x6000", "--v2"]
+            p = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                                 stderr=subprocess.STDOUT,
+                                 universal_newlines=True)
             print_out_str('--------')
             print_out_str(p.communicate()[0])
         elif os.path.isfile(os.path.join(out_dir, 'sram.bin')):
             sram_file = os.path.join(out_dir, 'sram.bin')
             p = subprocess.Popen([sys.executable, dcc_parser_path, '-s', sram_file, '--out-dir', out_dir],
-                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                                 stdout=subprocess.PIPE,
+                                 stderr=subprocess.STDOUT,
+                                 universal_newlines=True)
             print_out_str('--------')
             print_out_str(p.communicate()[0])
         else:
@@ -606,8 +703,9 @@ class DebugImage_v2():
         else:
             return
         p = subprocess.Popen([sys.executable, sysreg_parser_path_minidump, '-s', sysdbg_file, '--out-dir', out_dir],
-                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-
+                             stdout=subprocess.PIPE,
+                             stderr=subprocess.STDOUT,
+                             universal_newlines=True)
         print_out_str('--------')
         print_out_str(p.communicate()[0])
 
@@ -633,7 +731,7 @@ class DebugImage_v2():
 
         client_table = dict(client_types)
         # get first column of client_types
-        client_names = zip(*client_types)[0]
+        client_names = [x[0] for x in client_types]
 
         for j in range(0, table_num_entries):
             client_entry = table + j * dump_entry_size
@@ -652,13 +750,18 @@ class DebugImage_v2():
 
             results.append((client_name, client_table[client_name], client_entry))
 
-        results.sort(key=lambda(x): client_names.index(x[0]))
+        results.sort(key=lambda x: client_names.index(x[0]))
         return results
     def minidump_data_clients(self, ram_dump, client_id,entry_pa_addr,
                                       end_addr):
         results = list()
         client_table = dict(client_types)
         # get first column of client_types
+
+        if client_id not in self.dump_data_id_lookup_table:
+            print_out_str(
+                '!!! {0} Unknown client id. Skipping!'.format(client_id))
+            return None
 
         client_name = self.dump_data_id_lookup_table[client_id]
 
@@ -678,7 +781,7 @@ class DebugImage_v2():
             input = os.path.join(ram_dump.outdir, "mhm_scandump.bin")
         print_out_str(
             'Parsing mhm dump start {0:x} end {1:x} {2}'.format(start, end, input))
-        header_bin = ram_dump.open_file(input)
+        header_bin = ram_dump.open_file(input, mode='wb')
         it = range(start, end)
         for i in it:
             val = ram_dump.read_byte(i, False)
@@ -786,9 +889,8 @@ class DebugImage_v2():
             client.MSM_DUMP_DATA_LOG_BUF_FIRST_IDX] = 'MSM_DUMP_DATA_LOG_BUF_FIRST_IDX'
         self.dump_data_id_lookup_table[
             client.MSM_DUMP_DATA_MHM] = 'MSM_DUMP_DATA_MHM'
-	for i in range(0, cpus):
-		self.dump_data_id_lookup_table[
-		    client.MSM_DUMP_DATA_L2_TLB + i] = 'MSM_DUMP_DATA_L2_TLB'
+        for i in range(0, cpus):
+            self.dump_data_id_lookup_table[client.MSM_DUMP_DATA_L2_TLB + i] = 'MSM_DUMP_DATA_L2_TLB'
 
         if not ram_dump.minidump:
             dump_table_ptr_offset = ram_dump.field_offset(
@@ -915,7 +1017,7 @@ class DebugImage_v2():
                                     client_addr + dump_data_magic_offset))
                         continue
 
-                    if dump_data_magic != MEMDUMPV2_MAGIC:
+                    if dump_data_magic != MEMDUMPV2_MAGIC and dump_data_magic != MEMDUMPV_HYP_MAGIC:
                         print_out_str("!!! Magic {0:x} doesn't match! No context will be parsed".format(dump_data_magic))
                         continue
 

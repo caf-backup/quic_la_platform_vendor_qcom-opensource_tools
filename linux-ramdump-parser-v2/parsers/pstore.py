@@ -1,4 +1,4 @@
-# Copyright (c) 2018, The Linux Foundation. All rights reserved.
+# Copyright (c) 2018, 2020 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -41,7 +41,7 @@ class PStore(RamParser):
         sorts the logs in ascending timestamp manner
         '''
         ordered_event_data = collections.OrderedDict(sorted(event_data.items()))
-        for ts, log in ordered_event_data.iteritems():
+        for ts, log in ordered_event_data.items():
             pstore_out.write(log)
 
     def print_event_logs(self, pstore_out, addr, size):
@@ -134,6 +134,9 @@ class PStore(RamParser):
         out_file.close()
 
     def parse(self):
+        if not self.ramdump.is_config_defined('CONFIG_PSTORE'):
+            print_out_str('CONFIG_PSTORE is not defined')
+            return
         base_addr = self.ramdump.address_of('oops_cxt')
         self.extract_io_event_logs(base_addr)
         self.extract_console_logs(base_addr)

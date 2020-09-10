@@ -18,7 +18,7 @@ class ZoneInfo(RamParser):
 
     def print_atomic_long_counters(self, output_file, counter_name, addr, num):
 
-        for i in xrange(0, num):
+        for i in range(0, num):
             val = 0
             if self.ramdump.arm64:
                 val = self.ramdump.read_s64(self.ramdump.array_index(addr,
@@ -27,7 +27,7 @@ class ZoneInfo(RamParser):
             else:
                 val = self.ramdump.read_s32(self.ramdump.array_index(addr,
                     'atomic_long_t', i))
-            output_file.write(('{0:30}: {1:10} {2:10}MB\n'.format(counter_name[i], val, val * 4 / 1024)))
+            output_file.write(('{0:30}: {1:10} {2:10}MB\n'.format(counter_name[i], val, val * 4 // 1024)))
 
     def print_zone_stats(self, zone, vmstat_names, max_zone_stats, output_file):
         nr_watermark = self.ramdump.gdbmi.get_value_of('NR_WMARK')
@@ -48,12 +48,12 @@ class ZoneInfo(RamParser):
                 self.ramdump.field_offset('struct zone', '_watermark')
 
         output_file.write('\nZone {0:8}\n'.format(zname))
-        for i in xrange(0, nr_watermark):
+        for i in range(0, nr_watermark):
             val = self.ramdump.read_word(
                                     self.ramdump.array_index(zwatermark_addr,
                                         'unsigned long', i))
             output_file.write('{0:30}: {1:10} {2:10}MB\n'.format(wmark_names[i],
-                val, val * 4 / 1024))
+                val, val * 4 // 1024))
 
         self.print_atomic_long_counters(output_file, vmstat_names, zstats_addr,
                 max_zone_stats)
@@ -71,7 +71,7 @@ class ZoneInfo(RamParser):
         vmstat_names = self.ramdump.gdbmi.get_enum_lookup_table(
                   'vm_event_item', max_node_stat_item)
         rq_addr=[0,0,0,0,0,0,0,0]
-        for i in xrange(0, max_node_stat_item):
+        for i in range(0, max_node_stat_item):
             val = 0
             for j in self.ramdump.iter_cpus():
                 rq_addr[j] = vm_event_states + self.ramdump.per_cpu_offset(j)
@@ -84,10 +84,10 @@ class ZoneInfo(RamParser):
 
             if self.ramdump.arm64:
                 output_file.write('{0:30}: {1:10} {2:10}MB\n'.format(vmstat_names[i],
-                    val, val * 4 / 1024))
+                    val, val * 4 // 1024))
             else:
                 output_file.write('{0:30}: {1:10} {2:10}MB\n'.format(vmstat_names[i],
-                    val, val * 4 / 1024))
+                    val, val * 4 // 1024))
 
     def parse(self):
         output_file = self.ramdump.open_file("vmstats.txt", "w")

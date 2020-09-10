@@ -61,6 +61,63 @@ class IommuLib(object):
         rb_walker.walk(root, self._iommu_domain_func, self.domain_list)
         return True
 
+    def use_only_iommu_debug_attachments(self, debug_attachment):
+        has_pgtbl_info = self.ramdump.read_structure_field(debug_attachment,
+                         'struct iommu_debug_attachment', 'fmt')
+        has_client_name = self.ramdump.read_structure_field(debug_attachment,
+                         'struct iommu_debug_attachment', 'client_name')
+
+        if has_pgtbl_info and has_client_name:
+            return True;
+        return False
+
+    def find_iommu_domains_legacy(self, debug_attachment):
+        domain_ptr = self.ramdump.read_structure_field( debug_attachment,
+                     'struct iommu_debug_attachment', 'domain')
+
+        if not domain_ptr:
+            return
+
+        ptr = self.ramdump.read_structure_field(
+            debug_attachment, 'struct iommu_debug_attachment', 'group')
+        if ptr is not None:
+            dev_list = ptr + self.ramdump.field_offset(
+                'struct iommu_group', 'devices')
+            dev = self.ramdump.read_structure_field(
+                dev_list, 'struct list_head', 'next')
+            if self.ramdump.kernel_version >= (4, 14):
+                client_name = self.ramdump.read_structure_cstring(
+                    dev, 'struct group_device', 'name')
+            else:
+                client_name = self.ramdump.read_structure_cstring(
+                    dev, 'struct iommu_device', 'name')
+        else:
+            """Older kernel versions have the field 'dev'
+            instead of 'iommu_group'.
+            """
+            ptr = self.ramdump.read_structure_field(
+                debug_attachment, 'struct iommu_debug_attachment', 'dev')
+            kobj_ptr = ptr + self.ramdump.field_offset('struct device', 'kobj')
+            client_name = self.ramdump.read_structure_cstring(
+                kobj_ptr, 'struct kobject', 'name')
+
+
+        has_pgtbl_info = self.ramdump.read_structure_field(debug_attachment,\
+                         'struct iommu_debug_attachment', 'fmt') is not None
+        if self.ramdump.kernel_version >= (5, 4, 0) and has_pgtbl_info:
+            self._find_iommu_domains_debug_attachments(debug_attachment,\
+                                            client_name, self.domain_list)
+        else:
+            self._find_iommu_domains_arm_smmu(domain_ptr, client_name,\
+                                              self.domain_list)
+
+    def find_iommu_domains(self, debug_attachment):
+        client_name = self.ramdump.read_structure_cstring(debug_attachment,
+                      'struct iommu_debug_attachment', 'client_name')
+        self._find_iommu_domains_debug_attachments(debug_attachment,
+                                                   client_name,
+                                                   self.domain_list)
+
     """
     depends on CONFIG_IOMMU_DEBUG_TRACKING
     """
@@ -75,44 +132,10 @@ class IommuLib(object):
         list_walker = llist.ListWalker(self.ramdump, list_head_attachments, offset)
 
         for debug_attachment in list_walker:
-            domain_ptr = self.ramdump.read_structure_field(
-                            debug_attachment, 'struct iommu_debug_attachment', 'domain')
-
-            if not domain_ptr:
-                continue
-
-            ptr = self.ramdump.read_structure_field(
-                debug_attachment, 'struct iommu_debug_attachment', 'group')
-            if ptr is not None:
-                dev_list = ptr + self.ramdump.field_offset(
-                    'struct iommu_group', 'devices')
-                dev = self.ramdump.read_structure_field(
-                    dev_list, 'struct list_head', 'next')
-                if self.ramdump.kernel_version >= (4, 14):
-                    client_name = self.ramdump.read_structure_cstring(
-                        dev, 'struct group_device', 'name')
-                else:
-                    client_name = self.ramdump.read_structure_cstring(
-                        dev, 'struct iommu_device', 'name')
+            if self.use_only_iommu_debug_attachments(debug_attachment):
+                self.find_iommu_domains(debug_attachment)
             else:
-                """Older kernel versions have the field 'dev'
-                instead of 'iommu_group'.
-                """
-                ptr = self.ramdump.read_structure_field(
-                    debug_attachment, 'struct iommu_debug_attachment', 'dev')
-                kobj_ptr = ptr + self.ramdump.field_offset('struct device', 'kobj')
-                client_name = self.ramdump.read_structure_cstring(
-                    kobj_ptr, 'struct kobject', 'name')
-
-
-            has_pgtbl_info = self.ramdump.read_structure_field(debug_attachment,\
-                             'struct iommu_debug_attachment', 'fmt') is not None
-            if self.ramdump.kernel_version >= (5, 4, 0) and has_pgtbl_info:
-                self._find_iommu_domains_debug_attachments(debug_attachment,\
-                                                client_name, self.domain_list)
-            else:
-                self._find_iommu_domains_arm_smmu(domain_ptr, client_name,\
-                                                  self.domain_list)
+                self.find_iommu_domains_legacy(debug_attachment)
 
         return True
 
