@@ -1,4 +1,4 @@
-# Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
+# Copyright (c) 2013-2016, 2020 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -182,7 +182,7 @@ class IOMMU(RamParser):
         if map_type == self.SL_AP2:
             map_type_str = '[R]'
         map = self.FlatMapping(virt, phy_adr, map_type_str, page_size, mapped)
-        if not mappings.has_key(virt):
+        if virt not in mappings:
             mappings[virt] = map
         else:
             self.out_file.write(
@@ -192,7 +192,7 @@ class IOMMU(RamParser):
     def add_collapsed_mapping(self, mappings, virt_start, virt_end, phys_start, phys_end, map_type, page_size, mapped):
         map = self.CollapsedMapping(
             virt_start, virt_end, phys_start, phys_end, map_type, page_size, mapped)
-        if not mappings.has_key(virt_start):
+        if virt_start not in mappings:
             mappings[virt_start] = map
         else:
             self.out_file.write(
