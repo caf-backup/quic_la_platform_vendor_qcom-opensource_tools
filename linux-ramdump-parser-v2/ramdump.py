@@ -664,7 +664,6 @@ class RamDump():
             hyp_dump.determine_kaslr()
             self.gdbmi.kaslr_offset = hyp_dump.hyp_kaslr_addr_offset
             hyp_dump.get_trace_phy()
-            hyp_dump.get_ttbr()
             self.ttbr = hyp_dump.ttbr1
             self.vttbr = hyp_dump.vttbr
             self.s2_walk = True
