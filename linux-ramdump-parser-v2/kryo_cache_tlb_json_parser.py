@@ -311,9 +311,9 @@ def search_json_file_for_attribute(filename, target_cpu, cache_type, attribute, 
 
 
 def search_for_json_file(filename):
-    for f in os.listdir(os.path.join(os.path.dirname(os.path.realpath(__file__)), "json")):
+    for f in os.listdir(os.path.join(os.path.dirname(os.path.realpath(__file__)),  os.path.join('extensions','json'))):
         if f.lower() == (filename.lower() + ".json"):
-            return os.path.abspath(os.path.join(os.path.join(os.path.dirname(os.path.realpath(__file__)), "json"), f))
+            return os.path.abspath(os.path.join(os.path.join(os.path.dirname(os.path.realpath(__file__)), os.path.join('extensions','json')), f))
     return None
 
 
