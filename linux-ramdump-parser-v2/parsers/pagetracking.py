@@ -144,7 +144,7 @@ class PageTracking(RamParser):
                     handle = self.ramdump.read_structure_field(
                         temp_page_ext, 'struct page_ext', 'handle')
 
-                if handle is 0 or handle is None:
+                if handle == 0 or handle == None:
                     return -1, -1, -1, -1
                 slabindex = handle & 0x1fffff
                 handle_offset = (handle >> 0x15) & 0x3ff
@@ -273,8 +273,8 @@ class PageTracking(RamParser):
                 else:
                     sorted_pages[function_list] = 1
 
-        sortlist = sorted(sorted_pages.iteritems(),
-                          key=lambda(k, v): (v), reverse=True)
+        sortlist = sorted(sorted_pages.items(),
+                          key=lambda x: x[1], reverse=True)
 
         for k, v in sortlist:
             out_frequency.write('Allocated {0} times\n'.format(v))

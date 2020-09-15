@@ -1,4 +1,4 @@
-# Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
+# Copyright (c) 2015-2017, 2020 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -51,7 +51,7 @@ class CPR3Info(RamParser):
     def get_kryo(self):
         kryo_addr = self.ramdump.address_of('kryo_regulator_list')
         if kryo_addr is None:
-            print(
+            print_out_str(
                 "NOTE: 'kryo_regulator_list' list " +
                 "not found to extract kryo_addr information")
             return
@@ -117,7 +117,7 @@ class CPR3Info(RamParser):
                 'struct cpr3_corner', 'target_quot')
             size = self.ramdump.sizeof('u32')
             num = self.ramdump.sizeof('((struct cpr3_corner*)0)->target_quot') \
-                / size
+                // size
             for i in range(num):
                 quot = self.ramdump.read_u32(t0 + i * size)
                 quots = quots + " " + str(quot)

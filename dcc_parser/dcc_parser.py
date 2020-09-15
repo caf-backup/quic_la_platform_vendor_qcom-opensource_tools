@@ -1,4 +1,4 @@
-# Copyright (c) 2015, 2017, 2019 The Linux Foundation. All rights reserved.
+# Copyright (c) 2015, 2017, 2019-2020 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -97,7 +97,7 @@ def read_config(config_pt):
         link_descriptor = 0x3 << 30
         loop_descriptor = 0x1 << 30
         rd_mod_wr_descriptor = 0x1 << 31
-	dcc_write_ind = 0x1 << 28
+        dcc_write_ind = 0x1 << 28
         link_second_arg = 7
         #indicates end of list
         on_zero_link_len = -1
@@ -121,7 +121,7 @@ def read_config(config_pt):
             break
 
         descriptor = val & (0x3 << 30)
-	read_write_ind = val & (0x1 << 28)
+        read_write_ind = val & (0x1 << 28)
 
         if val == empty_ind:
             continue
@@ -325,7 +325,7 @@ if __name__ == '__main__':
         dcc_sink.append('SRAM')
     else:
         dcc_sink = options.dcc_sink.split(',')
-        print dcc_sink
+        print(dcc_sink)
 
     if options.outfile is None:
         options.outfile = 'dcc_captured_data{0}'.format(ext)
@@ -352,19 +352,19 @@ if __name__ == '__main__':
         sram_file.seek(int(options.config_offset, 16), 1)
     parsed_data = log_init('PARSED_DATA', options.outdir, options.outfile)
     if options.atbfile is not None and os.path.exists(options.atbfile):
-        atb_file = open(options.atbfile, 'rb')
+        atb_file = open(options.atbfile, 'r')
 
     for sink in dcc_sink:
         count = read_config(sram_file)
-        print "Number of registers in list:" , count
-        print "Sink used for the list:" ,  sink
+        print("Number of registers in list:" , count)
+        print("Sink used for the list:" ,  sink)
         if sink == 'SRAM':
-            print 'Read data from SRAM'
+            print('Read data from SRAM')
             if read_data(sram_file):
                 log.error('Couldn\'t read complete data.')
                 sys.exit(1)
         elif sink == 'ATB':
-            print 'Read data from ATB file'
+            print('Read data from ATB file')
             if options.atbfile is not None:
                 try:
                     atb_count = read_data_atb(atb_file, count)
@@ -373,8 +373,7 @@ if __name__ == '__main__':
                         del data[-atb_count:]
                         log.error("ATB file don't have complete DCC data")
                 except:
-                    log.error("could not open path {0}".format(options.atbfile))
-                    log.error("Do you have read permissions on the path?")
+                    log.error("could not read ATB data {0}".format(options.atbfile))
                     del address[-count:]
             else:
                 log.error('ATB file not given')
