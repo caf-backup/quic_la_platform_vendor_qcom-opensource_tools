@@ -19,10 +19,10 @@ from collections import OrderedDict
 from parser_util import register_parser, RamParser
 from print_out import print_out_str
 from tempfile import NamedTemporaryFile
-from parsers.ftrace_event_list import FtraceParser_Event_List
-from parsers.ftrace_event import FtraceParser_Event
+from .ftrace_event_list import FtraceParser_Event_List
+from .ftrace_event import FtraceParser_Event
 import linux_list as llist
-import parsers.taskdump
+from . import taskdump
 
 
 @register_parser(
@@ -273,7 +273,8 @@ class FtraceParser(RamParser):
             ftrace_file_map["006"] = ftrace_core6_fd
             ftrace_file_map["007"] = ftrace_core7_fd
 
-            for key in sorted(ftrace_time_data.keys()):
+            sorted_dict = {k: ftrace_time_data[k] for k in sorted(ftrace_time_data)}
+            for key in sorted_dict.keys():
                 line = str(ftrace_time_data[key])
                 if "sched_switch:" in line:
                     cpu_number = line.split("[")[1]
