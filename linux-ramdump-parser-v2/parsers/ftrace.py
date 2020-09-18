@@ -19,10 +19,10 @@ from collections import OrderedDict
 from parser_util import register_parser, RamParser
 from print_out import print_out_str
 from tempfile import NamedTemporaryFile
-from ftrace_event_list import FtraceParser_Event_List
-from ftrace_event import FtraceParser_Event
+from parsers.ftrace_event_list import FtraceParser_Event_List
+from parsers.ftrace_event import FtraceParser_Event
 import linux_list as llist
-import taskdump
+import parsers.taskdump
 
 
 @register_parser(
@@ -444,7 +444,8 @@ class FtraceParser(RamParser):
 
         sp = subprocess.Popen(crashargs,
                               stdout=subprocess.PIPE,
-                              stderr=subprocess.PIPE)
+                              stderr=subprocess.PIPE,
+                              universal_newlines = True)
         out, err = sp.communicate()
 
         if out:
@@ -467,7 +468,8 @@ class FtraceParser(RamParser):
         tracecmd_arg = self.ramdump.outdir + "/rawtracedata"
         sp = subprocess.Popen([tracecmdtool, "report", "-l", tracecmd_arg],
                               stdout=subprocess.PIPE,
-                              stderr=subprocess.PIPE)
+                              stderr=subprocess.PIPE,
+                              universal_newlines=True)
         out, err = sp.communicate();
 
         if out:

@@ -1,4 +1,4 @@
-# Copyright (c) 2017 The Linux Foundation. All rights reserved.
+# Copyright (c) 2017, 2020 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -50,6 +50,10 @@ class L1_Cache_Compare(RamParser):
                             continue
                         elif len(line) >= 195:
                             colm = line.split()
+
+                            if len(colm) < 28:
+                                out_l1_cache.write('Unexepected file format\n')
+                                break
 
                             # Read address value from file
                             addr = colm[6]

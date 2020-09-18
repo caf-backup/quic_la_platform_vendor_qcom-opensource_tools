@@ -80,77 +80,39 @@ class ipc_logging_cn(RamParser):
         tsv_header_struct_size = self.ramdump.sizeof('struct tsv_header')
         pos = 0
         while pos < len(final_buf):
-            tsv_msg_type = final_buf[pos]
-            tsv_msg_size = final_buf[pos + 1]
-
-            tsv_msg_type, = struct.unpack("B", tsv_msg_type)
-            tsv_msg_size, = struct.unpack("B", tsv_msg_size)
-
+            tsv_msg_type, tsv_msg_size = struct.unpack_from("BB", final_buf, pos)
             pos += tsv_header_struct_size
 
             this_msg = pos
             # TSV_TYPE_TIMESTAMP
-            this_msg_type = final_buf[this_msg]
-            this_msg_size = final_buf[this_msg + 1]
-            this_msg_type, = struct.unpack("B", this_msg_type)
-            this_msg_size, = struct.unpack("B", this_msg_size)
+            this_msg_type, this_msg_size = struct.unpack_from("BB", final_buf, this_msg)
 
             if this_msg_type == TSV_TYPE_TIMESTAMP:
                 this_msg = this_msg + tsv_header_struct_size
-                a = final_buf[this_msg]
-                b = final_buf[this_msg + 1]
-                c = final_buf[this_msg + 2]
-                d = final_buf[this_msg + 3]
-                str = a + b + c + d
+                fmt = 'L'
                 if this_msg_size == 8:
-                    e = final_buf[this_msg + 4]
-                    f = final_buf[this_msg + 5]
-                    g = final_buf[this_msg + 6]
-                    h = final_buf[this_msg + 7]
-                    str += (e + f + g + h)
-                    TimeStamp, = struct.unpack('Q', str)
-                else:
-                    TimeStamp, = struct.unpack('L', str)
+                    fmt = 'Q'
+                TimeStamp, = struct.unpack_from(fmt, final_buf, this_msg)
                 this_msg = this_msg + this_msg_size
 
             # TSV_TYPE_QTIMER
             TimeQtimer = 0
-            this_msg_type = final_buf[this_msg]
-            this_msg_size = final_buf[this_msg + 1]
-            this_msg_type, = struct.unpack("B", this_msg_type)
-            this_msg_size, = struct.unpack("B", this_msg_size)
+            this_msg_type, this_msg_size = struct.unpack_from("BB", final_buf, this_msg)
 
             if this_msg_type == TSV_TYPE_QTIMER:
                 this_msg = this_msg + tsv_header_struct_size
-                a = final_buf[this_msg]
-                b = final_buf[this_msg + 1]
-                c = final_buf[this_msg + 2]
-                d = final_buf[this_msg + 3]
-                str = a + b + c + d
+                fmt = 'L'
                 if this_msg_size == 8:
-                    e = final_buf[this_msg + 4]
-                    f = final_buf[this_msg + 5]
-                    g = final_buf[this_msg + 6]
-                    h = final_buf[this_msg + 7]
-                    str += (e + f + g + h)
-                    TimeQtimer, = struct.unpack('Q', str)
-                else:
-                    TimeQtimer, = struct.unpack('L', str)
+                    fmt = 'Q'
+                TimeQtimer, = struct.unpack_from(fmt, final_buf, this_msg)
                 this_msg = this_msg + this_msg_size
 
             # TSV_TYPE_BYTE_ARRAY
-
-            this_msg_type = final_buf[this_msg]
-            this_msg_size = final_buf[this_msg + 1]
-            this_msg_type, = struct.unpack("B", this_msg_type)
-            this_msg_size, = struct.unpack("B", this_msg_size)
+            this_msg_type, this_msg_size = struct.unpack_from("BB", final_buf, this_msg)
 
             if this_msg_type == TSV_TYPE_BYTE_ARRAY:
                 this_msg = this_msg + tsv_header_struct_size
-                str = final_buf[this_msg:this_msg + this_msg_size]
-                output_str = ''
-                for i in str:
-                    output_str += i
+                output_str = final_buf[this_msg:this_msg + this_msg_size].decode('utf-8', 'ignore')
                 if '\n' in output_str:
                     output.write(
                         "[ {0:10.9f}       0x{1:x}]   {2}".format(
@@ -204,7 +166,7 @@ class ipc_logging_cn(RamParser):
         else:
             wrapped_around = 1
 
-        final_buf = []
+        final_buf = bytes()
         stop_copy = 0
         while stop_copy != 1:
             hdr_addr = self.ramdump.struct_field_addr(

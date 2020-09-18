@@ -1,4 +1,4 @@
-# Copyright (c) 2014-2015, 2017, 2019, The Linux Foundation. All rights reserved.
+# Copyright (c) 2014-2015, 2017, 2019-2020, The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -32,9 +32,9 @@ class DDRCompare(RamParser) :
             self.output_file.write("!!! Objdump path is not set, please use --objdump-path option to specify the path\n\n")
             return
 
-        cmd = self.ramdump.objdump_path + " -D -j.data " +  self.ramdump.vmlinux
-        cmdarr = cmd.split(' ')
-        output = subprocess.Popen(cmdarr, stdout=subprocess.PIPE).communicate()[0]
+        cmdarr = [self.ramdump.objdump_path, "-D", "-j.data", self.ramdump.vmlinux]
+        p = subprocess.Popen(cmdarr, stdout=subprocess.PIPE, universal_newlines=True)
+        output = p.communicate()[0]
 
         foundcorruption = 0;
         for line in output.split('\n'):
