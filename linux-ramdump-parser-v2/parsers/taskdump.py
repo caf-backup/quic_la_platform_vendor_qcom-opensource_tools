@@ -152,6 +152,7 @@ def dump_thread_group(ramdump, thread_group, task_out, taskhighlight_out, check_
             return
 
         task_last_enqueued_ts = 0
+        task_last_sleep_ts = 0
         if offset_last_enqueued_ts is None and ramdump.is_config_defined('CONFIG_SCHED_WALT'):
             offset_last_enqueued_ts = ramdump.field_offset('struct walt_task_struct', 'last_enqueued_ts')
             walt_task_struct_offset = ramdump.field_offset('struct task_struct', 'wts')
@@ -161,8 +162,7 @@ def dump_thread_group(ramdump, thread_group, task_out, taskhighlight_out, check_
             task_last_enqueued_ts = ramdump.read_u64(next_thread_last_enqueued)
             if task_last_enqueued_ts is None:
                 task_last_enqueued_ts = 0
-        if offset_last_sleep_ts is None:
-            task_last_sleep_ts = 0
+        if offset_last_sleep_ts is None and ramdump.is_config_defined('CONFIG_SCHED_WALT'):
             offset_last_sleep_ts = ramdump.field_offset('struct walt_task_struct', 'last_sleep_ts ')
             walt_task_struct_offset = ramdump.field_offset('struct task_struct', 'wts')
             offset_last_sleep_ts = offset_last_sleep_ts + walt_task_struct_offset
