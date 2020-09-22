@@ -17,6 +17,8 @@ DEFAULT_MIGRATION_COST=500000
 DEFAULT_RT_PERIOD=1000000
 DEFAULT_RT_RUNTIME=950000
 
+cpu_online_bits = 0
+
 def mask_bitset_pos(cpumask):
     obj = [i for i in range(cpumask.bit_length()) if cpumask & (1<<i)]
     if len(obj) == 0:
@@ -27,6 +29,8 @@ def mask_bitset_pos(cpumask):
 def verify_active_cpus(ramdump):
     cpu_topology_addr = ramdump.address_of('cpu_topology')
     cpu_topology_size = ramdump.sizeof('struct cpu_topology')
+    cpu_isolated_bits = 0
+    global cpu_online_bits
 
     if (ramdump.kernel_version >= (4, 19, 0)):
         cluster_id_off = ramdump.field_offset('struct cpu_topology', 'package_id')
@@ -38,21 +42,26 @@ def verify_active_cpus(ramdump):
         cluster_id_off = ramdump.field_offset('struct cpu_topology', 'cluster_id')
         core_sib_off = ramdump.field_offset('struct cpu_topology', 'core_sibling')
 
-    if (ramdump.kernel_version >= (4, 9, 0)):
-        cpu_online_bits = ramdump.read_word('__cpu_online_mask')
-    else:
-        cpu_online_bits = ramdump.read_word('cpu_online_bits')
+    nr_cpus = ramdump.get_num_cpus()
+
+    # Skip !SMP/UP systems(with single cpu).
+    if not ramdump.is_config_defined('CONFIG_SMP') or (nr_cpus <= 1):
+        print ("Ramdmp is UP or !SMP or nrcpus <=1 ")
+        return
+
+    # Get online cpus from runqueue
+    runqueues_addr = ramdump.address_of('runqueues')
+    online_offset = ramdump.field_offset('struct rq', 'online')
+
+    for i in ramdump.iter_cpus():
+        rq_addr = runqueues_addr + ramdump.per_cpu_offset(i)
+        online = ramdump.read_int(rq_addr + online_offset)
+        cpu_online_bits |= (online << i)
+
     if (ramdump.kernel_version >= (4, 9, 0)):
         cpu_isolated_bits = ramdump.read_word('__cpu_isolated_mask')
     elif (ramdump.kernel_version >= (4, 4, 0)):
         cpu_isolated_bits = ramdump.read_word('cpu_isolated_bits')
-    else:
-        cpu_isolated_bits = 0
-
-    if(cpu_isolated_bits is None): #QCS404/None handling
-        cpu_isolated_bits = 0
-
-    nr_cpus = ramdump.get_num_cpus()
 
     if (cluster_id_off is None):
         print_out_str("\n Invalid cluster topology detected\n")
@@ -97,6 +106,7 @@ def verify_active_cpus(ramdump):
 @register_parser('--sched-info', 'Verify scheduler\'s various parameter status')
 class Schedinfo(RamParser):
     def parse(self):
+        global cpu_online_bits
         # Active cpu check verified by default!
         #verify_active_cpus(self.ramdump)
 
@@ -131,11 +141,6 @@ class Schedinfo(RamParser):
             print_out_str("\t\t sysctl_sched_rt_period Default:{0} and Value in dump:{1}\n".format(DEFAULT_RT_PERIOD, sched_rt_period))
 
         # verify rq root domain
-        if (self.ramdump.kernel_version >= (4, 9, 0)):
-            cpu_online_bits = self.ramdump.read_word('__cpu_online_mask')
-        else:
-            cpu_online_bits = self.ramdump.read_word('cpu_online_bits')
-
         runqueues_addr = self.ramdump.address_of('runqueues')
         rd_offset = self.ramdump.field_offset('struct rq', 'rd')
         sd_offset = self.ramdump.field_offset('struct rq', 'sd')
