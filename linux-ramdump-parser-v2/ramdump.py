@@ -195,16 +195,15 @@ class RamDump():
 
         def unwind_frame_generic64(self, frame):
             fp = frame.fp
-            low = frame.sp
-            mask = (self.ramdump.thread_size) - 1
-            high = (low + mask) & (~mask)
-
-            if (fp < low or fp > high or fp & 0xf):
+            try:
+                frame.sp = fp + 0x10
+                frame.fp = self.ramdump.read_word(fp)
+                frame.pc = self.ramdump.read_word(fp + 8)
+                if ((frame.fp == 0 and frame.pc == 0)
+                        or frame.pc is None or frame.lr is None):
+                    return -1
+            except:
                 return -1
-
-            frame.sp = fp + 0x10
-            frame.fp = self.ramdump.read_word(fp)
-            frame.pc = self.ramdump.read_word(fp + 8)
             return 0
 
         def unwind_frame_generic(self, frame):
