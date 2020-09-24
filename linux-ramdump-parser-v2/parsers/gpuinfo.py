@@ -49,6 +49,11 @@ class GpuParser(RamParser):
         self.rtw = linux_radix_tree.RadixTreeWalker(dump)
 
     def parse(self):
+        if not self.ramdump.is_config_defined('CONFIG_QCOM_KGSL'):
+            print_out_str(
+                "No GPU support detected... Skipping GPU parser.")
+            return
+
         self.out = self.ramdump.open_file('gpuinfo.txt')
 
         for subparser in self.parser_list:
