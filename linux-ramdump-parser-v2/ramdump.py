@@ -1932,6 +1932,28 @@ class RamDump():
             return self.read_u64(addr, virtual)
         return None
 
+    def read(self, cmd):
+        """Reads the value of a C-style expression provided it doesn't have a
+        pointer.
+
+        Supported syntax for cmd: dump.read('device_3d0.dev.open_count')
+        """
+        size = self.sizeof("{0}".format(cmd))
+        addr = self.address_of(cmd)
+
+        if addr is None or size is None:
+            return None
+
+        if size == 2:
+            return self.read_u16(addr)
+        if size == 4:
+            return self.read_u32(addr)
+        if size == 8:
+            return self.read_u64(addr)
+        if size != 0 and size != 4 and size != 8:
+            return addr
+        return None
+
     def read_structure_cstring(self, addr_or_name, struct_name, field,
                                max_length=100):
         """reads a C string from a structure field.  The C string field will be
