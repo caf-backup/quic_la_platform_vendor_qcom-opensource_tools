@@ -187,63 +187,64 @@ class PageTracking(RamParser):
 
     def parse(self):
         ranges = None
-	if self.ramdump.minidump:
-                addr = self.ramdump.address_of('md_pageowner_dump_addr')
-                if addr is None:
-                    print_out_str("NOTE: " +
-                            "Pageowner Minidump is not supported")
-                    return
-                for eb_file in self.ramdump.ebi_files:
-                    path1 = eb_file[3]
-                path = os.path.join(path1.split("MD_S")[0], "md_PAGEOWNER.bin")
-                input_file = open(path, 'r')
-		lines = input_file.readlines()
-		i = 0
-		functions = defaultdict(list)
-		pfns = defaultdict(list)
-		pfns_size = defaultdict(list)
-		while i < len(lines):
-			line = lines[i];
-			try:
-			    pfn, handle, n = [int(x) for x in line.split()]
-			except:
-			    break
-			i = i + 1
-                        if not functions[handle]:
-                            for j in range(0, n):
-                                line = lines[i]
-                                try:
-                                    int(line, 16)
-                                except:
-                                    break;
-				functions[handle].append(line)
-				i = i+1
-			pfns[handle].append(pfn)
-		i = 0
-		for key in pfns:
-		    pfns_size[key] = len(pfns[key])
-		output_file = self.ramdump.open_file("pageowner_dump.txt", 'w')
-		for key, value in sorted(pfns_size.items(), key=lambda item: item[1], reverse = True):
-			output_file.write("No of pfns :" + str(value))
-			output_file.write('\n')
-			output_file.write("Pfns :" + str(pfns[key]))
-			output_file.write('\n')
-			for key2 in functions:
-				if (key == key2):
-				    output_file.write("call stack :\n")
-				    for i in range(0,len(functions[key])):
-                                        look = self.ramdump.unwind_lookup(int(functions[key][i], 16))
-                                        if look is None:
-                                            continue
-                                        symname, offset = look
-                                        unwind_dat = '      [<{0:x}>] {1}+0x{2:x}\n'.format(
-                                                int(functions[key][i], 16), symname, offset)
-					output_file.write(unwind_dat)
-			output_file.write("\n")
-                output_file.close()
-                print_out_str(
-                        '---wrote page tracking information to pageowner_dump.txt')
+        if self.ramdump.minidump:
+            addr = self.ramdump.address_of('md_pageowner_dump_addr')
+            if addr is None:
+                print_out_str("NOTE: " +
+                        "Pageowner Minidump is not supported")
                 return
+            for eb_file in self.ramdump.ebi_files:
+                path1 = eb_file[3]
+            path = os.path.join(path1.split("MD_S")[0], "md_PAGEOWNER.bin")
+            input_file = open(path, 'r')
+            lines = input_file.readlines()
+            i = 0
+            functions = defaultdict(list)
+            pfns = defaultdict(list)
+            pfns_size = defaultdict(list)
+            while i < len(lines):
+                line = lines[i];
+                try:
+                    pfn, handle, n = [int(x) for x in line.split()]
+                except:
+                    break
+                i = i + 1
+                if not functions[handle]:
+                    for j in range(0, n):
+                        line = lines[i]
+                        try:
+                            int(line, 16)
+                        except:
+                            break
+                        functions[handle].append(line)
+                        i = i+1
+                    pfns[handle].append(pfn)
+
+            i = 0
+            for key in pfns:
+                pfns_size[key] = len(pfns[key])
+            output_file = self.ramdump.open_file("pageowner_dump.txt", 'w')
+            for key, value in sorted(pfns_size.items(), key=lambda item: item[1], reverse = True):
+                output_file.write("No of pfns :" + str(value))
+                output_file.write('\n')
+                output_file.write("Pfns :" + str(pfns[key]))
+                output_file.write('\n')
+                for key2 in functions:
+                    if (key == key2):
+                        output_file.write("call stack :\n")
+                        for i in range(0,len(functions[key])):
+                            look = self.ramdump.unwind_lookup(int(functions[key][i], 16))
+                            if look is None:
+                                continue
+                            symname, offset = look
+                            unwind_dat = '      [<{0:x}>] {1}+0x{2:x}\n'.format(
+                                    int(functions[key][i], 16), symname, offset)
+                            output_file.write(unwind_dat)
+                output_file.write("\n")
+            output_file.close()
+            print_out_str(
+                    '---wrote page tracking information to pageowner_dump.txt')
+            return
 
         for arg in sys.argv:
             if "ranges=" in arg:
