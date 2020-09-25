@@ -579,6 +579,7 @@ class RamDump():
         self.ram_addr = options.ram_addr
         self.autodump = options.autodump
         self.module_table = module_table.module_table_class()
+        self.hyp = options.hyp
         # Save all paths given from --mod_path option. These will be searched for .ko.unstripped files
         if options.mod_path_list:
             for path in options.mod_path_list:
@@ -591,29 +592,6 @@ class RamDump():
         self.hyp_dump = None
         self.ttbr = None
         self.vttbr = None
-        # Add search path for kernel modules under "vendor/qcom" directory
-        # Location of this directory in relation to vmlinux changes depending on whether it's a primary or secondary boot.
-        # PRIMARY-BOOT case:
-        if os.path.basename(os.path.dirname(os.path.dirname(options.vmlinux))) == 'obj':
-            boot_dir = os.path.dirname(os.path.dirname(options.vmlinux))
-            mod_build_path = os.path.join(boot_dir, 'vendor', 'qcom') # obj/vendor/qcom
-            if os.path.exists(mod_build_path):
-                self.module_table.add_sym_path(mod_build_path)
-            mod_build_path = os.path.join(boot_dir, os.pardir, 'vendor', 'lib', 'modules') # obj/../vendor/lib
-            if os.path.exists(mod_build_path):
-                self.module_table.add_sym_path(mod_build_path)
-        # SECONDARY-BOOT or gki-boot case:
-        elif os.path.basename(os.path.dirname(options.vmlinux)) in ['secondary-boot', 'gki-boot']:
-            boot_dir = os.path.dirname(options.vmlinux)
-            mod_build_path = os.path.join(boot_dir, 'unstripped_modules')  # secondary-boot/unstripped_modules
-            if os.path.exists(mod_build_path):
-                self.module_table.add_sym_path(mod_build_path)
-            mod_build_path = os.path.join(boot_dir, 'vendor', 'modules')  # secondary-boot/vendor/modules
-            if os.path.exists(mod_build_path):
-                self.module_table.add_sym_path(mod_build_path)
-            mod_build_path = os.path.join(boot_dir, 'dlkm', 'lib', 'modules')
-            if os.path.exists(mod_build_path):
-                self.module_table.add_sym_path(mod_build_path)
         if self.minidump:
             try:
                 mod = import_module('elftools.elf.elffile')
@@ -875,6 +853,27 @@ class RamDump():
             sys.exit(1)
         return f
 
+    def gdmi_switch_open(self):
+        self.gdbmi.close() #closing the previous one with vmlinux
+        try:
+            self.gdbmi = gdbmi.GdbMI(self.gdb_path, self.hyp,
+                                 0)
+            self.gdbmi.open()
+        except Exception as err:
+            self.gdbmi = gdbmi.GdbMI(self.gdb_path, self.vmlinux,
+                                 self.kaslr_offset or 0)
+            self.gdbmi.open() #openning gdb session with vmlinux
+            if self.kaslr_offset is None:
+                self.determine_kaslr_offset()
+                self.gdbmi.kaslr_offset = self.get_kaslr_offset()
+    def gdmi_switch_close(self):
+        self.gdbmi.close() #closing gdb session with hyp elf
+        self.gdbmi = gdbmi.GdbMI(self.gdb_path, self.vmlinux,
+                                 self.kaslr_offset or 0)
+        self.gdbmi.open() #openning gdb session with vmlinux
+        if self.kaslr_offset is None:
+            self.determine_kaslr_offset()
+            self.gdbmi.kaslr_offset = self.get_kaslr_offset()
     def remove_file(self, file_name):
         file_path = os.path.join(self.outdir, file_name)
         try:
@@ -1288,16 +1287,21 @@ class RamDump():
         return self.kaslr_offset
 
     def determine_kaslr_offset(self):
-        self.kaslr_offset = 0
-        if self.kaslr_addr is None:
-            print_out_str('!!!! Kaslr addr is not provided.')
+        if self.svm:
+            self.kaslr_offset = 0x180000
+            self.kaslr_addr = None
+            return
         else:
-            kaslr_magic = self.read_u32(self.kaslr_addr, False)
-            if kaslr_magic != 0xdead4ead:
-                print_out_str('!!!! Kaslr magic does not match.')
+            self.kaslr_offset = 0
+            if self.kaslr_addr is None:
+                print_out_str('!!!! Kaslr addr is not provided.')
             else:
-                self.kaslr_offset = self.read_u64(self.kaslr_addr + 4, False)
-                print_out_str("The kaslr_offset extracted is: " + str(hex(self.kaslr_offset)))
+                kaslr_magic = self.read_u32(self.kaslr_addr, False)
+                if kaslr_magic != 0xdead4ead:
+                    print_out_str('!!!! Kaslr magic does not match.')
+                else:
+                    self.kaslr_offset = self.read_u64(self.kaslr_addr + 4, False)
+                    print_out_str("The kaslr_offset extracted is: " + str(hex(self.kaslr_offset)))
 
     def get_hw_id(self, add_offset=True):
         socinfo_format = -1
@@ -1507,7 +1511,7 @@ class RamDump():
         kallsyms_offset = self.field_offset('struct module', 'kallsyms')
 
         next_list_ent = self.read_pointer(mod_list + next_offset)
-        while next_list_ent != mod_list:
+        while next_list_ent and next_list_ent != mod_list:
             mod_tbl_ent = module_table.module_table_entry()
             module = next_list_ent - list_offset
             name_ptr = module + name_offset
