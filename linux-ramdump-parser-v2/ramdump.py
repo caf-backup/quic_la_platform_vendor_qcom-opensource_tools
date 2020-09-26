@@ -665,6 +665,13 @@ class RamDump():
             hyp_dump.get_trace_phy()
             self.ttbr = hyp_dump.ttbr1
             self.vttbr = hyp_dump.vttbr
+            self.TTBR0_EL1 = hyp_dump.TTBR0_EL1
+            self.SCTLR_EL1 = hyp_dump.SCTLR_EL1
+            self.TCR_EL1 = hyp_dump.TCR_EL1
+            self.VTCR_EL2 = hyp_dump.VTCR_EL2
+            self.HCR_EL2 = hyp_dump.HCR_EL2
+            self.ttbr_data = hyp_dump.ttbr1_data_info
+            self.vttbr_data = hyp_dump.vttbr_el2_data
             self.s2_walk = True
             self.gdbmi.close() #closing gdb session with hyp elf
 
@@ -1143,25 +1150,45 @@ class RamDump():
         if not self.minidump:
             if self.arm64:
                 startup_script.write('Register.Set NS 1\n')
-                startup_script.write('Data.Set SPR:0x30201 %Quad 0x{0:x}\n'.format(
-                    self.kernel_virt_to_phys(self.swapper_pg_dir_addr)))
-
-                if is_cortex_a53:
-                    startup_script.write('Data.Set SPR:0x30202 %Quad 0x00000012B5193519\n')
-                    startup_script.write('Data.Set SPR:0x30A20 %Quad 0x000000FF440C0400\n')
-                    startup_script.write('Data.Set SPR:0x30A30 %Quad 0x0000000000000000\n')
-                    startup_script.write('Data.Set SPR:0x30100 %Quad 0x0000000034D5D91D\n')
+                if self.svm:
+                    startup_script.write('Data.Set SPR:0x30201 %Quad 0x{0:x}\n'.format(
+                    self.ttbr_data))
+                    startup_script.write('Data.Set SPR:0x34210 %Quad 0x{0:x}\n'.format(
+                    self.vttbr_data))
+                    startup_script.write('Data.Set SPR:0x30100 %Quad 0x{0:x}\n'.format(
+                    self.SCTLR_EL1))
+                    startup_script.write('Data.Set SPR:0x30200 %Quad 0x{0:x}\n'.format(
+                    self.TTBR0_EL1))
+                    startup_script.write('Data.Set SPR:0x30202 %Quad 0x{0:x}\n'.format(
+                    self.TCR_EL1))
+                    startup_script.write('Data.Set SPR:0x34110 %Quad 0x{0:x}\n'.format(
+                    self.HCR_EL2))
+                    startup_script.write('Data.Set SPR:0x34212 %Quad 0x{0:x}\n'.format(
+                    self.VTCR_EL2))
+                    startup_script.write('R.S M 5\n')
                 else:
-                    startup_script.write('Data.Set SPR:0x30202 %Quad 0x00000032B5193519\n')
-                    startup_script.write('Data.Set SPR:0x30A20 %Quad 0x000000FF440C0400\n')
-                    startup_script.write('Data.Set SPR:0x30A30 %Quad 0x0000000000000000\n')
-                    startup_script.write('Data.Set SPR:0x30100 %Quad 0x0000000004C5D93D\n')
+                    startup_script.write('Data.Set SPR:0x30201 %Quad 0x{0:x}\n'.format(
+                        self.kernel_virt_to_phys(self.swapper_pg_dir_addr)))
 
-                startup_script.write('Register.Set CPSR 0x3C5\n')
-                startup_script.write('MMU.Delete\n')
-                startup_script.write('MMU.SCAN PT 0xFFFFFF8000000000--0xFFFFFFFFFFFFFFFF\n')
-                startup_script.write('mmu.on\n')
-                startup_script.write('mmu.pt.list 0xffffff8000000000\n')
+                    if is_cortex_a53:
+                        startup_script.write('Data.Set SPR:0x30202 %Quad 0x00000012B5193519\n')
+                        startup_script.write('Data.Set SPR:0x30A20 %Quad 0x000000FF440C0400\n')
+                        startup_script.write('Data.Set SPR:0x30A30 %Quad 0x0000000000000000\n')
+                        startup_script.write('Data.Set SPR:0x30100 %Quad 0x0000000034D5D91D\n')
+                    else:
+                        startup_script.write('Data.Set SPR:0x30202 %Quad 0x00000032B5193519\n')
+                        startup_script.write('Data.Set SPR:0x30A20 %Quad 0x000000FF440C0400\n')
+                        startup_script.write('Data.Set SPR:0x30A30 %Quad 0x0000000000000000\n')
+                        startup_script.write('Data.Set SPR:0x30100 %Quad 0x0000000004C5D93D\n')
+
+                    startup_script.write('Register.Set CPSR 0x3C5\n')
+                    startup_script.write('MMU.Delete\n')
+                    startup_script.write('MMU.SCAN PT 0xFFFFFF8000000000--0xFFFFFFFFFFFFFFFF\n')
+                    startup_script.write('mmu.on\n')
+                    startup_script.write('mmu.pt.list 0xffffff8000000000\n')
+                if self.svm:
+                        startup_script.write('trans.tablewalk on\n')
+                        startup_script.write('trans.on\n')
             else:
                 # ARM-32: MMU is enabled by default on most platforms.
                 mmu_enabled = 1
