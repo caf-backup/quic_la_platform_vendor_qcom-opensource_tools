@@ -149,6 +149,9 @@ class MDPinfo(RamParser):
     def print_sderange(self, node):
         rng = RangeDumpSdeNode(self.ramdump, node)
 
+        if (rng.offset.start is None) or (rng.offset.end is None):
+            return
+
         if (rng.offset.start > rng.offset.end) or (rng.offset.end == 0):
             print_out_str("Invalid offsets (%d, %d) for range: %s" %
                           (rng.offset.start, rng.offset.end, rng.range_name))
@@ -2340,231 +2343,237 @@ class MDPinfo(RamParser):
             if mdss_dbg.is_empty():
                 return
             # EVENT LOGS
-            self.outfile = self.ramdump.open_file('sde_evtlog.txt')
+            try:
+                self.outfile = self.ramdump.open_file('sde_evtlog.txt')
 
-            evt_log = Struct(self.ramdump, mdss_dbg.evtlog,
-                      struct_name="struct sde_dbg_evtlog",
-                      fields={'name': Struct.get_cstring,
-                              'enable': Struct.get_u32,
-                              'last': Struct.get_u32,
-                              'curr': Struct.get_u32,
-                              'logs': Struct.get_address,
-                              'last_dump': Struct.get_u32})
+                evt_log = Struct(self.ramdump, mdss_dbg.evtlog,
+                          struct_name="struct sde_dbg_evtlog",
+                          fields={'name': Struct.get_cstring,
+                                  'enable': Struct.get_u32,
+                                  'last': Struct.get_u32,
+                                  'curr': Struct.get_u32,
+                                  'logs': Struct.get_address,
+                                  'last_dump': Struct.get_u32})
 
-            SDE_EVTLOG_ENTRY = 8192
-            SDE_EVTLOG_MAX_DATA = self.ramdump.sizeof('(*(sde_dbg_base.evtlog)).logs[0].data')/4
-            self.outfile.write('%-60.50s%-20.5s%-8.5s%-8.5s%s\n' % ("FUNC", "TIME", "PID", "CPU", "DATA"))
-            sde_evtlog_start = 0
-            sde_evtlog_repeat = 0
-            if (evt_log.curr != evt_log.last):
-                    sde_evtlog_start = evt_log.curr
-            else:
-                    sde_evtlog_repeat = 1
-            sde_evtlog_count = 0
-            while(sde_evtlog_count < SDE_EVTLOG_ENTRY):
-                    i = sde_evtlog_start % SDE_EVTLOG_ENTRY
-                    if (i == evt_log.curr):
-                            if (sde_evtlog_repeat):
-                                    break
-                            else:
-                                    sde_evtlog_repeat = 1
-                    addr = evt_log.logs + self.ramdump.sizeof('struct sde_dbg_evtlog_log') * i
-                    log_log = addr
-                    sde_evtlog_start = sde_evtlog_start + 1
-                    sde_evtlog_count = sde_evtlog_count + 1
-                    log_log = Struct(self.ramdump, log_log,
-                                     struct_name="struct sde_dbg_evtlog_log",
-                                     fields={'name': Struct.get_pointer,
-                                             'cpu': Struct.get_u32,
-                                             'line': Struct.get_u32,
-                                             'data_cnt': Struct.get_u32,
-                                             'pid': Struct.get_u32,
-                                             'data' : Struct.get_address,
-                                             'time': get_u64})
-
-                    if (log_log.time == 0x0):
-                            break
-                    func_name = self.ramdump.read_cstring(log_log.name)
-                    func_name = func_name + ':' + str(log_log.line)
-                    self.outfile.write('%-60.50s' % (func_name))
-                    self.outfile.write('%-20.0d' % (log_log.time))
-                    self.outfile.write('%-8.1d' % (log_log.pid))
-                    self.outfile.write('%-8.1d' % (log_log.cpu))
-                    for i in range(log_log.data_cnt):
-                            self.outfile.write('%x ' % (self.ramdump.read_u32(log_log.data+(i*4))))
-                    self.outfile.write('\n' % ())
-            self.outfile.close()
-
-            #Event log Parser
-            tmp_outfile = self.ramdump.open_file('sde_evtlog.txt', 'r')
-            self.outfile = self.ramdump.open_file('evtlog_stage_1.txt')
-            lines = tmp_outfile.readlines()
-
-            for eachLine in lines:
-                if ':' in eachLine:
-                    try:
-                        eachLine1=re.sub(r'\s+', ' ', eachLine)
-                        matchObj=re.match(r'([a-zA-Z0-9_\-\.]+)(:)([0-9]+\s)([0-9]+\s)([0-9]+\s)([0-9]+\s)(.*)',eachLine1)
-                        line_new = '{:<50}  {:<10}  {:<15}  {:<15}  {:<15}  {:<100}'.format(matchObj.group(1), matchObj.group(3), matchObj.group(4), matchObj.group(5), matchObj.group(6), matchObj.group(7))
-                        self.outfile.write(line_new)
-                        self.outfile.write("\n")
-                    except:
-                        continue
-            tmp_outfile.close()
-            self.outfile.close()
-
-            #Event log Verbose
-            tmp_outfile = self.ramdump.open_file('evtlog_stage_1.txt', 'r')
-            self.outfile = self.ramdump.open_file('evtlog_stage_2.txt')
-            title = '{:<50}  {:<10}  {:<15}  {:<15}  {:<15}  {:<100}'.format('FUNCTION_NAME', "LINE_NO", "TIMESTAMP", "PID", "CPU", "DATA"  )
-            self.outfile.write(title)
-            self.outfile.write("\n")
-            for line in tmp_outfile:
-                if not line.isspace():
-                    self.outfile.write(line)
-            self.outfile.close()
-            tmp_outfile.close()
-
-            self.outfile = self.ramdump.open_file('evtlog_stage_2.txt', 'r')
-            self.outfile.readline()
-            contents_list = []
-            for line in self.outfile:
-                matchObj=re.match(r'([a-zA-Z0-9_\-\.]+)\s*([0-9]+)\s*([0-9]+)\s*([0-9]+)\s*([A-Z0-9]+)\s*(.*)',line)
-                sub_list=[matchObj.group(1).strip(),matchObj.group(2).strip(),matchObj.group(3).strip(),matchObj.group(4).strip(),matchObj.group(5).strip(),matchObj.group(6).strip()]
-                contents_list.append(sub_list)
-            self.outfile.close()
-            contents_list_for_analysis = contents_list
-            contents_list.reverse()
-            flag=0
-            finalflag=0
-            z=0
-
-            for i in range(len(contents_list)):
-                if(i>=len(contents_list)):
-                    break
-                if(contents_list[i][0]=="_sde_crtc_blend_setup_mixer") and flag==0:
-                    k=contents_list[i][3]
-                    while True:
-                        i=i+1
-                        z=i
-                        if(i>=len(contents_list)):
-                            contents_list.append((["\n-----------------------------------------------------------COMMIT SCHEDULED-------------------------------------------------------------------------"]))
-                            flag=1
-                            break
-                        elif( contents_list[i][3]==k):
-                            continue
-                        else:
-                            contents_list[i].extend(["\n-----------------------------------------------------------COMMIT SCHEDULED-------------------------------------------------------------------------"])
-                            finalflag=0
-                            flag=1
-                            break
-
-                elif(contents_list[i][0]=="sde_encoder_virt_atomic_check") and flag==1 and len(contents_list[i][5].split())==2:
-                    k=contents_list[i][3]
-                    while True and flag==1:
-                        i=i+1
-                        if(i>=len(contents_list)):
-                            break
-                        elif(contents_list[i][0]=="sde_fence_create") and finalflag==0:
-                            while True:
-                                i=i+1
-                                if(i>=len(contents_list)):
-                                    contents_list.append((["---------------------------------------------------------------CHECK START---------------------------------------------------------------------------"]))
-                                    flag=2
-                                    break
-                                elif(contents_list[i][0]=="sde_fence_create"):
-                                    continue
-                                else:
-                                    contents_list[i].extend(["\n--------------------------------------------------------------CHECK START--------------------------------------------------------------------------"])
-
-                                    flag=2
-                                    break
-
-                elif(contents_list[i][0]=="sde_encoder_virt_atomic_check") and flag==2 and len(contents_list[i][5].split())==2:
-                    k=contents_list[i][3]
-                    while True:
-                        i=i+1
-                        if(i>=len(contents_list)):
-                            contents_list.append((["------------------------------------------------------------CHECK ONLY START------------------------------------------------------------------------"]))
-                            break
-                        elif(contents_list[i][3]==k):
-                            continue
-                        else:
-                            contents_list[i].extend(["\n-----------------------------------------------------------CHECK ONLY START-----------------------------------------------------------------------"])
-                            flag=0
-                            break
-
-                elif((contents_list[i][0]=="_sde_crtc_blend_setup_mixer") and flag==2):
-                    flag=0
-
+                SDE_EVTLOG_ENTRY = 8192
+                SDE_EVTLOG_MAX_DATA = self.ramdump.sizeof('(*(sde_dbg_base.evtlog)).logs[0].data')/4
+                self.outfile.write('%-60.50s%-20.5s%-8.5s%-8.5s%s\n' % ("FUNC", "TIME", "PID", "CPU", "DATA"))
+                sde_evtlog_start = 0
+                sde_evtlog_repeat = 0
+                if (evt_log.curr != evt_log.last):
+                        sde_evtlog_start = evt_log.curr
                 else:
-                    continue
+                        sde_evtlog_repeat = 1
+                sde_evtlog_count = 0
+                while(sde_evtlog_count < SDE_EVTLOG_ENTRY):
+                        i = sde_evtlog_start % SDE_EVTLOG_ENTRY
+                        if (i == evt_log.curr):
+                                if (sde_evtlog_repeat):
+                                        break
+                                else:
+                                        sde_evtlog_repeat = 1
+                        addr = evt_log.logs + self.ramdump.sizeof('struct sde_dbg_evtlog_log') * i
+                        log_log = addr
+                        sde_evtlog_start = sde_evtlog_start + 1
+                        sde_evtlog_count = sde_evtlog_count + 1
+                        log_log = Struct(self.ramdump, log_log,
+                                         struct_name="struct sde_dbg_evtlog_log",
+                                         fields={'name': Struct.get_pointer,
+                                                 'cpu': Struct.get_u32,
+                                                 'line': Struct.get_u32,
+                                                 'data_cnt': Struct.get_u32,
+                                                 'pid': Struct.get_u32,
+                                                 'data' : Struct.get_address,
+                                                 'time': get_u64})
 
-            contents_list.reverse()
-            self.outfile=open('evtlog_stage_2.txt',"w")
-            for i in range(len(contents_list)) :
-                for j in range(len(contents_list[i])):
-                    self.outfile.write(contents_list[i][j])
-                    self.outfile.write(" ")
+                        if (log_log.time == 0x0):
+                                break
+                        func_name = self.ramdump.read_cstring(log_log.name)
+                        func_name = func_name + ':' + str(log_log.line)
+                        self.outfile.write('%-60.50s' % (func_name))
+                        self.outfile.write('%-20.0d' % (log_log.time))
+                        self.outfile.write('%-8.1d' % (log_log.pid))
+                        self.outfile.write('%-8.1d' % (log_log.cpu))
+                        for i in range(log_log.data_cnt):
+                                self.outfile.write('%x ' % (self.ramdump.read_u32(log_log.data+(i*4))))
+                        self.outfile.write('\n' % ())
+                self.outfile.close()
+
+                #Event log Parser
+                tmp_outfile = self.ramdump.open_file('sde_evtlog.txt', 'r')
+                self.outfile = self.ramdump.open_file('evtlog_stage_1.txt')
+                lines = tmp_outfile.readlines()
+
+                for eachLine in lines:
+                    if ':' in eachLine:
+                        try:
+                            eachLine1=re.sub(r'\s+', ' ', eachLine)
+                            matchObj=re.match(r'([a-zA-Z0-9_\-\.]+)(:)([0-9]+\s)([0-9]+\s)([0-9]+\s)([0-9]+\s)(.*)',eachLine1)
+                            line_new = '{:<50}  {:<10}  {:<15}  {:<15}  {:<15}  {:<100}'.format(matchObj.group(1), matchObj.group(3), matchObj.group(4), matchObj.group(5), matchObj.group(6), matchObj.group(7))
+                            self.outfile.write(line_new)
+                            self.outfile.write("\n")
+                        except:
+                            continue
+                tmp_outfile.close()
+                self.outfile.close()
+
+                #Event log Verbose
+                tmp_outfile = self.ramdump.open_file('evtlog_stage_1.txt', 'r')
+                self.outfile = self.ramdump.open_file('evtlog_stage_2.txt')
+                title = '{:<50}  {:<10}  {:<15}  {:<15}  {:<15}  {:<100}'.format('FUNCTION_NAME', "LINE_NO", "TIMESTAMP", "PID", "CPU", "DATA"  )
+                self.outfile.write(title)
                 self.outfile.write("\n")
-            self.outfile.write("\n")
-            self.outfile.close()
+                for line in tmp_outfile:
+                    if not line.isspace():
+                        self.outfile.write(line)
+                self.outfile.close()
+                tmp_outfile.close()
 
-            self.split_dic('evtlog_stage_2.txt')
+                self.outfile = self.ramdump.open_file('evtlog_stage_2.txt', 'r')
+                self.outfile.readline()
+                contents_list = []
+                for line in self.outfile:
+                    matchObj=re.match(r'([a-zA-Z0-9_\-\.]+)\s*([0-9]+)\s*([0-9]+)\s*([0-9]+)\s*([A-Z0-9]+)\s*(.*)',line)
+                    sub_list=[matchObj.group(1).strip(),matchObj.group(2).strip(),matchObj.group(3).strip(),matchObj.group(4).strip(),matchObj.group(5).strip(),matchObj.group(6).strip()]
+                    contents_list.append(sub_list)
+                self.outfile.close()
+                contents_list_for_analysis = contents_list
+                contents_list.reverse()
+                flag=0
+                finalflag=0
+                z=0
+
+                for i in range(len(contents_list)):
+                    if(i>=len(contents_list)):
+                        break
+                    if(contents_list[i][0]=="_sde_crtc_blend_setup_mixer") and flag==0:
+                        k=contents_list[i][3]
+                        while True:
+                            i=i+1
+                            z=i
+                            if(i>=len(contents_list)):
+                                contents_list.append((["\n-----------------------------------------------------------COMMIT SCHEDULED-------------------------------------------------------------------------"]))
+                                flag=1
+                                break
+                            elif( contents_list[i][3]==k):
+                                continue
+                            else:
+                                contents_list[i].extend(["\n-----------------------------------------------------------COMMIT SCHEDULED-------------------------------------------------------------------------"])
+                                finalflag=0
+                                flag=1
+                                break
+
+                    elif(contents_list[i][0]=="sde_encoder_virt_atomic_check") and flag==1 and len(contents_list[i][5].split())==2:
+                        k=contents_list[i][3]
+                        while True and flag==1:
+                            i=i+1
+                            if(i>=len(contents_list)):
+                                break
+                            elif(contents_list[i][0]=="sde_fence_create") and finalflag==0:
+                                while True:
+                                    i=i+1
+                                    if(i>=len(contents_list)):
+                                        contents_list.append((["---------------------------------------------------------------CHECK START---------------------------------------------------------------------------"]))
+                                        flag=2
+                                        break
+                                    elif(contents_list[i][0]=="sde_fence_create"):
+                                        continue
+                                    else:
+                                        contents_list[i].extend(["\n--------------------------------------------------------------CHECK START--------------------------------------------------------------------------"])
+
+                                        flag=2
+                                        break
+
+                    elif(contents_list[i][0]=="sde_encoder_virt_atomic_check") and flag==2 and len(contents_list[i][5].split())==2:
+                        k=contents_list[i][3]
+                        while True:
+                            i=i+1
+                            if(i>=len(contents_list)):
+                                contents_list.append((["------------------------------------------------------------CHECK ONLY START------------------------------------------------------------------------"]))
+                                break
+                            elif(contents_list[i][3]==k):
+                                continue
+                            else:
+                                contents_list[i].extend(["\n-----------------------------------------------------------CHECK ONLY START-----------------------------------------------------------------------"])
+                                flag=0
+                                break
+
+                    elif((contents_list[i][0]=="_sde_crtc_blend_setup_mixer") and flag==2):
+                        flag=0
+
+                    else:
+                        continue
+
+                contents_list.reverse()
+                self.outfile=open('evtlog_stage_2.txt',"w")
+                for i in range(len(contents_list)) :
+                    for j in range(len(contents_list[i])):
+                        self.outfile.write(contents_list[i][j])
+                        self.outfile.write(" ")
+                    self.outfile.write("\n")
+                self.outfile.write("\n")
+                self.outfile.close()
+
+                self.split_dic('evtlog_stage_2.txt')
+            except:
+                pass
             self.ramdump.remove_file('evtlog_stage_1.txt')
             self.ramdump.remove_file('evtlog_stage_2.txt')
 
             #Dumps
-            self.outfile = self.ramdump.open_file('sde_regdump.txt')
-            dump_list = ListWalker(self.ramdump, mdss_dbg.reg_base_list, 0)
-            if dump_list.is_empty():
-                self.outfile.write('%s \n' % ("BLK DUMPLIST IS EMPTY!!!"))
-                return
-            for blk in dump_list:
-                    reg_blk = Struct(self.ramdump, blk, struct_name="struct sde_dbg_reg_base",
-                            fields={'name': Struct.get_cstring,
-                            'base': Struct.get_pointer,
-                            'max_offset': Struct.get_u32,
-                            'sub_range_list': Struct.get_address,
-                            'reg_dump': Struct.get_pointer})
-                    if (reg_blk.base == 0x0000):
-                            continue
-                    self.outfile.write('\n---------------------------------------------------------------------\n')
-                    self.outfile.write('[%s]   0x%x\n' % (reg_blk.name, reg_blk.base))
-                    self.outfile.write('---------------------------------------------------------------------\n')
-                    headoffset_2 = self.ramdump.field_offset('struct sde_dbg_reg_range', 'head')
-                    sub_blk_list = ListWalker(self.ramdump, reg_blk.sub_range_list, headoffset_2)
+            try:
+                self.outfile = self.ramdump.open_file('sde_regdump.txt')
+                dump_list = ListWalker(self.ramdump, mdss_dbg.reg_base_list, 0)
+                if dump_list.is_empty():
+                    self.outfile.write('%s \n' % ("BLK DUMPLIST IS EMPTY!!!"))
+                    return
+                for blk in dump_list:
+                        reg_blk = Struct(self.ramdump, blk, struct_name="struct sde_dbg_reg_base",
+                                fields={'name': Struct.get_cstring,
+                                'base': Struct.get_pointer,
+                                'max_offset': Struct.get_u32,
+                                'sub_range_list': Struct.get_address,
+                                'reg_dump': Struct.get_pointer})
+                        if (reg_blk.base == 0x0000) or (reg_blk.name == ""):
+                                continue
+                        self.outfile.write('\n---------------------------------------------------------------------\n')
+                        self.outfile.write('[%s]   0x%x\n' % (reg_blk.name, reg_blk.base))
+                        self.outfile.write('---------------------------------------------------------------------\n')
+                        headoffset_2 = self.ramdump.field_offset('struct sde_dbg_reg_range', 'head')
+                        sub_blk_list = ListWalker(self.ramdump, reg_blk.sub_range_list, headoffset_2)
 
-                    if sub_blk_list.is_empty():
-                        self.mdss_dump_reg(reg_blk.base, reg_blk.max_offset, reg_blk.reg_dump, 0)
-                    else:
-                        for node in sub_blk_list:
-                            self.print_sderange(node)
-            #Dumps Parse
-            self.outfile.close()
-            f_in = self.ramdump.open_file('sde_regdump.txt', 'r')
-            self.outfile = self.ramdump.open_file('reg_stage_1.txt', 'w')
-            for eachLine in f_in:
-                if not eachLine.isspace() and "-----" not in eachLine and "======" not in eachLine and '["' not in eachLine :
-                    self.outfile.write(eachLine)
-            f_in.close()
-            self.outfile.close()
+                        if sub_blk_list.is_empty():
+                            self.mdss_dump_reg(reg_blk.base, reg_blk.max_offset, reg_blk.reg_dump, 0)
+                        else:
+                            for node in sub_blk_list:
+                                self.print_sderange(node)
+                #Dumps Parse
+                self.outfile.close()
+                f_in = self.ramdump.open_file('sde_regdump.txt', 'r')
+                self.outfile = self.ramdump.open_file('reg_stage_1.txt', 'w')
+                for eachLine in f_in:
+                    if not eachLine.isspace() and "-----" not in eachLine and "======" not in eachLine and '["' not in eachLine :
+                        self.outfile.write(eachLine)
+                f_in.close()
+                self.outfile.close()
 
-            f_in = self.ramdump.open_file("reg_stage_1.txt", 'r')
-            self.outfile = self.ramdump.open_file('reg_stage_2.txt','w')
-            for eachLine in f_in:
-                if '[' in eachLine:
-                    break
-            self.outfile.write(eachLine)
-            for eachLine in f_in:
+                f_in = self.ramdump.open_file("reg_stage_1.txt", 'r')
+                self.outfile = self.ramdump.open_file('reg_stage_2.txt','w')
+                for eachLine in f_in:
+                    if '[' in eachLine:
+                        break
                 self.outfile.write(eachLine)
-            f_in.close()
-            self.outfile.close()
-            contents_for_analysis=self.reg_parser("reg_stage_2.txt")
+                for eachLine in f_in:
+                    self.outfile.write(eachLine)
+                f_in.close()
+                self.outfile.close()
+                contents_for_analysis=self.reg_parser("reg_stage_2.txt")
 
-            #Regdump Verbose
-            contents_for_analysis=self.reg_verbose(contents_for_analysis)
-            self.file_write(contents_for_analysis, "sde_regdump_parsed.txt")
+                #Regdump Verbose
+                contents_for_analysis=self.reg_verbose(contents_for_analysis)
+                self.file_write(contents_for_analysis, "sde_regdump_parsed.txt")
+            except:
+                pass
             self.ramdump.remove_file('reg_stage_1.txt')
             self.ramdump.remove_file('reg_stage_2.txt')
             self.ramdump.remove_file('reg_stage_3.txt')
