@@ -53,12 +53,15 @@ class PageTracking(RamParser):
         self.stack_slabs = self.ramdump.address_of('stack_slabs')
         self.stack_slabs_size = self.ramdump.sizeof('void *')
 
-    def page_trace(self, pfn, mem_section):
+    def page_trace(self, pfn, mem_section, alloc):
         trace_offset = 0
         nr_entries_offset = 0
         trace_entries_offset = 0
         offset = 0
         struct_holding_trace_entries = 0
+
+        if not alloc and self.ramdump.kernel_version < (5, 4, 0):
+            return -1, -1, -1, -1
 
         if (self.ramdump.kernel_version <= (3, 19, 0)):
             trace_offset = self.ramdump.field_offset('struct page', 'trace')
@@ -125,10 +128,17 @@ class PageTracking(RamParser):
                 temp_page_ext = temp_page_ext + page_owner_ops_offset
                 order = self.ramdump.read_structure_field(
                             temp_page_ext, 'struct page_owner', 'order')
-                pid = self.ramdump.read_structure_field(
-                            temp_page_ext, 'struct page_owner', 'pid')
-                ts_nsec = self.ramdump.read_structure_field(
-                            temp_page_ext, 'struct page_owner', 'ts_nsec')
+                if alloc:
+                    pid = self.ramdump.read_structure_field(
+                                temp_page_ext, 'struct page_owner', 'pid')
+                    ts_nsec = self.ramdump.read_structure_field(
+                                temp_page_ext, 'struct page_owner', 'ts_nsec')
+                else:
+                    pid = -1
+                    ts_nsec = self.ramdump.read_structure_field(temp_page_ext,
+                              'struct page_owner', 'free_ts_nsec')
+                    if ts_nsec is None:
+                        ts_nsec = -1
             else:
                 order = self.ramdump.read_structure_field(
                             temp_page_ext, 'struct page_ext', 'order')
@@ -139,8 +149,12 @@ class PageTracking(RamParser):
                 struct_holding_trace_entries = temp_page_ext
             else:
                 if self.ramdump.kernel_version >= (4, 9, 0):
+                    if not alloc:
+                        handle_str = 'free_handle'
+                    else:
+                        handle_str = 'handle'
                     handle = self.ramdump.read_structure_field(
-                        temp_page_ext, 'struct page_owner', 'handle')
+                        temp_page_ext, 'struct page_owner', handle_str)
                 else:
                     handle = self.ramdump.read_structure_field(
                         temp_page_ext, 'struct page_ext', 'handle')
@@ -185,16 +199,26 @@ class PageTracking(RamParser):
 
         return alloc_str, order, pid, ts_nsec
 
-    def parse_output(self, pfn, mem_section, out_tracking, page_size, sorted_pages):
+    def parse_output(self, pfn, mem_section, out_tracking, out_tracking_freed,
+                     page_size, sorted_pages):
         str_f = "PFN : 0x{0:x}-0x{1:x} Page : 0x{2:x} Order : {3} PID : {4} ts_nsec {5}\n{" \
               "6}\n"
         page = pfn_to_page(self.ramdump, pfn)
         order = 0
         if (page_buddy(self.ramdump, page) or
             page_count(self.ramdump, page) == 0):
+            function_list, order, pid, ts_nsec = self.page_trace(pfn,
+                                                                 mem_section,
+                                                                 False)
+            if function_list == -1:
+                return
+            out_tracking_freed.write(str_f.format(pfn, pfn + (1 << order) - 1,
+                                                  page, order, pid, ts_nsec,
+                                                  function_list))
             return
+
         function_list, order, pid, ts_nsec = self.page_trace(pfn,
-                                                        mem_section)
+                                                        mem_section, True)
         if function_list == -1:
             return
         if order >= self.max_order:
@@ -320,15 +344,18 @@ class PageTracking(RamParser):
 
         out_tracking = self.ramdump.open_file('page_tracking.txt')
         out_frequency = self.ramdump.open_file('page_frequency.txt')
+        out_tracking_freed = self.ramdump.open_file('page_tracking_freed.txt')
         sorted_pages = {}
         page_size = 4
 
         if g_optimization is True:
             for pfn in range(start_pfn, end_pfn):
-                self.parse_output(pfn, mem_section, out_tracking, page_size, sorted_pages)
+                self.parse_output(pfn, mem_section, out_tracking,
+                                  out_tracking_freed, page_size, sorted_pages)
         else:
             for pfn in for_each_pfn(self.ramdump):
-                self.parse_output(pfn, mem_section, out_tracking, page_size, sorted_pages)
+                self.parse_output(pfn, mem_section, out_tracking,
+                                  out_tracking_freed, page_size, sorted_pages)
 
         sortdict = {}
         for i in sorted_pages:
@@ -351,7 +378,10 @@ class PageTracking(RamParser):
 
         out_tracking.close()
         out_frequency.close()
+        out_tracking_freed.close()
         print_out_str(
-            '---wrote page tracking information to page_tracking.txt')
+            '---wrote allocated page tracking information to page_tracking.txt')
+        print_out_str(
+            '---wrote freed page tracking information to page_tracking_freed.txt')
         print_out_str(
             '---wrote page frequency information to page_frequency.txt')
