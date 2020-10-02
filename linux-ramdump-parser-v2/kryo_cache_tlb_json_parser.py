@@ -441,6 +441,17 @@ def cache_dump_parse(input_filename, output_filename, target_cpu, cpu_data_file,
                                                                             opt_soc)
 
         start_offset = seek_offset + offset
+        if (isinstance(block_size,str) and block_size.isdigit()) or (isinstance(block_size,unicode) and block_size.isnumeric()):
+            block_size = int(block_size)
+        if (isinstance(num_sets,str) and num_sets.isdigit()) or (isinstance(num_sets,unicode) and num_sets.isnumeric()):
+            num_sets = int(num_sets)
+        if (isinstance(associativity,str) and associativity.isdigit()) or (isinstance(associativity,unicode) and associativity.isnumeric()):
+            associativity = int(associativity)
+        if type(block_size)!=int or type(num_sets)!=int or type(associativity)!=int :
+            sys.stderr.write('Type block_size    = ' + str(type(block_size)) + '\n')
+            sys.stderr.write('Type num_sets      = ' + str(type(num_sets)) + '\n')
+            sys.stderr.write('Type associativity = ' + str(type(associativity)) + '\n')
+            raise TypeError
 
         try:
             total_bytes = block_size * num_sets * associativity
