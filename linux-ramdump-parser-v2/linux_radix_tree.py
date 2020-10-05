@@ -57,7 +57,7 @@ class RadixTreeWalker(object):
             slot = 0
             shift = (height - 1) * RADIX_TREE_MAP_SHIFT
             slot = self.ramdump.read_word(radix_tree_node + slots_offset + pointer_size * off)
-            if slot is 0:
+            if slot == 0:
                 continue
             radix_tree_node_next = slot
             # RADIX_TREE_INTERNAL_NODE mean we are not leaf
