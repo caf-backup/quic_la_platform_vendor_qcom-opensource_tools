@@ -85,6 +85,7 @@ def dump_thread_group(ramdump, thread_group, task_out, taskhighlight_out, check_
     offset_stack = ramdump.field_offset('struct task_struct', 'stack')
     offset_state = ramdump.field_offset('struct task_struct', 'state')
     offset_prio = ramdump.field_offset('struct task_struct', 'prio')
+    offset_oncpu = ramdump.field_offset('struct task_struct', 'on_cpu')
     offset_schedinfo = ramdump.field_offset('struct task_struct', 'sched_info')
     offset_last_enqueued_ts = ramdump.field_offset('struct task_struct', 'last_enqueued_ts')
     offset_last_queued = offset_schedinfo + ramdump.field_offset('struct sched_info', 'last_queued')
@@ -115,7 +116,9 @@ def dump_thread_group(ramdump, thread_group, task_out, taskhighlight_out, check_
         next_thread_state = next_thread_start + offset_state
         next_thread_exit_state = next_thread_start + offset_exit_state
         next_thread_affine = next_thread_start + offset_affine
+        next_thread_oncpu = next_thread_start + offset_oncpu
         next_thread_info = ramdump.get_thread_info_addr(next_thread_start)
+        task_on_cpu = ramdump.read_int(next_thread_oncpu)
         thread_task_name = cleanupString(
             ramdump.read_cstring(next_thread_comm, 16))
         if thread_task_name is None or thread_task_name == "":
@@ -187,12 +190,15 @@ def dump_thread_group(ramdump, thread_group, task_out, taskhighlight_out, check_
                 else:
                     highlight_tasks += " " + thread_line
                     taskhighlight_out.write("  " + thread_line)
-                ramdump.unwind.unwind_backtrace(
-                     ramdump.thread_saved_sp(next_thread_start),
-                     ramdump.thread_saved_fp(next_thread_start),
-                     ramdump.thread_saved_pc(next_thread_start),
-                     0, '    ', taskhighlight_out)
-                thread_line = '+' + thread_line
+                if task_on_cpu == 1:
+                    taskhighlight_out.write("Task currently running on CPU. Please check dmesg_tz for callstack")
+                else:
+                    ramdump.unwind.unwind_backtrace(
+                        ramdump.thread_saved_sp(next_thread_start),
+                        ramdump.thread_saved_fp(next_thread_start),
+                        ramdump.thread_saved_pc(next_thread_start),
+                        0, '    ', taskhighlight_out)
+                    thread_line = '+' + thread_line
             else:
                 thread_line = ' ' + thread_line
 
@@ -209,18 +215,21 @@ def dump_thread_group(ramdump, thread_group, task_out, taskhighlight_out, check_
                 thread_task_name, thread_task_pid, task_cpu, task_state,
                 task_exit_state, addr_stack, next_thread_start, thread_task_prio, task_state_str,
                 task_last_enqueued_ts/1000000000.0, task_last_sleep_ts/1000000000.0))
-            task_out.write('    Stack:\n')
-            ramdump.unwind.unwind_backtrace(
-                 ramdump.thread_saved_sp(next_thread_start),
-                 ramdump.thread_saved_fp(next_thread_start),
-                 ramdump.thread_saved_pc(next_thread_start),
-                 0, '    ', task_out)
-            task_out.write(
-                '=======================================================\n')
-            cpu_no = ramdump.get_task_cpu(next_thread_start, threadinfo)
-            if cpu_no >= ramdump.get_num_cpus():
-                error = 1
-                return
+            if task_on_cpu == 1:
+                taskhighlight_out.write("Task currently running on CPU. Please check dmesg_tz for callstack")
+            else:
+                task_out.write('    Stack:\n')
+                ramdump.unwind.unwind_backtrace(
+                    ramdump.thread_saved_sp(next_thread_start),
+                    ramdump.thread_saved_fp(next_thread_start),
+                    ramdump.thread_saved_pc(next_thread_start),
+                    0, '    ', task_out)
+                task_out.write(
+                    '=======================================================\n')
+                cpu_no = ramdump.get_task_cpu(next_thread_start, threadinfo)
+                if cpu_no >= ramdump.get_num_cpus():
+                    error = 1
+                    return
             task_per_cpu_list[task_cpu].append([thread_task_name, thread_task_pid,
                 ramdump.read_u64(next_thread_last_arrival),
                 ramdump.read_u64(next_thread_last_queued),
