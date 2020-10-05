@@ -619,7 +619,7 @@ class Armv8MMU(MMU):
         return descriptor
 
     def do_tl_level_lookupel2(self, table_base_address, table_index):
-        descriptor, addr = self.do_level_lookupel2(
+        descriptor, addr = self.do_level_lookupel2v2(
             table_base_address, table_index, 12)
         if descriptor.dtype == Armv8MMU.TL_DESCRIPTOR_PAGE:
             descriptor.add_field('output_address', (47, 12))

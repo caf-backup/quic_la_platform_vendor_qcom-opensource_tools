@@ -13,7 +13,6 @@ import math
 import operator
 from mm import pfn_to_page
 from parser_util import register_parser, RamParser
-
 # /kernel/msm-4.4/mm/slub.c
 OO_SHIFT = 16
 PAGE_SHIFT = 12

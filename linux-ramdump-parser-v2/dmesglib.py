@@ -125,12 +125,17 @@ class DmesgLib(object):
             timestamp = self.ramdump.read_dword(curr_idx + time_offset)
             text_len = self.ramdump.read_u16(curr_idx + text_len_offset)
             text_str = self.ramdump.read_cstring(curr_idx + log_size, text_len)
-            for partial in text_str.split('\n'):
-                f = '[{0:>5}.{1:0>6d}] {2}\n'.format(
-                    timestamp // 1000000000, (timestamp % 1000000000) // 1000, partial)
-                self.outfile.write(f)
-            curr_idx = self.log_next(curr_idx, logbuf_addr)
-            curr_idx = self.verify_log(curr_idx, logbuf_addr, last_idx)
+            if text_str is not None:
+                for partial in text_str.split('\n'):
+                    f = '[{0:>5}.{1:0>6d}] {2}\n'.format(
+                        timestamp // 1000000000, (timestamp % 1000000000) // 1000, partial)
+                    self.outfile.write(f)
+                curr_idx = self.log_next(curr_idx, logbuf_addr)
+                curr_idx = self.verify_log(curr_idx, logbuf_addr, last_idx)
+            else:
+                self.outfile.write("[ Log wraps around ] at {0} \n".format(hex(curr_idx)))
+                curr_idx = logbuf_addr
+                self.wrap_cnt += 1
 
     def extract_dmesg(self):
         major, minor, patch = self.ramdump.kernel_version
