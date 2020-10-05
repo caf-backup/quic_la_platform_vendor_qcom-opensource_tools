@@ -195,16 +195,15 @@ class RamDump():
 
         def unwind_frame_generic64(self, frame):
             fp = frame.fp
-            low = frame.sp
-            mask = (self.ramdump.thread_size) - 1
-            high = (low + mask) & (~mask)
-
-            if (fp < low or fp > high or fp & 0xf):
+            try:
+                frame.sp = fp + 0x10
+                frame.fp = self.ramdump.read_word(fp)
+                frame.pc = self.ramdump.read_word(fp + 8)
+                if ((frame.fp == 0 and frame.pc == 0)
+                        or frame.pc is None or frame.lr is None):
+                    return -1
+            except:
                 return -1
-
-            frame.sp = fp + 0x10
-            frame.fp = self.ramdump.read_word(fp)
-            frame.pc = self.ramdump.read_word(fp + 8)
             return 0
 
         def unwind_frame_generic(self, frame):
@@ -592,29 +591,6 @@ class RamDump():
         self.hyp_dump = None
         self.ttbr = None
         self.vttbr = None
-        # Add search path for kernel modules under "vendor/qcom" directory
-        # Location of this directory in relation to vmlinux changes depending on whether it's a primary or secondary boot.
-        # PRIMARY-BOOT case:
-        if os.path.basename(os.path.dirname(os.path.dirname(options.vmlinux))) == 'obj':
-            boot_dir = os.path.dirname(os.path.dirname(options.vmlinux))
-            mod_build_path = os.path.join(boot_dir, 'vendor', 'qcom') # obj/vendor/qcom
-            if os.path.exists(mod_build_path):
-                self.module_table.add_sym_path(mod_build_path)
-            mod_build_path = os.path.join(boot_dir, os.pardir, 'vendor', 'lib', 'modules') # obj/../vendor/lib
-            if os.path.exists(mod_build_path):
-                self.module_table.add_sym_path(mod_build_path)
-        # SECONDARY-BOOT or gki-boot case:
-        elif os.path.basename(os.path.dirname(options.vmlinux)) in ['secondary-boot', 'gki-boot']:
-            boot_dir = os.path.dirname(options.vmlinux)
-            mod_build_path = os.path.join(boot_dir, 'unstripped_modules')  # secondary-boot/unstripped_modules
-            if os.path.exists(mod_build_path):
-                self.module_table.add_sym_path(mod_build_path)
-            mod_build_path = os.path.join(boot_dir, 'vendor', 'modules')  # secondary-boot/vendor/modules
-            if os.path.exists(mod_build_path):
-                self.module_table.add_sym_path(mod_build_path)
-            mod_build_path = os.path.join(boot_dir, 'dlkm', 'lib', 'modules')
-            if os.path.exists(mod_build_path):
-                self.module_table.add_sym_path(mod_build_path)
         if self.minidump:
             try:
                 mod = import_module('elftools.elf.elffile')
@@ -687,9 +663,15 @@ class RamDump():
             hyp_dump.determine_kaslr()
             self.gdbmi.kaslr_offset = hyp_dump.hyp_kaslr_addr_offset
             hyp_dump.get_trace_phy()
-            hyp_dump.get_ttbr()
             self.ttbr = hyp_dump.ttbr1
             self.vttbr = hyp_dump.vttbr
+            self.TTBR0_EL1 = hyp_dump.TTBR0_EL1
+            self.SCTLR_EL1 = hyp_dump.SCTLR_EL1
+            self.TCR_EL1 = hyp_dump.TCR_EL1
+            self.VTCR_EL2 = hyp_dump.VTCR_EL2
+            self.HCR_EL2 = hyp_dump.HCR_EL2
+            self.ttbr_data = hyp_dump.ttbr1_data_info
+            self.vttbr_data = hyp_dump.vttbr_el2_data
             self.s2_walk = True
             self.gdbmi.close() #closing gdb session with hyp elf
 
@@ -883,6 +865,8 @@ class RamDump():
                                  0)
             self.gdbmi.open()
         except Exception as err:
+            self.gdbmi = gdbmi.GdbMI(self.gdb_path, self.vmlinux,
+                                 self.kaslr_offset or 0)
             self.gdbmi.open() #openning gdb session with vmlinux
             if self.kaslr_offset is None:
                 self.determine_kaslr_offset()
@@ -1166,25 +1150,45 @@ class RamDump():
         if not self.minidump:
             if self.arm64:
                 startup_script.write('Register.Set NS 1\n')
-                startup_script.write('Data.Set SPR:0x30201 %Quad 0x{0:x}\n'.format(
-                    self.kernel_virt_to_phys(self.swapper_pg_dir_addr)))
-
-                if is_cortex_a53:
-                    startup_script.write('Data.Set SPR:0x30202 %Quad 0x00000012B5193519\n')
-                    startup_script.write('Data.Set SPR:0x30A20 %Quad 0x000000FF440C0400\n')
-                    startup_script.write('Data.Set SPR:0x30A30 %Quad 0x0000000000000000\n')
-                    startup_script.write('Data.Set SPR:0x30100 %Quad 0x0000000034D5D91D\n')
+                if self.svm:
+                    startup_script.write('Data.Set SPR:0x30201 %Quad 0x{0:x}\n'.format(
+                    self.ttbr_data))
+                    startup_script.write('Data.Set SPR:0x34210 %Quad 0x{0:x}\n'.format(
+                    self.vttbr_data))
+                    startup_script.write('Data.Set SPR:0x30100 %Quad 0x{0:x}\n'.format(
+                    self.SCTLR_EL1))
+                    startup_script.write('Data.Set SPR:0x30200 %Quad 0x{0:x}\n'.format(
+                    self.TTBR0_EL1))
+                    startup_script.write('Data.Set SPR:0x30202 %Quad 0x{0:x}\n'.format(
+                    self.TCR_EL1))
+                    startup_script.write('Data.Set SPR:0x34110 %Quad 0x{0:x}\n'.format(
+                    self.HCR_EL2))
+                    startup_script.write('Data.Set SPR:0x34212 %Quad 0x{0:x}\n'.format(
+                    self.VTCR_EL2))
+                    startup_script.write('R.S M 5\n')
                 else:
-                    startup_script.write('Data.Set SPR:0x30202 %Quad 0x00000032B5193519\n')
-                    startup_script.write('Data.Set SPR:0x30A20 %Quad 0x000000FF440C0400\n')
-                    startup_script.write('Data.Set SPR:0x30A30 %Quad 0x0000000000000000\n')
-                    startup_script.write('Data.Set SPR:0x30100 %Quad 0x0000000004C5D93D\n')
+                    startup_script.write('Data.Set SPR:0x30201 %Quad 0x{0:x}\n'.format(
+                        self.kernel_virt_to_phys(self.swapper_pg_dir_addr)))
 
-                startup_script.write('Register.Set CPSR 0x3C5\n')
-                startup_script.write('MMU.Delete\n')
-                startup_script.write('MMU.SCAN PT 0xFFFFFF8000000000--0xFFFFFFFFFFFFFFFF\n')
-                startup_script.write('mmu.on\n')
-                startup_script.write('mmu.pt.list 0xffffff8000000000\n')
+                    if is_cortex_a53:
+                        startup_script.write('Data.Set SPR:0x30202 %Quad 0x00000012B5193519\n')
+                        startup_script.write('Data.Set SPR:0x30A20 %Quad 0x000000FF440C0400\n')
+                        startup_script.write('Data.Set SPR:0x30A30 %Quad 0x0000000000000000\n')
+                        startup_script.write('Data.Set SPR:0x30100 %Quad 0x0000000034D5D91D\n')
+                    else:
+                        startup_script.write('Data.Set SPR:0x30202 %Quad 0x00000032B5193519\n')
+                        startup_script.write('Data.Set SPR:0x30A20 %Quad 0x000000FF440C0400\n')
+                        startup_script.write('Data.Set SPR:0x30A30 %Quad 0x0000000000000000\n')
+                        startup_script.write('Data.Set SPR:0x30100 %Quad 0x0000000004C5D93D\n')
+
+                    startup_script.write('Register.Set CPSR 0x3C5\n')
+                    startup_script.write('MMU.Delete\n')
+                    startup_script.write('MMU.SCAN PT 0xFFFFFF8000000000--0xFFFFFFFFFFFFFFFF\n')
+                    startup_script.write('mmu.on\n')
+                    startup_script.write('mmu.pt.list 0xffffff8000000000\n')
+                if self.svm:
+                        startup_script.write('trans.tablewalk on\n')
+                        startup_script.write('trans.on\n')
             else:
                 # ARM-32: MMU is enabled by default on most platforms.
                 mmu_enabled = 1
@@ -1532,7 +1536,7 @@ class RamDump():
         kallsyms_offset = self.field_offset('struct module', 'kallsyms')
 
         next_list_ent = self.read_pointer(mod_list + next_offset)
-        while next_list_ent != mod_list:
+        while next_list_ent and next_list_ent != mod_list:
             mod_tbl_ent = module_table.module_table_entry()
             module = next_list_ent - list_offset
             name_ptr = module + name_offset
@@ -1954,6 +1958,28 @@ class RamDump():
             return self.read_u64(addr, virtual)
         return None
 
+    def read(self, cmd):
+        """Reads the value of a C-style expression provided it doesn't have a
+        pointer.
+
+        Supported syntax for cmd: dump.read('device_3d0.dev.open_count')
+        """
+        size = self.sizeof("{0}".format(cmd))
+        addr = self.address_of(cmd)
+
+        if addr is None or size is None:
+            return None
+
+        if size == 2:
+            return self.read_u16(addr)
+        if size == 4:
+            return self.read_u32(addr)
+        if size == 8:
+            return self.read_u64(addr)
+        if size != 0 and size != 4 and size != 8:
+            return addr
+        return None
+
     def read_structure_cstring(self, addr_or_name, struct_name, field,
                                max_length=100):
         """reads a C string from a structure field.  The C string field will be
@@ -2354,6 +2380,48 @@ class Struct(object):
         length = self.get_struct_sizeof(key)
         return self.ramdump.read_cstring(address, length)
 
+    def get_cstring_from_pointer(self, key):
+        """
+        :param key: struct field name
+        :return: returns a string that is contained within struct memory
+
+        Example C struct::
+
+            struct {
+                char *key;
+            };
+        """
+        pointer = self.get_pointer(key)
+        return self.ramdump.read_cstring(pointer)
+
+    def get_u8(self, key):
+        """
+        :param key: struct field name
+        :return: returns a u8 integer within the struct
+
+        Example C struct::
+
+            struct {
+                u8 key;
+            };
+        """
+        address = self.get_address(key)
+        return self.ramdump.read_byte(address)
+
+    def get_u16(self, key):
+        """
+        :param key: struct field name
+        :return: returns a u16 integer within the struct
+
+        Example C struct::
+
+            struct {
+                u16 key;
+            };
+        """
+        address = self.get_address(key)
+        return self.ramdump.read_u16(address)
+
     def get_u32(self, key):
         """
         :param key: struct field name
@@ -2367,6 +2435,20 @@ class Struct(object):
         """
         address = self.get_address(key)
         return self.ramdump.read_u32(address)
+
+    def get_u64(self, key):
+        """
+        :param key: struct field name
+        :return: returns a u64 integer within the struct
+
+        Example C struct::
+
+            struct {
+                u64 key;
+            };
+        """
+        address = self.get_address(key)
+        return self.ramdump.read_u64(address)
 
     def get_array_ptrs(self, key):
         """

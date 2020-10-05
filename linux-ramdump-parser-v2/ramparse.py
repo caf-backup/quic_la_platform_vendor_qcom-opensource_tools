@@ -106,6 +106,10 @@ if __name__ == '__main__':
                       dest='currentEL', help='Current exception level for kernel')
     parser.add_option('', '--parse-qdss', action='store_true',
                       dest='qdss', help='Parse QDSS (deprecated)')
+    parser.add_option('', '--64-bit', action='store_true', dest='arm64',
+                      help='Parse dumps as 64-bit dumps (default)')
+    parser.add_option('', '--32-bit', action='store_true', dest='arm32',
+                      help='Parse dumps as 32-bit dumps')
     parser.add_option('', '--shell', action='store_true',
                       help='Run an interactive python interpreter with the ramdump loaded')
     parser.add_option('', '--classic-shell', action='store_true',
@@ -171,6 +175,10 @@ if __name__ == '__main__':
         default_list.append("RTB")
         default_list.append("DebugImage")
         default_list.append("Watchdog")
+        default_list.append("KBootLog")
+        default_list.append("PageTracking")
+        default_list.append("Slabinfo")
+        default_list.append("RunQueues")
 
     if options.outdir:
         if not os.path.exists(options.outdir):
