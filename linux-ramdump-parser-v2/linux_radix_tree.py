@@ -21,7 +21,7 @@
     walk_radix_tree_node start with this rnode
  '''
 RADIX_TREE_ENTRY_MASK =	3
-RADIX_TREE_INTERNAL_NODE = 1
+RADIX_TREE_INTERNAL_NODE = 1    # 1 for 4.19; 2 for 5.4
 RADIX_TREE_MAP_SHIFT = 6
 RADIX_TREE_MAP_SIZE = (1 << RADIX_TREE_MAP_SHIFT)
 
@@ -29,9 +29,21 @@ RADIX_TREE_MAP_SIZE = (1 << RADIX_TREE_MAP_SHIFT)
 class RadixTreeWalker(object):
     def __init__(self, ramdump):
         self.ramdump = ramdump
+        if (self.ramdump.kernel_version == (0, 0, 0) or
+           self.ramdump.kernel_version >= (5, 4, 0)):
+            self.root_struct = 'xarray'
+            self.head_struct = 'xa_head'
+            self.node_struct = 'xa_node'
+            global RADIX_TREE_INTERNAL_NODE
+            RADIX_TREE_INTERNAL_NODE = 2
+        else:
+            self.root_struct = 'radix_tree_root'
+            self.head_struct = 'rnode'
+            self.node_struct = 'radix_tree_node'
 
     def get_radix_tree_root(self, radix_tree_root):
-        rnode_offset = self.ramdump.field_offset('struct radix_tree_root', 'rnode')
+        rnode_offset = self.ramdump.field_offset('struct ' + self.root_struct,
+                                                 self.head_struct)
         rnode_addr = self.ramdump.read_word(radix_tree_root + rnode_offset)
         return rnode_addr
 
@@ -46,9 +58,12 @@ class RadixTreeWalker(object):
         if self.radix_tree_is_internal_node(radix_tree_node):
             radix_tree_node = self.entry_to_node(radix_tree_node)
 
-        rnode_shift_offset = self.ramdump.field_offset('struct radix_tree_node', 'shift')
-        slots_offset = self.ramdump.field_offset('struct radix_tree_node', 'slots')
-        pointer_size = self.ramdump.sizeof('struct radix_tree_node *')
+        rnode_shift_offset = self.ramdump.field_offset('struct ' +
+                                                       self.node_struct,
+                                                       'shift')
+        slots_offset = self.ramdump.field_offset('struct ' + self.node_struct,
+                                                 'slots')
+        pointer_size = self.ramdump.sizeof('struct ' + self.node_struct + ' *')
 
         shift = self.ramdump.read_byte(radix_tree_node + rnode_shift_offset)
 
