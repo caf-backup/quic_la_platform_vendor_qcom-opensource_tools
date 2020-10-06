@@ -464,6 +464,8 @@ class RamDump():
         def unwind_backtrace(self, sp, fp, pc, lr, extra_str='',
                              out_file=None):
             offset = 0
+            max_frames = 128
+            frame_count = 0
             frame = self.Stackframe(fp, sp, lr, pc)
             frame.fp = fp
             frame.sp = sp
@@ -493,6 +495,10 @@ class RamDump():
 
                 urc = self.unwind_frame(frame)
                 if urc < 0:
+                    break
+                frame_count = frame_count + 1
+                if frame_count >= max_frames:
+                    out_file.write("Max stack depth reached")
                     break
             return backtrace
 
