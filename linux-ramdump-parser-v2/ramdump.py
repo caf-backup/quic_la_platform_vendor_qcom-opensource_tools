@@ -195,16 +195,15 @@ class RamDump():
 
         def unwind_frame_generic64(self, frame):
             fp = frame.fp
-            low = frame.sp
-            mask = (self.ramdump.thread_size) - 1
-            high = (low + mask) & (~mask)
-
-            if (fp < low or fp > high or fp & 0xf):
+            try:
+                frame.sp = fp + 0x10
+                frame.fp = self.ramdump.read_word(fp)
+                frame.pc = self.ramdump.read_word(fp + 8)
+                if ((frame.fp == 0 and frame.pc == 0)
+                        or frame.pc is None or frame.lr is None):
+                    return -1
+            except:
                 return -1
-
-            frame.sp = fp + 0x10
-            frame.fp = self.ramdump.read_word(fp)
-            frame.pc = self.ramdump.read_word(fp + 8)
             return 0
 
         def unwind_frame_generic(self, frame):
@@ -664,9 +663,15 @@ class RamDump():
             hyp_dump.determine_kaslr()
             self.gdbmi.kaslr_offset = hyp_dump.hyp_kaslr_addr_offset
             hyp_dump.get_trace_phy()
-            hyp_dump.get_ttbr()
             self.ttbr = hyp_dump.ttbr1
             self.vttbr = hyp_dump.vttbr
+            self.TTBR0_EL1 = hyp_dump.TTBR0_EL1
+            self.SCTLR_EL1 = hyp_dump.SCTLR_EL1
+            self.TCR_EL1 = hyp_dump.TCR_EL1
+            self.VTCR_EL2 = hyp_dump.VTCR_EL2
+            self.HCR_EL2 = hyp_dump.HCR_EL2
+            self.ttbr_data = hyp_dump.ttbr1_data_info
+            self.vttbr_data = hyp_dump.vttbr_el2_data
             self.s2_walk = True
             self.gdbmi.close() #closing gdb session with hyp elf
 
@@ -1145,25 +1150,45 @@ class RamDump():
         if not self.minidump:
             if self.arm64:
                 startup_script.write('Register.Set NS 1\n')
-                startup_script.write('Data.Set SPR:0x30201 %Quad 0x{0:x}\n'.format(
-                    self.kernel_virt_to_phys(self.swapper_pg_dir_addr)))
-
-                if is_cortex_a53:
-                    startup_script.write('Data.Set SPR:0x30202 %Quad 0x00000012B5193519\n')
-                    startup_script.write('Data.Set SPR:0x30A20 %Quad 0x000000FF440C0400\n')
-                    startup_script.write('Data.Set SPR:0x30A30 %Quad 0x0000000000000000\n')
-                    startup_script.write('Data.Set SPR:0x30100 %Quad 0x0000000034D5D91D\n')
+                if self.svm:
+                    startup_script.write('Data.Set SPR:0x30201 %Quad 0x{0:x}\n'.format(
+                    self.ttbr_data))
+                    startup_script.write('Data.Set SPR:0x34210 %Quad 0x{0:x}\n'.format(
+                    self.vttbr_data))
+                    startup_script.write('Data.Set SPR:0x30100 %Quad 0x{0:x}\n'.format(
+                    self.SCTLR_EL1))
+                    startup_script.write('Data.Set SPR:0x30200 %Quad 0x{0:x}\n'.format(
+                    self.TTBR0_EL1))
+                    startup_script.write('Data.Set SPR:0x30202 %Quad 0x{0:x}\n'.format(
+                    self.TCR_EL1))
+                    startup_script.write('Data.Set SPR:0x34110 %Quad 0x{0:x}\n'.format(
+                    self.HCR_EL2))
+                    startup_script.write('Data.Set SPR:0x34212 %Quad 0x{0:x}\n'.format(
+                    self.VTCR_EL2))
+                    startup_script.write('R.S M 5\n')
                 else:
-                    startup_script.write('Data.Set SPR:0x30202 %Quad 0x00000032B5193519\n')
-                    startup_script.write('Data.Set SPR:0x30A20 %Quad 0x000000FF440C0400\n')
-                    startup_script.write('Data.Set SPR:0x30A30 %Quad 0x0000000000000000\n')
-                    startup_script.write('Data.Set SPR:0x30100 %Quad 0x0000000004C5D93D\n')
+                    startup_script.write('Data.Set SPR:0x30201 %Quad 0x{0:x}\n'.format(
+                        self.kernel_virt_to_phys(self.swapper_pg_dir_addr)))
 
-                startup_script.write('Register.Set CPSR 0x3C5\n')
-                startup_script.write('MMU.Delete\n')
-                startup_script.write('MMU.SCAN PT 0xFFFFFF8000000000--0xFFFFFFFFFFFFFFFF\n')
-                startup_script.write('mmu.on\n')
-                startup_script.write('mmu.pt.list 0xffffff8000000000\n')
+                    if is_cortex_a53:
+                        startup_script.write('Data.Set SPR:0x30202 %Quad 0x00000012B5193519\n')
+                        startup_script.write('Data.Set SPR:0x30A20 %Quad 0x000000FF440C0400\n')
+                        startup_script.write('Data.Set SPR:0x30A30 %Quad 0x0000000000000000\n')
+                        startup_script.write('Data.Set SPR:0x30100 %Quad 0x0000000034D5D91D\n')
+                    else:
+                        startup_script.write('Data.Set SPR:0x30202 %Quad 0x00000032B5193519\n')
+                        startup_script.write('Data.Set SPR:0x30A20 %Quad 0x000000FF440C0400\n')
+                        startup_script.write('Data.Set SPR:0x30A30 %Quad 0x0000000000000000\n')
+                        startup_script.write('Data.Set SPR:0x30100 %Quad 0x0000000004C5D93D\n')
+
+                    startup_script.write('Register.Set CPSR 0x3C5\n')
+                    startup_script.write('MMU.Delete\n')
+                    startup_script.write('MMU.SCAN PT 0xFFFFFF8000000000--0xFFFFFFFFFFFFFFFF\n')
+                    startup_script.write('mmu.on\n')
+                    startup_script.write('mmu.pt.list 0xffffff8000000000\n')
+                if self.svm:
+                        startup_script.write('trans.tablewalk on\n')
+                        startup_script.write('trans.on\n')
             else:
                 # ARM-32: MMU is enabled by default on most platforms.
                 mmu_enabled = 1
@@ -1933,6 +1958,28 @@ class RamDump():
             return self.read_u64(addr, virtual)
         return None
 
+    def read(self, cmd):
+        """Reads the value of a C-style expression provided it doesn't have a
+        pointer.
+
+        Supported syntax for cmd: dump.read('device_3d0.dev.open_count')
+        """
+        size = self.sizeof("{0}".format(cmd))
+        addr = self.address_of(cmd)
+
+        if addr is None or size is None:
+            return None
+
+        if size == 2:
+            return self.read_u16(addr)
+        if size == 4:
+            return self.read_u32(addr)
+        if size == 8:
+            return self.read_u64(addr)
+        if size != 0 and size != 4 and size != 8:
+            return addr
+        return None
+
     def read_structure_cstring(self, addr_or_name, struct_name, field,
                                max_length=100):
         """reads a C string from a structure field.  The C string field will be
@@ -2333,6 +2380,48 @@ class Struct(object):
         length = self.get_struct_sizeof(key)
         return self.ramdump.read_cstring(address, length)
 
+    def get_cstring_from_pointer(self, key):
+        """
+        :param key: struct field name
+        :return: returns a string that is contained within struct memory
+
+        Example C struct::
+
+            struct {
+                char *key;
+            };
+        """
+        pointer = self.get_pointer(key)
+        return self.ramdump.read_cstring(pointer)
+
+    def get_u8(self, key):
+        """
+        :param key: struct field name
+        :return: returns a u8 integer within the struct
+
+        Example C struct::
+
+            struct {
+                u8 key;
+            };
+        """
+        address = self.get_address(key)
+        return self.ramdump.read_byte(address)
+
+    def get_u16(self, key):
+        """
+        :param key: struct field name
+        :return: returns a u16 integer within the struct
+
+        Example C struct::
+
+            struct {
+                u16 key;
+            };
+        """
+        address = self.get_address(key)
+        return self.ramdump.read_u16(address)
+
     def get_u32(self, key):
         """
         :param key: struct field name
@@ -2346,6 +2435,20 @@ class Struct(object):
         """
         address = self.get_address(key)
         return self.ramdump.read_u32(address)
+
+    def get_u64(self, key):
+        """
+        :param key: struct field name
+        :return: returns a u64 integer within the struct
+
+        Example C struct::
+
+            struct {
+                u64 key;
+            };
+        """
+        address = self.get_address(key)
+        return self.ramdump.read_u64(address)
 
     def get_array_ptrs(self, key):
         """
