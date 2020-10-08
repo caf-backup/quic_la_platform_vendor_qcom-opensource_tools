@@ -41,7 +41,7 @@ class RadixTreeWalker(object):
     def radix_tree_is_internal_node(self, rbnode):
         return (rbnode & RADIX_TREE_ENTRY_MASK) == RADIX_TREE_INTERNAL_NODE
 
-    def walk_radix_tree_node(self, radix_tree_node, func):
+    def walk_radix_tree_node(self, radix_tree_node, func, *args):
 
         if self.radix_tree_is_internal_node(radix_tree_node):
             radix_tree_node = self.entry_to_node(radix_tree_node)
@@ -65,10 +65,10 @@ class RadixTreeWalker(object):
                 slot = self.entry_to_node(slot)
             else:
                 # now we are going to handle our data on this leaf node
-                func(slot)
+                func(slot, *args)
             if height > 1:
-                self.walk_radix_tree_node(radix_tree_node_next, func)
+                self.walk_radix_tree_node(radix_tree_node_next, func, *args)
 
-    def walk_radix_tree(self, radix_tree_root, func):
+    def walk_radix_tree(self, radix_tree_root, func, *args):
         radix_tree_node = self.get_radix_tree_root(radix_tree_root)
-        self.walk_radix_tree_node(radix_tree_node, func)
+        self.walk_radix_tree_node(radix_tree_node, func, *args)
