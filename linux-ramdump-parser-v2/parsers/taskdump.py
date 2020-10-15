@@ -85,7 +85,8 @@ def dump_thread_group(ramdump, thread_group, task_out, taskhighlight_out, check_
     offset_stack = ramdump.field_offset('struct task_struct', 'stack')
     offset_state = ramdump.field_offset('struct task_struct', 'state')
     offset_prio = ramdump.field_offset('struct task_struct', 'prio')
-    offset_oncpu = ramdump.field_offset('struct task_struct', 'on_cpu')
+    if ramdump.is_config_defined('CONFIG_SMP'):
+        offset_oncpu = ramdump.field_offset('struct task_struct', 'on_cpu')
     offset_schedinfo = ramdump.field_offset('struct task_struct', 'sched_info')
     offset_last_enqueued_ts = ramdump.field_offset('struct task_struct', 'last_enqueued_ts')
     offset_last_queued = offset_schedinfo + ramdump.field_offset('struct sched_info', 'last_queued')
@@ -103,6 +104,7 @@ def dump_thread_group(ramdump, thread_group, task_out, taskhighlight_out, check_
     orig_thread_group = thread_group
     first = 0
     seen_threads = []
+    task_on_cpu = 0
     while True:
         next_thread_start = thread_group - offset_thread_group
         next_thread_comm = next_thread_start + offset_comm
@@ -116,9 +118,10 @@ def dump_thread_group(ramdump, thread_group, task_out, taskhighlight_out, check_
         next_thread_state = next_thread_start + offset_state
         next_thread_exit_state = next_thread_start + offset_exit_state
         next_thread_affine = next_thread_start + offset_affine
-        next_thread_oncpu = next_thread_start + offset_oncpu
+        if ramdump.is_config_defined('CONFIG_SMP'):
+            next_thread_oncpu = next_thread_start + offset_oncpu
+            task_on_cpu = ramdump.read_int(next_thread_oncpu)
         next_thread_info = ramdump.get_thread_info_addr(next_thread_start)
-        task_on_cpu = ramdump.read_int(next_thread_oncpu)
         thread_task_name = cleanupString(
             ramdump.read_cstring(next_thread_comm, 16))
         if thread_task_name is None or thread_task_name == "":
