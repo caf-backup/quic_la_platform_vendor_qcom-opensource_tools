@@ -255,7 +255,7 @@ class PageTracking(RamParser):
                             break
                         functions[handle].append(line)
                         i = i+1
-                    pfns[handle].append(pfn)
+                pfns[handle].append(pfn)
 
             i = 0
             for key in pfns:
