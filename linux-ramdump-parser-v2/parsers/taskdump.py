@@ -85,6 +85,8 @@ def dump_thread_group(ramdump, thread_group, task_out, taskhighlight_out, check_
     offset_stack = ramdump.field_offset('struct task_struct', 'stack')
     offset_state = ramdump.field_offset('struct task_struct', 'state')
     offset_prio = ramdump.field_offset('struct task_struct', 'prio')
+    if ramdump.is_config_defined('CONFIG_SMP'):
+        offset_oncpu = ramdump.field_offset('struct task_struct', 'on_cpu')
     offset_schedinfo = ramdump.field_offset('struct task_struct', 'sched_info')
     offset_last_enqueued_ts = ramdump.field_offset('struct task_struct', 'last_enqueued_ts')
     offset_last_queued = offset_schedinfo + ramdump.field_offset('struct sched_info', 'last_queued')
@@ -102,6 +104,7 @@ def dump_thread_group(ramdump, thread_group, task_out, taskhighlight_out, check_
     orig_thread_group = thread_group
     first = 0
     seen_threads = []
+    task_on_cpu = 0
     while True:
         next_thread_start = thread_group - offset_thread_group
         next_thread_comm = next_thread_start + offset_comm
@@ -115,6 +118,9 @@ def dump_thread_group(ramdump, thread_group, task_out, taskhighlight_out, check_
         next_thread_state = next_thread_start + offset_state
         next_thread_exit_state = next_thread_start + offset_exit_state
         next_thread_affine = next_thread_start + offset_affine
+        if ramdump.is_config_defined('CONFIG_SMP'):
+            next_thread_oncpu = next_thread_start + offset_oncpu
+            task_on_cpu = ramdump.read_int(next_thread_oncpu)
         next_thread_info = ramdump.get_thread_info_addr(next_thread_start)
         thread_task_name = cleanupString(
             ramdump.read_cstring(next_thread_comm, 16))
@@ -187,12 +193,15 @@ def dump_thread_group(ramdump, thread_group, task_out, taskhighlight_out, check_
                 else:
                     highlight_tasks += " " + thread_line
                     taskhighlight_out.write("  " + thread_line)
-                ramdump.unwind.unwind_backtrace(
-                     ramdump.thread_saved_sp(next_thread_start),
-                     ramdump.thread_saved_fp(next_thread_start),
-                     ramdump.thread_saved_pc(next_thread_start),
-                     0, '    ', taskhighlight_out)
-                thread_line = '+' + thread_line
+                if task_on_cpu == 1:
+                    taskhighlight_out.write("Task currently running on CPU. Please check dmesg_tz for callstack")
+                else:
+                    ramdump.unwind.unwind_backtrace(
+                        ramdump.thread_saved_sp(next_thread_start),
+                        ramdump.thread_saved_fp(next_thread_start),
+                        ramdump.thread_saved_pc(next_thread_start),
+                        0, '    ', taskhighlight_out)
+                    thread_line = '+' + thread_line
             else:
                 thread_line = ' ' + thread_line
 
@@ -209,18 +218,21 @@ def dump_thread_group(ramdump, thread_group, task_out, taskhighlight_out, check_
                 thread_task_name, thread_task_pid, task_cpu, task_state,
                 task_exit_state, addr_stack, next_thread_start, thread_task_prio, task_state_str,
                 task_last_enqueued_ts/1000000000.0, task_last_sleep_ts/1000000000.0))
-            task_out.write('    Stack:\n')
-            ramdump.unwind.unwind_backtrace(
-                 ramdump.thread_saved_sp(next_thread_start),
-                 ramdump.thread_saved_fp(next_thread_start),
-                 ramdump.thread_saved_pc(next_thread_start),
-                 0, '    ', task_out)
-            task_out.write(
-                '=======================================================\n')
-            cpu_no = ramdump.get_task_cpu(next_thread_start, threadinfo)
-            if cpu_no >= ramdump.get_num_cpus():
-                error = 1
-                return
+            if task_on_cpu == 1:
+                taskhighlight_out.write("Task currently running on CPU. Please check dmesg_tz for callstack")
+            else:
+                task_out.write('    Stack:\n')
+                ramdump.unwind.unwind_backtrace(
+                    ramdump.thread_saved_sp(next_thread_start),
+                    ramdump.thread_saved_fp(next_thread_start),
+                    ramdump.thread_saved_pc(next_thread_start),
+                    0, '    ', task_out)
+                task_out.write(
+                    '=======================================================\n')
+                cpu_no = ramdump.get_task_cpu(next_thread_start, threadinfo)
+                if cpu_no >= ramdump.get_num_cpus():
+                    error = 1
+                    return
             task_per_cpu_list[task_cpu].append([thread_task_name, thread_task_pid,
                 ramdump.read_u64(next_thread_last_arrival),
                 ramdump.read_u64(next_thread_last_queued),
@@ -405,19 +417,24 @@ def do_dump_task_timestamps(ramdump):
             task_out[i].write('!!!Note : Some thread may be missing\n\n')
         task_per_cpu_list[i] = sorted(task_per_cpu_list[i], key=lambda l:l[2], reverse=True)
         str = '{0:<17s}{1:>8s}{2:>18s}{3:>18s}{4:>18s}{5:>17s}' \
-              ' {6:>8s}{7:>8s}{8:>18s}{9:>18s}\n'.format(
+              ' {6:>8s}{7:>8s}{8:>18s}{9:>18s}{10:>20s}\n'.format(
                     'Task name', 'PID', 'Exec_Started_at',
                     'Last_Queued_at', 'Total_wait_time',
                     'No_of_times_exec', 'Prio', 'State',
-                    'Last_enqueued_ts', 'Last_sleep_ts')
+                    'Last_enqueued_ts', 'Last_sleep_ts', 'Last runtime(msec)')
         task_out[i].write(str)
+
         for item in task_per_cpu_list[i]:
-            str = '{0:<17s}{1:8d}{2:18.9f}{3:18.9f}{4:18.9f}{5:17d}{6:8d}{7:>9s}{8:18.9f}{9:18.9f}\n'\
+            runtime = 0.0
+            if (item[8] < item[9]):
+               runtime = ((item[9]-item[8])/1000000.0)
+
+            str = '{0:<17s}{1:8d}{2:18.9f}{3:18.9f}{4:18.9f}{5:17d}{6:8d}{7:>9s}{8:18.9f}{9:18.9f} {10:18.9f}\n'\
                     .format(
                         item[0], item[1], item[2]/1000000000.0,
                         item[3]/1000000000.0, item[4]/1000000000.0,
                         item[5], item[6], item[7], item[8]/1000000000.0,
-                        item[9]/1000000000.0)
+                        item[9]/1000000000.0, runtime)
             task_out[i].write(str)
         task_out[i].close()
         print_out_str('---wrote tasks to tasks_sched_stats{0}.txt'.format(i))

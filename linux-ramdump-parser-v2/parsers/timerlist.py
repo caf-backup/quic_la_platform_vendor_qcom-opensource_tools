@@ -92,8 +92,9 @@ class TimerList(RamParser) :
             if timer_base != base:
                 remarks += "Timer Base Mismatch detected"
 
-        output = "\t{0:<6} {1:<18x} {2:<14} {3:<40} {4:<52} {5}\n".format(index, node, expires, function, data, remarks)
-        self.output.append(output)
+        if expires:
+            output = "\t{0:<6} {1:<18x} {2:<14} {3:<40} {4:<52} {5}\n".format(index, node, expires, function, data, remarks)
+            self.output.append(output)
 
     def iterate_vec(self, type, base):
         vec_addr = base + self.ramdump.field_offset(self.tvec_base, type)
