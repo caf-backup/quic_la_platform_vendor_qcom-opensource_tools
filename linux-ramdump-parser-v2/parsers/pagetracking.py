@@ -185,6 +185,43 @@ class PageTracking(RamParser):
 
         return alloc_str, order, pid, ts_nsec
 
+    def parse_output(self, pfn, mem_section, out_tracking, page_size, sorted_pages):
+        str_f = "PFN : 0x{0:x}-0x{1:x} Page : 0x{2:x} Order : {3} PID : {4} ts_nsec {5}\n{" \
+              "6}\n"
+        page = pfn_to_page(self.ramdump, pfn)
+        order = 0
+        if (page_buddy(self.ramdump, page) or
+            page_count(self.ramdump, page) == 0):
+            return
+        function_list, order, pid, ts_nsec = self.page_trace(pfn,
+                                                        mem_section)
+        if function_list == -1:
+            return
+        if order >= self.max_order:
+            out_tracking.write('PFN 0x{:x} page 0x{:x} skip as order '
+                               '0x{:x}\n'.format(pfn, page, order))
+        out_tracking.write(str_f.format(pfn, pfn + (1 << order) - 1,
+                            page, order, pid, ts_nsec, function_list))
+        if function_list in sorted_pages:
+            sorted_pages[function_list]["page_count"] = \
+                sorted_pages[function_list]["page_count"] + 1
+            sorted_pages[function_list]["memory"] += page_size * (1 << int(order))
+            if pid in sorted_pages[function_list]:
+                if order in sorted_pages[function_list][pid]:
+                    sorted_pages[function_list][pid][order] = \
+                        sorted_pages[function_list][pid][order] + 1
+                else:
+                    sorted_pages[function_list][pid][order] = 1
+            else:
+                sorted_pages[function_list][pid] = {}
+                sorted_pages[function_list][pid][order] = 1
+        else:
+            sorted_pages[function_list] = {}
+            sorted_pages[function_list]["page_count"] = 1
+            sorted_pages[function_list]["memory"] = page_size * (1<<int(order))
+            sorted_pages[function_list][pid] = {}
+            sorted_pages[function_list][pid][order] = 1
+
     def parse(self):
         ranges = None
         if self.ramdump.minidump:
@@ -284,62 +321,33 @@ class PageTracking(RamParser):
         out_tracking = self.ramdump.open_file('page_tracking.txt')
         out_frequency = self.ramdump.open_file('page_frequency.txt')
         sorted_pages = {}
-        str1 = "PFN : 0x{0:x}-0x{1:x} Page : 0x{2:x} Order : {3} PID : {4} ts_nsec {5}\n{" \
-              "6}\n"
+        page_size = 4
 
         if g_optimization is True:
             for pfn in range(start_pfn, end_pfn):
-                page = pfn_to_page(self.ramdump, pfn)
-                order = 0
-                if (page_buddy(self.ramdump, page) or
-                        page_count(self.ramdump, page) == 0):
-                    continue
-                function_list, order, pid, ts_nsec = self.page_trace(pfn,
-                                                                mem_section)
-                if function_list == -1:
-                    continue
-                if order >= self.max_order:
-                    out_tracking.write('PFN 0x{:x} page 0x{:x} skip as order '
-                                       '0x{:x}\n'.format(pfn, page, order))
-                out_tracking.write(str1.format(pfn, pfn + (1 << order) - 1,
-                                    page, order, pid, ts_nsec, function_list))
-                if function_list in sorted_pages:
-                    sorted_pages[function_list] = sorted_pages[function_list]\
-                                                  + 1
-                else:
-                    sorted_pages[function_list] = 1
-
+                self.parse_output(pfn, mem_section, out_tracking, page_size, sorted_pages)
         else:
             for pfn in for_each_pfn(self.ramdump):
-                page = pfn_to_page(self.ramdump, pfn)
-                order = 0
-                if (page_buddy(self.ramdump, page) or
-                        page_count(self.ramdump, page) == 0):
-                    continue
-                function_list, order, pid, ts_nsec = self.page_trace(pfn,
-                                                                mem_section)
-                if function_list == -1:
-                    continue
-                if order >= self.max_order:
-                    out_tracking.write('PFN 0x{:x} page 0x{:x} skip as order '
-                                       '0x{:x}\n'.format(pfn, page, order))
+                self.parse_output(pfn, mem_section, out_tracking, page_size, sorted_pages)
 
-                out_tracking.write(str1.format(pfn, pfn + (1 << order) - 1,
-                                page, order, pid, ts_nsec, function_list))
-
-                if function_list in sorted_pages:
-                    sorted_pages[function_list] = sorted_pages[function_list]\
-                                                  + 1
-                else:
-                    sorted_pages[function_list] = 1
-
-        sortlist = sorted(sorted_pages.items(),
-                          key=lambda x: x[1], reverse=True)
-
-        for k, v in sortlist:
-            out_frequency.write('Allocated {0} times\n'.format(v))
-            out_frequency.write(k)
-            out_frequency.write('\n')
+        sortdict = {}
+        for i in sorted_pages:
+            sortdict[i] = sorted_pages[i]["memory"]
+        sortdict = sorted(sortdict, key = lambda k: sortdict[k], reverse = True)
+        try:
+            for i in sortdict:
+                out_frequency.write('Allocated {0} times, total memory: {1} KB\n'.
+                    format(sorted_pages[i]["page_count"], sorted_pages[i]["memory"]))
+                out_frequency.write(i)
+                for j in sorted_pages[i]:
+                    if str(j) != "page_count" and str(j) != "memory":
+                        for order in sorted_pages[i][j]:
+                            memory_order = page_size * (1<<int(order)) * sorted_pages[i][j][order]
+                            out_frequency.write("pid:{0} order:{1} frequency:{2} memory:{3} KB\n"\
+                                .format(j, order, sorted_pages[i][j][order], memory_order))
+                out_frequency.write('\n')
+        except Exception as e:
+            print_out_str(str(e))
 
         out_tracking.close()
         out_frequency.close()
