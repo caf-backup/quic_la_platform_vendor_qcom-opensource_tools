@@ -175,6 +175,11 @@ if __name__ == '__main__':
         default_list.append("RTB")
         default_list.append("DebugImage")
         default_list.append("Watchdog")
+        default_list.append("KBootLog")
+        default_list.append("PageTracking")
+        default_list.append("Slabinfo")
+        default_list.append("RunQueues")
+        default_list.append("PStore")
 
     if options.outdir:
         if not os.path.exists(options.outdir):
