@@ -464,6 +464,8 @@ class RamDump():
         def unwind_backtrace(self, sp, fp, pc, lr, extra_str='',
                              out_file=None):
             offset = 0
+            max_frames = 128
+            frame_count = 0
             frame = self.Stackframe(fp, sp, lr, pc)
             frame.fp = fp
             frame.sp = sp
@@ -493,6 +495,10 @@ class RamDump():
 
                 urc = self.unwind_frame(frame)
                 if urc < 0:
+                    break
+                frame_count = frame_count + 1
+                if frame_count >= max_frames:
+                    out_file.write("Max stack depth reached")
                     break
             return backtrace
 
@@ -611,7 +617,7 @@ class RamDump():
                         'Could not open {0}. Will not be part of dump'.format(file_path))
                     continue
                 self.ebi_files.append((fd, start, end, file_path))
-        elif not options.minidump:
+        else:
             if not self.auto_parse(options.autodump, options.minidump):
                 print("Oops, auto-parse option failed. Please specify vmlinux & DDR files manually.")
                 sys.exit(1)
@@ -2380,6 +2386,48 @@ class Struct(object):
         length = self.get_struct_sizeof(key)
         return self.ramdump.read_cstring(address, length)
 
+    def get_cstring_from_pointer(self, key):
+        """
+        :param key: struct field name
+        :return: returns a string that is contained within struct memory
+
+        Example C struct::
+
+            struct {
+                char *key;
+            };
+        """
+        pointer = self.get_pointer(key)
+        return self.ramdump.read_cstring(pointer)
+
+    def get_u8(self, key):
+        """
+        :param key: struct field name
+        :return: returns a u8 integer within the struct
+
+        Example C struct::
+
+            struct {
+                u8 key;
+            };
+        """
+        address = self.get_address(key)
+        return self.ramdump.read_byte(address)
+
+    def get_u16(self, key):
+        """
+        :param key: struct field name
+        :return: returns a u16 integer within the struct
+
+        Example C struct::
+
+            struct {
+                u16 key;
+            };
+        """
+        address = self.get_address(key)
+        return self.ramdump.read_u16(address)
+
     def get_u32(self, key):
         """
         :param key: struct field name
@@ -2393,6 +2441,20 @@ class Struct(object):
         """
         address = self.get_address(key)
         return self.ramdump.read_u32(address)
+
+    def get_u64(self, key):
+        """
+        :param key: struct field name
+        :return: returns a u64 integer within the struct
+
+        Example C struct::
+
+            struct {
+                u64 key;
+            };
+        """
+        address = self.get_address(key)
+        return self.ramdump.read_u64(address)
 
     def get_array_ptrs(self, key):
         """
