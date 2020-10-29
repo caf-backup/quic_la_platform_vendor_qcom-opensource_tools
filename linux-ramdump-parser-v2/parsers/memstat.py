@@ -109,42 +109,39 @@ class MemStats(RamParser):
         return other_mem
 
     def calculate_ionmem(self):
-        number_of_ion_heaps = self.ramdump.read_int('num_heaps')
-        heap_addr = self.ramdump.read_word('heaps')
         if self.ramdump.kernel_version >= (5, 4):
-            offset_total_allocated = \
-            self.ramdump.field_offset(
-                'struct ion_heap', 'num_of_alloc_bytes')
-            size = self.ramdump.sizeof(
-                '((struct ion_heap *)0x0)->num_of_alloc_bytes')
+            grandtotal = self.ramdump.read_u64('total_heap_bytes')
         else:
+            number_of_ion_heaps = self.ramdump.read_int('num_heaps')
+            heap_addr = self.ramdump.read_word('heaps')
+
             offset_total_allocated = \
             self.ramdump.field_offset(
                 'struct ion_heap', 'total_allocated')
             size = self.ramdump.sizeof(
                 '((struct ion_heap *)0x0)->total_allocated')
 
-        if offset_total_allocated is None:
-            return "ion buffer debugging change is not there in this kernel"
-        if self.ramdump.arm64:
-            addressspace = 8
-        else:
-            addressspace = 4
-        heap_addr_array = []
-        grandtotal = 0
-        for i in range(0, number_of_ion_heaps):
-            heap_addr_array.append(heap_addr + i * addressspace)
-            temp = self.ramdump.read_word(heap_addr_array[i])
-            if size == 4:
-                total_allocated = self.ramdump.read_int(
+            if offset_total_allocated is None:
+                return "ion buffer debugging change is not there in this kernel"
+            if self.ramdump.arm64:
+                addressspace = 8
+            else:
+                addressspace = 4
+            heap_addr_array = []
+            grandtotal = 0
+            for i in range(0, number_of_ion_heaps):
+                heap_addr_array.append(heap_addr + i * addressspace)
+                temp = self.ramdump.read_word(heap_addr_array[i])
+                if size == 4:
+                    total_allocated = self.ramdump.read_int(
                                     temp + offset_total_allocated)
-            if size == 8:
-                total_allocated = self.ramdump.read_u64(
+                if size == 8:
+                    total_allocated = self.ramdump.read_u64(
                                     temp + offset_total_allocated)
-            if total_allocated is None:
-                total_allocated = 0
-                break
-            grandtotal = grandtotal + total_allocated
+                if total_allocated is None:
+                    total_allocated = 0
+                    break
+                grandtotal = grandtotal + total_allocated
         grandtotal = self.bytes_to_mb(grandtotal)
         return grandtotal
 

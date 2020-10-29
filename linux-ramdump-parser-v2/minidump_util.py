@@ -39,11 +39,11 @@ def read_physical_minidump(ebi_files,ebi_files_ramfile,elffile,addr,length):
         idx = ebi[0]
         textSec = elffile.get_segment(idx)
         off = addr - ebi[1]
-        elf_content = bytearray(a[4])
+        endoff = off + length
+        if endoff > ebi[4]:
+            endoff = ebi[4]
         val = textSec.data()
-        elf_content[0:a[4]] = val
-        data = elf_content[off:]
-        return data[:length]
+        return val[off:endoff]
     else:
         ebi = (-1, -1, -1)
         for a in ebi_files_ramfile:

@@ -464,6 +464,8 @@ class RamDump():
         def unwind_backtrace(self, sp, fp, pc, lr, extra_str='',
                              out_file=None):
             offset = 0
+            max_frames = 128
+            frame_count = 0
             frame = self.Stackframe(fp, sp, lr, pc)
             frame.fp = fp
             frame.sp = sp
@@ -493,6 +495,10 @@ class RamDump():
 
                 urc = self.unwind_frame(frame)
                 if urc < 0:
+                    break
+                frame_count = frame_count + 1
+                if frame_count >= max_frames:
+                    out_file.write("Max stack depth reached")
                     break
             return backtrace
 
@@ -611,7 +617,7 @@ class RamDump():
                         'Could not open {0}. Will not be part of dump'.format(file_path))
                     continue
                 self.ebi_files.append((fd, start, end, file_path))
-        elif not options.minidump:
+        else:
             if not self.auto_parse(options.autodump, options.minidump):
                 print("Oops, auto-parse option failed. Please specify vmlinux & DDR files manually.")
                 sys.exit(1)
