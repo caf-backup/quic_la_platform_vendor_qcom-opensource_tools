@@ -162,7 +162,7 @@ class PStore(RamParser):
         while next_addr < (pmsg_size - 19):
             magic, len, uid, pid, id, tid, tv_sec, tv_nsec, outtag = \
                     struct.unpack('<c3HbH2Ib', pmsg[next_addr:next_addr + 19])
-            if magic == b'l' and 0 <= outtag < 9 and 0 <= id < 7 and \
+            if magic == b'l' and 0 <= outtag < 9 and 0 <= id < 7 and len > 19 and \
                     (content_err or pmsg[next_addr-1:next_addr] == b'\x00'):
                 tv_nsec = str(tv_nsec // 1000)
                 tv_nsec = tv_nsec.zfill(6)
