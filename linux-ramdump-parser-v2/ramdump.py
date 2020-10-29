@@ -498,7 +498,8 @@ class RamDump():
                     break
                 frame_count = frame_count + 1
                 if frame_count >= max_frames:
-                    out_file.write("Max stack depth reached")
+                    if out_file != None:
+                        out_file.write("Max stack depth reached")
                     break
             return backtrace
 
@@ -1032,7 +1033,7 @@ class RamDump():
         else:
             print_out_str('!!! Could not lookup saved command line address')
             return False
-        
+
     def print_socinfo_minidump(self):
         content_socinfo = None
         boards = get_supported_boards()
