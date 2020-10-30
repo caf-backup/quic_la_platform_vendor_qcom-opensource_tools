@@ -949,6 +949,11 @@ class DebugImage_v2():
                 root_table.version >> 20, root_table.version & 0xFFFFF, root_table.num_entries))
             print_out_str('--------')
 
+            out_dir =  ram_dump.outdir
+            sdi_dump_out = open(os.path.join(out_dir , 'sdi_dump_table.txt') , 'w')
+            sdi_dump_out.write("DumpTable base = 0x{0:02x} \n".format(root_table.phys_addr))
+            sdi_dump_out.write("DumpTable Src = {0}\n".format(root_table.name))
+
             for i in range(0, root_table.num_entries):
                 this_entry = root_table.phys_addr + dump_table_entry_offset + \
                     i * dump_entry_size
@@ -1018,9 +1023,12 @@ class DebugImage_v2():
                     print_out_str('Parsing debug information for {0}. Version: {1} Magic: {2:x} Source: {3}'.format(
                         client_name, dump_data_version, dump_data_magic,
                         dump_data_name))
-
-
-
+                    sdi_dump_out.write("Id = {0} type = {1} Addr = 0x{2:02x} "
+                    "version {3}  magic {4} DataAddr 0x{5:02x}  DataLen {6} "
+                    "Dataname {7} \n"
+                    .format(client_id,client_type,client_addr,
+                    dump_data_version,dump_data_magic,dump_data_addr,
+                    dump_data_len,dump_data_name))
                     if dump_data_magic != MEMDUMPV2_MAGIC and dump_data_magic != MEMDUMPV_HYP_MAGIC:
                         print_out_str("!!! Magic {0:x} doesn't match! No context will be parsed".format(dump_data_magic))
                         continue
@@ -1028,6 +1036,7 @@ class DebugImage_v2():
                     getattr(DebugImage_v2, func)(
                         self, dump_data_version, dump_data_addr,
                         dump_data_addr + dump_data_len, client_id, ram_dump)
+            sdi_dump_out.close()
         else:
             dump_table_num_entry_offset = ram_dump.field_offset(
                 'struct md_table', 'num_regions')
