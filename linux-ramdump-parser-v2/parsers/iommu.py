@@ -307,7 +307,7 @@ class IOMMU(RamParser):
 
     def parse_short_form_tables(self, d, domain_num):
         self.out_file = self.ramdump.open_file(
-            'msm_iommu_domain_%02d.txt' % (domain_num))
+            'msm_iommu_domain_%02d_0x%12X.txt' % (domain_num, d.pg_table))
         redirect = 'OFF'
         if d.redirect is None:
             redirect = 'UNKNOWN'
