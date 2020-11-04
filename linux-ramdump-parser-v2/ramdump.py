@@ -2014,6 +2014,18 @@ class RamDump():
         else:
             return s
 
+    def read_binarystring(self, addr_or_name, length, virtual=True, cpu=None):
+        """Reads binary data of specified length from addr_or_name."""
+        addr = addr_or_name
+        if virtual:
+            if cpu is not None:
+                pcpu_offset = self.per_cpu_offset(cpu)
+                addr_or_name = self.resolve_virt(addr_or_name)
+                addr_or_name += pcpu_offset
+            addr = self.virt_to_phys(addr_or_name)
+        s = self.read_physical(addr, length)
+        return s
+
     def read_string(self, addr_or_name, format_string, virtual=True, cpu=None):
         """Reads data using a format string.
 
