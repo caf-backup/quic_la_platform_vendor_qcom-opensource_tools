@@ -429,7 +429,8 @@ def parse_aarch64_tables(ramdump, d, domain_num):
     device_name  = re.sub("[^a-zA-Z]+", "_", d.client_name.strip())
     if device_name is None:
         device_name = "xxxx"
-    fname = 'arm_iommu_domain_%02d_%s.txt' % (domain_num, device_name)
+    fname = 'arm_iommu_domain_%02d_%s_0x%12X.txt' % (domain_num, device_name,
+                                                     d.pg_table)
     with ramdump.open_file(fname) as outfile:
 
         redirect = 'OFF'
