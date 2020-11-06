@@ -254,22 +254,40 @@ class DebugImage_v2():
                 ram_dump.gdmi_switch_open()
                 cpu_type_offset  = ram_dump.field_offset(
                                 'struct msm_dump_cpu_ctx', 'cpu_type')
+                if cpu_type_offset is None:
+                    cpu_type_offset = 0x0
                 ctx_type_offset  = ram_dump.field_offset(
                                 'struct msm_dump_cpu_ctx', 'ctx_type')
+                if ctx_type_offset is None:
+                    ctx_type_offset = 0x4
                 cpu_id_offset  = ram_dump.field_offset(
                                 'struct msm_dump_cpu_ctx', 'cpu_id')
+                if cpu_id_offset is None:
+                    cpu_id_offset = 0xC
                 cpu_index_offset  = ram_dump.field_offset(
                                 'struct msm_dump_cpu_ctx', 'affinity')
+                if cpu_index_offset is None:
+                    cpu_index_offset = 0x10
                 machine_id_offset  = ram_dump.field_offset(
                                 'struct msm_dump_cpu_ctx', 'machine_id')
+                if machine_id_offset is None:
+                    machine_id_offset = 0x14
                 registers_offset   = ram_dump.field_offset(
                                 'struct msm_dump_cpu_ctx', 'registers')
+                if registers_offset is None:
+                    registers_offset = 0x20
                 regset_num_register_offset  = ram_dump.field_offset(
                                 'struct msm_dump_cpu_ctx', 'num_register_sets')
+                if regset_num_register_offset is None:
+                    regset_num_register_offset = 0x1C
                 regset_id_offset  = ram_dump.field_offset(
                                 'struct msm_dump_cpu_register_entry', 'regset_id')
+                if regset_id_offset is None:
+                    regset_id_offset = 0x0
                 regset_addr_offset  = ram_dump.field_offset(
                                 'struct msm_dump_cpu_register_entry', 'regset_addr')
+                if regset_addr_offset is None:
+                    regset_addr_offset = 0x8
 
                 cpu_type = ram_dump.read_u32(start + cpu_type_offset,False)
                 print_out_str("cpu_type = {0}".format(msm_dump_cpu_type[cpu_type]))
@@ -280,6 +298,8 @@ class DebugImage_v2():
                 regset_num_register = ram_dump.read_u32(start + regset_num_register_offset,False)
                 registers = start + registers_offset
                 registers_size = ram_dump.sizeof('struct msm_dump_cpu_register_entry')
+                if registers_size is None:
+                    registers_size = 0x10
                 regset_name_addr = OrderedDict()
                 for i in range(0,regset_num_register):
                     registers_addr = registers + registers_size * i
@@ -290,6 +310,8 @@ class DebugImage_v2():
                     print_out_str("regset_name = {0}".format(regset_name))
                     regset_addr = ram_dump.read_u32(registers_addr + regset_addr_offset,False)
                     regset_size = ram_dump.sizeof('struct msm_dump_aarch64_gprs')
+                    if regset_size is None:
+                        regset_size = 0x110
                     regset_end = regset_addr + regset_size
                     regset_name_addr[regset_name] = [regset_addr,regset_end]
                 regs = TZRegDump_v2()
