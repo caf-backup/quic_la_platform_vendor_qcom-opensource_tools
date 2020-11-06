@@ -1011,14 +1011,15 @@ class DebugImage_v2():
                                         client_addr + dump_data_addr_offset, False)
                     dump_data_len = ram_dump.read_dword(
                                         client_addr + dump_data_len_offset, False)
-                    print_out_str('Parsing debug information for {0}. Version: {1} Magic: {2:x} Source: {3}'.format(
-                        client_name, dump_data_version, dump_data_magic,
-                        dump_data_name))
-
                     if dump_data_magic is None:
                         print_out_str("!!! Address {0:x} is bogus! Can't parse!".format(
                                     client_addr + dump_data_magic_offset))
                         continue
+                    print_out_str('Parsing debug information for {0}. Version: {1} Magic: {2:x} Source: {3}'.format(
+                        client_name, dump_data_version, dump_data_magic,
+                        dump_data_name))
+
+
 
                     if dump_data_magic != MEMDUMPV2_MAGIC and dump_data_magic != MEMDUMPV_HYP_MAGIC:
                         print_out_str("!!! Magic {0:x} doesn't match! No context will be parsed".format(dump_data_magic))
