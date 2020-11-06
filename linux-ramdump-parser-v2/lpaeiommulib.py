@@ -159,7 +159,7 @@ def get_coalesced_mappings(flat_mappings):
 
 
 def parse_long_form_tables(dump, d, domain_num):
-    fname = 'msm_iommu_domain_%02d.txt' % (domain_num)
+    fname = 'msm_iommu_domain_%02d_0x%12X.txt' % (domain_num, d.pg_table)
     with dump.open_file(fname) as outfile:
 
         print_out_str('LPAE Iommu page tables: ' + fname)
