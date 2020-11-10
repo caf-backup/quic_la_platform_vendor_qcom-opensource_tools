@@ -69,7 +69,8 @@ class RunQueues(RamParser):
         my_q_offset = self.ramdump.field_offset('struct sched_entity', 'my_q')
 
         if se_addr == 0 or my_q_offset is None:
-            self.print_task_state(status, se_addr)
+            task = self.ramdump.container_of(se_addr, 'struct task_struct', 'se')
+            self.print_task_state(status, task)
         else:
             my_q_addr = self.ramdump.read_word(se_addr + my_q_offset)
             if my_q_addr == 0:

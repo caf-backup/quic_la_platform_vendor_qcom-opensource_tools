@@ -12,6 +12,8 @@
 from parser_util import cleanupString
 from parser_util import register_parser, RamParser
 from print_out import print_out_str
+import struct
+import datetime
 import re
 import collections
 
@@ -95,6 +97,8 @@ class PStore(RamParser):
         Parses the console logs from pstore
         '''
         start_addr, console_size = self.calculate_console_size(base_addr)
+        if start_addr is None:
+            return
         pstore_out = self.ramdump.open_file('console_logs.txt')
         self.print_console_logs(pstore_out, start_addr, console_size)
         pstore_out.close()
@@ -133,12 +137,86 @@ class PStore(RamParser):
         out_file.write('\nepoch_ns: {0}ns  epoch_cyc: {1}\n'.format(epoch_ns,epoch_cyc))
         out_file.close()
 
-    def parse(self):
-        if not self.ramdump.is_config_defined('CONFIG_PSTORE'):
-            print_out_str('CONFIG_PSTORE is not defined')
-            return
-        base_addr = self.ramdump.address_of('oops_cxt')
-        self.extract_io_event_logs(base_addr)
-        self.extract_console_logs(base_addr)
-        self.print_clockdata_info()
+    def extract_pmsg_logs(self, pmsg, pmsg_size):
+        '''
+        Parses the pmsg log stored in the persistent
+        ram zone.
+        '''
+        log_type_list = ["0:main", "1:radio", "2:event", "3:system", "4:crash",
+                            "5:stats", "6:security", "7:kernel"]
+        priority_list = ["0:UNKNOWN", "1:DEFAULT", "2:VERBOSE", "3:DEBUG", "4:INFO",
+                            "5:WARNING", "6:ERROR", "7:FATAL", "8:SILENT"]
+        pmsg_out = self.ramdump.open_file('pmsg_logs.txt')
+        pmsg_out.write("timestamp".ljust(26))
+        pmsg_out.write("uid".rjust(6))
+        pmsg_out.write("pid".rjust(6))
+        pmsg_out.write("tid".rjust(6))
+        pmsg_out.write("  ")
+        pmsg_out.write("log_type".ljust(10))
+        pmsg_out.write("level".ljust(12))
+        pmsg_out.write("message")
+        pmsg_out.write("\n")
 
+        next_addr = 4
+        content_err = False
+        while next_addr < (pmsg_size - 19):
+            magic, len, uid, pid, id, tid, tv_sec, tv_nsec, outtag = \
+                    struct.unpack('<c3HbH2Ib', pmsg[next_addr:next_addr + 19])
+            if magic == b'l' and 0 <= outtag < 9 and 0 <= id < 7 and len > 19 and \
+                    (content_err or pmsg[next_addr-1:next_addr] == b'\x00'):
+                tv_nsec = str(tv_nsec // 1000)
+                tv_nsec = tv_nsec.zfill(6)
+                date = datetime.datetime.utcfromtimestamp(tv_sec)
+                timestamp = date.strftime("%y-%m-%d %H:%M:%S") + '.' + tv_nsec
+                msg = pmsg[next_addr + 19:next_addr + len].replace(b'\x0a', b'\x20')
+                msg = msg.replace(b'\x00', b'\x20')
+                pmsg_out.write(timestamp.ljust(26))
+                pmsg_out.write(str(uid).rjust(6))
+                pmsg_out.write(str(pid).rjust(6))
+                pmsg_out.write(str(tid).rjust(6))
+                pmsg_out.write("  ")
+                pmsg_out.write(str(log_type_list[id]).ljust(10))
+                pmsg_out.write(str(priority_list[outtag]).ljust(12))
+                if next_addr + len < pmsg_size:
+                    if pmsg[next_addr + len:next_addr + len + 1] != b'l':
+                        content_err = True
+                        next_addr += 19
+                        pmsg_out.write("Content Missing!\n")
+                        continue
+                pmsg_out.write(msg.decode("ascii","ignore"))
+                pmsg_out.write("\n")
+                content_err = False
+                next_addr += len
+            else:
+                next_addr += 1
+        pmsg_out.close()
+
+    def extract_pmsg_logs_fd(self, base_addr):
+        pmsg_zone_addr = self.ramdump.read_u64(base_addr +
+                    self.ramdump.field_offset('struct ramoops_context', 'mprz'))
+        start_addr = self.ramdump.read_u32(pmsg_zone_addr +
+                    self.ramdump.field_offset('struct persistent_ram_zone', 'paddr'))
+        pmsg_size = self.ramdump.read_u32(pmsg_zone_addr +
+                    self.ramdump.field_offset('struct persistent_ram_zone', 'size'))
+        pmsg = self.ramdump.read_physical(start_addr, pmsg_size)
+        self.extract_pmsg_logs(pmsg, pmsg_size)
+
+    def parse(self):
+        if not self.ramdump.minidump:
+            if not self.ramdump.is_config_defined('CONFIG_PSTORE'):
+                print_out_str('CONFIG_PSTORE is not defined')
+                return
+            base_addr = self.ramdump.address_of('oops_cxt')
+            self.extract_io_event_logs(base_addr)
+            self.extract_console_logs(base_addr)
+            self.print_clockdata_info()
+            self.extract_pmsg_logs_fd(base_addr)
+        else:
+            pmsg_addr = list(self.ramdump.ebi_pa_name_map.keys())[
+                list(self.ramdump.ebi_pa_name_map.values()).index("KPMSG")]
+            if pmsg_addr is not None:
+                for idx, pa, end, va, size in self.ramdump.ebi_files_minidump:
+                    if pa == pmsg_addr:
+                        break
+                pmsg_cxt = self.ramdump.read_physical(pmsg_addr, size)
+                self.extract_pmsg_logs(pmsg_cxt, size)
