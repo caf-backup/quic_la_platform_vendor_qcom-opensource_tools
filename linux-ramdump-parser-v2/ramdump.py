@@ -856,7 +856,7 @@ class RamDump():
         f = None
         try:
             dir_path = os.path.dirname(file_path)
-            if not os.path.exists(dir_path) and 'w' in mode:
+            if not os.path.exists(dir_path) and ('w' in mode or 'a' in mode):
                 os.makedirs(dir_path)
             f = open(file_path, mode)
         except:
