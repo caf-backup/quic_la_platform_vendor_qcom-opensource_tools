@@ -769,8 +769,10 @@ class RamDump():
 
                 print_out_str('!!! Exiting now')
                 sys.exit(1)
-
-        stext = self.address_of('stext')
+        if self.get_kernel_version() > (5, 7, 0):
+            stext = self.address_of('primary_entry')
+        else:
+            stext = self.address_of('stext')
         if self.kimage_voffset is None:
             self.kernel_text_offset = stext - self.page_offset
         else:
