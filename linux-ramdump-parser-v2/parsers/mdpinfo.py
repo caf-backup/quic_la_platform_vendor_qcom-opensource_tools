@@ -276,11 +276,11 @@ class MDPinfo(RamParser):
         data[1] = 'IN' #'FUNC_ENTRY'
 
         flags = int(data[2], 16)
-        flags_str = [flag_bit[i] for i in range(10) if (flags & BIT[i])]
+        flags_str = [flag_bit[i] for i in range(10) if (flags & (1<<i))]
         data[2] = 'flags: [' + '|'.join(flags_str) + ']'
 
         mipi_flags = int(data[3], 16)
-        mipi_flags_str = [mipi_flag_bit[i] for i in range(10) if (mipi_flags & BIT[i])]
+        mipi_flags_str = [mipi_flag_bit[i] for i in range(10) if (mipi_flags & (1<<i))]
         data[3] = 'MIPI_DSI_MSG_[' + '|'.join(mipi_flags_str) + ']'
         tmp = tmp +' '.join(data)
         sde_dbg_evtlog_log_["data"] = tmp
@@ -553,13 +553,13 @@ class MDPinfo(RamParser):
             return "INTF"
         elif(blktype == '9'):
             return "WB"
-        elif(blktype == '10'):
+        elif(blktype == 'a'):
             return "DSC"
-        elif(blktype == '11'):
+        elif(blktype == 'b'):
             return "VDC"
-        elif(blktype == '12'):
+        elif(blktype == 'c'):
             return "MERGE_3D"
-        elif(blktype == '13'):
+        elif(blktype == 'd'):
             return "QDSS"
 
     def gettopotype(self, topotype):
@@ -583,15 +583,15 @@ class MDPinfo(RamParser):
             return "DUALPIPE_3DMERGE_VDC"
         if (topotype == '9'):
             return "DUALPIPE_DSCMERGE"
-        if (topotype == '10'):
+        if (topotype == 'a'):
             return "PPSPLIT"
-        if (topotype == '11'):
+        if (topotype == 'b'):
             return "QUADPIPE_3DMERGE"
-        if (topotype == '12'):
+        if (topotype == 'c'):
             return "QUADPIPE_3DMERGE_DSC"
-        if (topotype == '13'):
+        if (topotype == 'd'):
             return "QUADPIPE_DSCMERGE"
-        if (topotype == '14'):
+        if (topotype == 'e'):
             return "QUADPIPE_DSC4HSMERGE"
 
     def rm_print_rsvps(self, sde_dbg_evtlog_log_, output_fd):
