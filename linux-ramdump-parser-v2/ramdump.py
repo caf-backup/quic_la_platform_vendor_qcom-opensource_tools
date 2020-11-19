@@ -464,6 +464,8 @@ class RamDump():
         def unwind_backtrace(self, sp, fp, pc, lr, extra_str='',
                              out_file=None):
             offset = 0
+            max_frames = 128
+            frame_count = 0
             frame = self.Stackframe(fp, sp, lr, pc)
             frame.fp = fp
             frame.sp = sp
@@ -493,6 +495,11 @@ class RamDump():
 
                 urc = self.unwind_frame(frame)
                 if urc < 0:
+                    break
+                frame_count = frame_count + 1
+                if frame_count >= max_frames:
+                    if out_file != None:
+                        out_file.write("Max stack depth reached")
                     break
             return backtrace
 
@@ -611,7 +618,7 @@ class RamDump():
                         'Could not open {0}. Will not be part of dump'.format(file_path))
                     continue
                 self.ebi_files.append((fd, start, end, file_path))
-        elif not options.minidump:
+        else:
             if not self.auto_parse(options.autodump, options.minidump):
                 print("Oops, auto-parse option failed. Please specify vmlinux & DDR files manually.")
                 sys.exit(1)
@@ -630,7 +637,7 @@ class RamDump():
                 pa = int(s['p_paddr'])
                 va = int(s['p_vaddr'])
                 size = int(s['p_filesz'])
-                end_addr = pa + size
+                end_addr = pa + size - 1
                 for section in self.elffile.iter_sections():
                     if (not section.is_null() and
                             s.section_in_segment(section)):
@@ -1026,7 +1033,7 @@ class RamDump():
         else:
             print_out_str('!!! Could not lookup saved command line address')
             return False
-        
+
     def print_socinfo_minidump(self):
         content_socinfo = None
         boards = get_supported_boards()
@@ -2006,6 +2013,18 @@ class RamDump():
             return a.split('\0')[0]
         else:
             return s
+
+    def read_binarystring(self, addr_or_name, length, virtual=True, cpu=None):
+        """Reads binary data of specified length from addr_or_name."""
+        addr = addr_or_name
+        if virtual:
+            if cpu is not None:
+                pcpu_offset = self.per_cpu_offset(cpu)
+                addr_or_name = self.resolve_virt(addr_or_name)
+                addr_or_name += pcpu_offset
+            addr = self.virt_to_phys(addr_or_name)
+        s = self.read_physical(addr, length)
+        return s
 
     def read_string(self, addr_or_name, format_string, virtual=True, cpu=None):
         """Reads data using a format string.
