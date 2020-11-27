@@ -359,6 +359,18 @@ def parse_softirq_stat(ramdump):
 def do_parse_qsee_log(ramdump):
     qsee_out = ramdump.open_file('qsee_log.txt')
     g_qsee_log_addr = ramdump.address_of('g_qsee_log')
+    g_qsee_log_v2_addr = ramdump.address_of('g_qsee_log_v2')
+    tzdbg_addr = ramdump.address_of('tzdbg')
+    is_enlarged_buf_addr = ramdump.field_offset('struct tzdbg', 'is_enlarged_buf')
+    is_enlarged_buf = False
+    if is_enlarged_buf_addr is not None:
+        is_enlarged_buf = ramdump.read_bool(tzdbg_addr + is_enlarged_buf_addr)
+    log_buf_offset = ramdump.field_offset('struct tzdbg_log_t', 'log_buf')
+    qsee_log_buf_size = 0x8000 ##define QSEE_LOG_BUF_SIZE 0x8000
+    if is_enlarged_buf is True:
+        qsee_log_buf_size = 0x20000 ##define QSEE_LOG_BUF_SIZE_V2 0x20000
+        g_qsee_log_addr = g_qsee_log_v2_addr
+        log_buf_offset = ramdump.field_offset('struct tzdbg_log_v2_t', 'log_buf')
     if g_qsee_log_addr is None:
         print_out_str("!!! g_qsee_logs not found")
         qsee_out.close()
@@ -369,9 +381,7 @@ def do_parse_qsee_log(ramdump):
         print_out_str('!!! Cannot read g_qsee_log_addr')
         qsee_out.close()
         return
-    log_buf_offset = ramdump.field_offset('struct tzdbg_log_t', 'log_buf')
     log_buf_addr = g_qsee_log_addr + log_buf_offset
-    qsee_log_buf_size = 0x8000 ##define QSEE_LOG_BUF_SIZE 0x8000
     qsee_log_data = ramdump.read_cstring(log_buf_addr, qsee_log_buf_size)
     qsee_log_data = qsee_log_data.rstrip(' \t\r\n\0')
     qsee_out.write(qsee_log_data)
