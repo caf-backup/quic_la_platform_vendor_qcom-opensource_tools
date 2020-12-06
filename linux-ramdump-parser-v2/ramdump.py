@@ -637,7 +637,7 @@ class RamDump():
                 pa = int(s['p_paddr'])
                 va = int(s['p_vaddr'])
                 size = int(s['p_filesz'])
-                end_addr = pa + size
+                end_addr = pa + size - 1
                 for section in self.elffile.iter_sections():
                     if (not section.is_null() and
                             s.section_in_segment(section)):
