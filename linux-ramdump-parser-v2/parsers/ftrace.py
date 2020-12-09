@@ -334,24 +334,34 @@ class FtraceParser(RamParser):
                         if pendig_process == False:
                             for pi in pending_update_list:
                                 #print "pending line process ++ = {0}".format(pi)
-                                ftrace_out.write(pi.replace("<TBD>", "<idle>-"+pid))
-                                ftrace_file_map[str(cpu_number)].write(pi.replace("<TBD>", "<idle>-"+pid))
+                                if "swapper" in temp_prev_comm:
+                                    ftrace_out.write(pi.replace("<TBD>", "<idle>-0"))
+                                    ftrace_file_map[str(cpu_number)].write(pi.replace("<TBD>", "<idle>-0"))
+                                else:
+                                    ftrace_out.write(pi.replace("<TBD>", temp_prev_comm+pid))
+                                    ftrace_file_map[str(cpu_number)].write(pi.replace("<TBD>", temp_prev_comm + "-" + pid))
+
                             pendig_process = True
                             pending_update_list = []
-                        ftrace_out.write(line.replace("<TBD>", "<idle>-"+pid))
-                        ftrace_file_map[str(cpu_number)].write(line.replace("<TBD>", "<idle>-"+pid))
+                        if "swapper" in temp_prev_comm:
+                            ftrace_out.write(pi.replace("<TBD>", "<idle>-0"))
+                            ftrace_file_map[str(cpu_number)].write(line.replace("<TBD>", "<idle>-0"))
+                        else:
+                            ftrace_out.write(line.replace("<TBD>", temp_prev_comm + "-" + pid))
+                            ftrace_file_map[str(cpu_number)].write(line.replace("<TBD>", temp_prev_comm + "-" + pid))
+
                     else:
                         pid = prev_comm.split(":")
                         #ftrace_out.write(line.replace("next_pid", pid))
                         if pendig_process == False:
                             for pi in pending_update_list:
                                 #print "pending line process && = {0}".format(pi)
-                                ftrace_out.write(pi.replace("<TBD>", "<idle>-" + str(pid)))
-                                ftrace_file_map[str(cpu_number)].write(pi.replace("<TBD>", "<idle>-" + str(pid)))
+                                ftrace_out.write(pi.replace("<TBD>", "<idle>-0"))
+                                ftrace_file_map[str(cpu_number)].write(pi.replace("<TBD>", "<idle>-0"))
                             pendig_process = True
                             pending_update_list = []
-                        ftrace_out.write(line.replace("<TBD>", "<idle>-" + str(pid)))
-                        ftrace_file_map[str(cpu_number)].write(line.replace("<TBD>", "<idle>-" + str(pid)))
+                        ftrace_out.write(line.replace("<TBD>", "<idle>-0"))
+                        ftrace_file_map[str(cpu_number)].write(line.replace("<TBD>", "<idle>-0"))
                         #ctask = "<idle>-" + str(pid)
                         #switch_map[cpu_number] = ctask
                 else:
@@ -379,8 +389,8 @@ class FtraceParser(RamParser):
                                 ftrace_out.write(line.replace("<TBD>", temp_curr_comm+"-"+pid))
                                 ftrace_file_map[str(cpu_number)].write(line.replace("<TBD>", temp_curr_comm+"-"+pid))
                             else:
-                                ftrace_out.write(line.replace("<TBD>", "<idle>-"+pid))
-                                ftrace_file_map[str(cpu_number)].write(line.replace("<TBD>", "<idle>-"+pid))
+                                ftrace_out.write(line.replace("<TBD>", "<idle>-0"))
+                                ftrace_file_map[str(cpu_number)].write(line.replace("<TBD>", "<idle>-0"))
                         else:
                             ftrace_out.write(line.replace("<TBD>", "<idle>-0"))
                             ftrace_file_map[str(cpu_number)].write(line.replace("<TBD>", "<idle>-0"))
