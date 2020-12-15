@@ -32,35 +32,43 @@ class GpuParser(RamParser):
     def __init__(self, dump):
         super(GpuParser, self).__init__(dump)
 
-        # List of all sub-parsers as (func, info) tuples.
+        # List of all sub-parsers as (func, info, outfile) tuples.
         self.parser_list_419 = [
-            (self.parse_kgsl_data, "KGSL"),
-            (self.parse_pwrctrl_data, "KGSL Power"),
-            (self.parse_kgsl_mem, "KGSL Memory Stats"),
-            (self.parse_rb_inflight_data, "Ringbuffer and Inflight Queues"),
-            (self.parse_dispatcher_data, "Dispatcher"),
-            (self.parse_mutex_data, "KGSL Mutexes"),
-            (self.parse_scratch_memory, "Scratch Memory"),
-            (self.parse_memstore_memory, "Memstore"),
-            (self.parse_context_data, "Open Contexts"),
-            (self.parse_open_process_data, "Open Processes"),
-            (self.parse_fence_data, "Fences"),
-            (self.parse_open_process_mementry, "Open Process Mementries"),
+            (self.parse_kgsl_data, "KGSL", 'gpuinfo.txt'),
+            (self.parse_pwrctrl_data, "KGSL Power", 'gpuinfo.txt'),
+            (self.parse_kgsl_mem, "KGSL Memory Stats", 'gpuinfo.txt'),
+            (self.parse_rb_inflight_data, "Ringbuffer and Inflight Queues",
+             'gpuinfo.txt'),
+            (self.parse_dispatcher_data, "Dispatcher", 'gpuinfo.txt'),
+            (self.parse_mutex_data, "KGSL Mutexes", 'gpuinfo.txt'),
+            (self.parse_scratch_memory, "Scratch Memory", 'gpuinfo.txt'),
+            (self.parse_memstore_memory, "Memstore", 'gpuinfo.txt'),
+            (self.parse_context_data, "Open Contexts", 'gpuinfo.txt'),
+            (self.parse_open_process_data, "Open Processes", 'gpuinfo.txt'),
+            (self.parse_pagetables, "Process Pagetables", 'gpuinfo.txt'),
+            (self.dump_gpu_snapshot, "GPU Snapshot", 'gpuinfo.txt'),
+            (self.parse_fence_data, "Fences", 'gpu_sync_fences.txt'),
+            (self.parse_open_process_mementry, "Open Process Mementries",
+             'open_process_mementries.txt'),
         ]
 
         self.parser_list_54 = [
-            (self.parse_kgsl_data_54, "KGSL"),
-            (self.parse_pwrctrl_data, "KGSL Power"),
-            (self.parse_kgsl_mem_54, "KGSL Memory Stats"),
-            (self.parse_rb_inflight_data, "Ringbuffer and Inflight Queues"),
-            (self.parse_dispatcher_data_54, "Dispatcher"),
-            (self.parse_mutex_data, "KGSL Mutexes"),
-            (self.parse_scratch_memory_54, "Scratch Memory"),
-            (self.parse_memstore_memory_54, "Memstore"),
-            (self.parse_context_data, "Open Contexts"),
-            (self.parse_open_process_data, "Open Processes"),
-            (self.parse_fence_data, "Fences"),
-            (self.parse_open_process_mementry, "Open Process Mementries"),
+            (self.parse_kgsl_data_54, "KGSL", 'gpuinfo.txt'),
+            (self.parse_pwrctrl_data, "KGSL Power", 'gpuinfo.txt'),
+            (self.parse_kgsl_mem_54, "KGSL Memory Stats", 'gpuinfo.txt'),
+            (self.parse_rb_inflight_data, "Ringbuffer and Inflight Queues",
+             'gpuinfo.txt'),
+            (self.parse_dispatcher_data_54, "Dispatcher", 'gpuinfo.txt'),
+            (self.parse_mutex_data, "KGSL Mutexes", 'gpuinfo.txt'),
+            (self.parse_scratch_memory_54, "Scratch Memory", 'gpuinfo.txt'),
+            (self.parse_memstore_memory_54, "Memstore", 'gpuinfo.txt'),
+            (self.parse_context_data, "Open Contexts", 'gpuinfo.txt'),
+            (self.parse_open_process_data, "Open Processes", 'gpuinfo.txt'),
+            (self.parse_pagetables, "Process Pagetables", 'gpuinfo.txt'),
+            (self.dump_gpu_snapshot, "GPU Snapshot", 'gpuinfo.txt'),
+            (self.parse_fence_data, "Fences", 'gpu_sync_fences.txt'),
+            (self.parse_open_process_mementry, "Open Process Mementries",
+             'open_process_mementries.txt'),
         ]
 
         self.rtw = linux_radix_tree.RadixTreeWalker(dump)
@@ -70,8 +78,6 @@ class GpuParser(RamParser):
             print_out_str(
                 "No GPU support detected... Skipping GPU parser.")
             return
-
-        self.out = self.ramdump.open_file('gpuinfo.txt')
 
         if (self.ramdump.kernel_version == (0, 0, 0) or
            self.ramdump.kernel_version >= (5, 4, 0)):
@@ -86,9 +92,12 @@ class GpuParser(RamParser):
 
         for subparser in self.parser_list:
             try:
+                self.out = self.ramdump.open_file('gpu_parser/' + subparser[2],
+                                                  'a')
                 self.write(subparser[1].center(90, '-') + '\n')
                 subparser[0](self.ramdump)
                 self.writeln()
+                self.out.close()
             except Exception:
                 print_out_str("GPU info: Parsing failed in "
                               + subparser[0].__name__)
@@ -861,3 +870,100 @@ class GpuParser(RamParser):
         self.writeln(format_str.format(
             str(pid), str(pname), hex(kgsl_private_base_addr),
             hex(kgsl_pagetable_address), str_convert_to_kb(val)))
+
+    def parse_pagetables(self, dump):
+        format_str = '{0:14} {1:16} {2:20} {3:20} {4:20}'
+        self.writeln(format_str.format("PID", "pt_base", "ttbr0",
+                                       "ctxidr", "attached"))
+
+        node_addr = dump.read('kgsl_driver.pagetable_list.next')
+        list_elem_offset = dump.field_offset(
+                            'struct kgsl_pagetable', 'list')
+        pagetable_list_walker = linux_list.ListWalker(
+                                    dump, node_addr, list_elem_offset)
+        pagetable_list_walker.walk(node_addr, self.walk_pagetable,
+                                   dump, format_str)
+
+    def walk_pagetable(self, kgsl_pagetable_base_addr, dump, format_str):
+        pid = dump.read_structure_field(
+            kgsl_pagetable_base_addr, 'struct kgsl_pagetable', 'name')
+        if pid == 0 or pid == 1:
+            return
+        priv_offset = dump.field_offset('struct kgsl_pagetable', 'priv')
+
+        ttbr0_mask = 0xFFFFFFFFFFFF
+        kgsl_iommu_pt_base_addr = dump.read_pointer(kgsl_pagetable_base_addr +
+                                                    priv_offset)
+        ttbr0_val = dump.read_structure_field(
+            kgsl_iommu_pt_base_addr, 'struct kgsl_iommu_pt', 'ttbr0')
+        pt_base = ttbr0_val & ttbr0_mask
+
+        context_idr_offset = dump.field_offset('struct kgsl_iommu_pt',
+                                               'contextidr')
+        context_idr_val = dump.read_u32(kgsl_iommu_pt_base_addr +
+                                        context_idr_offset)
+
+        attached_offset = dump.field_offset('struct kgsl_iommu_pt', 'attached')
+        attached_val = dump.read_bool(kgsl_iommu_pt_base_addr +
+                                      attached_offset)
+
+        self.writeln(format_str.format(
+            str(pid), strhex(pt_base), strhex(ttbr0_val),
+            strhex(context_idr_val), str(attached_val)))
+
+    def dump_gpu_snapshot(self, dump):
+        devp_addr = dump.read('kgsl_driver.devp')
+        snapshot_faultcount = dump.read_structure_field(devp_addr,
+                                                        'struct kgsl_device',
+                                                        'snapshot_faultcount')
+        self.writeln(str(snapshot_faultcount) + ' snapshot fault(s) detected.')
+
+        if snapshot_faultcount == 0:
+            self.writeln('No GPU hang, skipping snapshot dumping.')
+            return
+
+        snapshot_offset = dump.field_offset('struct kgsl_device', 'snapshot')
+        snapshot_memory_offset = dump.field_offset(
+            'struct kgsl_device', 'snapshot_memory')
+        snapshot_memory_size = dump.read_u32(devp_addr +
+                                             snapshot_memory_offset + 8)
+        snapshot_base_addr = dump.read_pointer(devp_addr + snapshot_offset)
+        if snapshot_base_addr == 0:
+            self.writeln('Snapshot not found.')
+            return
+
+        snapshot_start = dump.read_structure_field(
+            snapshot_base_addr, 'struct kgsl_snapshot', 'start')
+        snapshot_size = dump.read_structure_field(
+            snapshot_base_addr, 'struct kgsl_snapshot', 'size')
+        snapshot_timestamp = dump.read_structure_field(
+            snapshot_base_addr, 'struct kgsl_snapshot', 'timestamp')
+        snapshot_process_offset = dump.field_offset('struct kgsl_snapshot',
+                                                    'process')
+        snapshot_process = dump.read_pointer(snapshot_base_addr +
+                                             snapshot_process_offset)
+        snapshot_pid = dump.read_structure_field(
+            snapshot_process, 'struct kgsl_process_private', 'pid')
+
+        self.writeln('Snapshot Details:')
+        self.writeln('\tStart Address: ' + strhex(snapshot_start))
+        self.writeln('\tSize: ' + str(snapshot_size))
+        self.writeln('\tTimestamp: ' + str(snapshot_timestamp))
+        self.writeln('\tProcess PID: ' + str(snapshot_pid))
+
+        file_name = 'gpu_snapshot_' + str(snapshot_timestamp) + '.bpmd'
+        file = self.ramdump.open_file('gpu_parser/' + file_name, 'wb')
+
+        if snapshot_size == 0:
+            self.write('Snapshot freeze not completed.')
+            self.writeln('Dumping entire region to gpu_snapshot.bpmd')
+            data = self.ramdump.read_binarystring(snapshot_start,
+                                                  snapshot_memory_size)
+        else:
+            self.writeln('\nDumping ' + str_convert_to_kb(snapshot_size) +
+                         ' starting from ' + strhex(snapshot_start) +
+                         ' to ' + file_name)
+            data = self.ramdump.read_binarystring(snapshot_start,
+                                                  snapshot_size)
+        file.write(data)
+        file.close()

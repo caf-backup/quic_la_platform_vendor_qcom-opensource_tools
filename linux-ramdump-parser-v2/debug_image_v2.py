@@ -197,11 +197,7 @@ class DebugImage_v2():
         print_out_str(
             'Parsing scandump context start {0:x} end {1:x} {2} {3}'.format(start, end, output, input))
         header_bin = ram_dump.open_file(input, 'wb')
-
-        it = range(start, end)
-        for i in it:
-            val = ram_dump.read_byte(i, False)
-            header_bin.write(struct.pack("<B", val))
+        header_bin.write(ram_dump.read_physical(start, end - start))
         header_bin.close()
         subprocess.call('py -2 {0} -d {1} -o {2} -f {3} -c {4}'.format(scan_wrapper_path, input, output, arch, chipset))
         sv2 = Scandump_v2(core_num,ram_dump,version)
@@ -254,22 +250,40 @@ class DebugImage_v2():
                 ram_dump.gdmi_switch_open()
                 cpu_type_offset  = ram_dump.field_offset(
                                 'struct msm_dump_cpu_ctx', 'cpu_type')
+                if cpu_type_offset is None:
+                    cpu_type_offset = 0x0
                 ctx_type_offset  = ram_dump.field_offset(
                                 'struct msm_dump_cpu_ctx', 'ctx_type')
+                if ctx_type_offset is None:
+                    ctx_type_offset = 0x4
                 cpu_id_offset  = ram_dump.field_offset(
                                 'struct msm_dump_cpu_ctx', 'cpu_id')
+                if cpu_id_offset is None:
+                    cpu_id_offset = 0xC
                 cpu_index_offset  = ram_dump.field_offset(
                                 'struct msm_dump_cpu_ctx', 'affinity')
+                if cpu_index_offset is None:
+                    cpu_index_offset = 0x10
                 machine_id_offset  = ram_dump.field_offset(
                                 'struct msm_dump_cpu_ctx', 'machine_id')
+                if machine_id_offset is None:
+                    machine_id_offset = 0x14
                 registers_offset   = ram_dump.field_offset(
                                 'struct msm_dump_cpu_ctx', 'registers')
+                if registers_offset is None:
+                    registers_offset = 0x20
                 regset_num_register_offset  = ram_dump.field_offset(
                                 'struct msm_dump_cpu_ctx', 'num_register_sets')
+                if regset_num_register_offset is None:
+                    regset_num_register_offset = 0x1C
                 regset_id_offset  = ram_dump.field_offset(
                                 'struct msm_dump_cpu_register_entry', 'regset_id')
+                if regset_id_offset is None:
+                    regset_id_offset = 0x0
                 regset_addr_offset  = ram_dump.field_offset(
                                 'struct msm_dump_cpu_register_entry', 'regset_addr')
+                if regset_addr_offset is None:
+                    regset_addr_offset = 0x8
 
                 cpu_type = ram_dump.read_u32(start + cpu_type_offset,False)
                 print_out_str("cpu_type = {0}".format(msm_dump_cpu_type[cpu_type]))
@@ -280,6 +294,8 @@ class DebugImage_v2():
                 regset_num_register = ram_dump.read_u32(start + regset_num_register_offset,False)
                 registers = start + registers_offset
                 registers_size = ram_dump.sizeof('struct msm_dump_cpu_register_entry')
+                if registers_size is None:
+                    registers_size = 0x10
                 regset_name_addr = OrderedDict()
                 for i in range(0,regset_num_register):
                     registers_addr = registers + registers_size * i
@@ -290,6 +306,8 @@ class DebugImage_v2():
                     print_out_str("regset_name = {0}".format(regset_name))
                     regset_addr = ram_dump.read_u32(registers_addr + regset_addr_offset,False)
                     regset_size = ram_dump.sizeof('struct msm_dump_aarch64_gprs')
+                    if regset_size is None:
+                        regset_size = 0x110
                     regset_end = regset_addr + regset_size
                     regset_name_addr[regset_name] = [regset_addr,regset_end]
                 regs = TZRegDump_v2()
@@ -785,10 +803,7 @@ class DebugImage_v2():
         print_out_str(
             'Parsing mhm dump start {0:x} end {1:x} {2}'.format(start, end, input))
         header_bin = ram_dump.open_file(input, mode='wb')
-        it = range(start, end)
-        for i in it:
-            val = ram_dump.read_byte(i, False)
-            header_bin.write(struct.pack("<B", val))
+        header_bin.write(ram_dump.read_physical(start, end - start))
         header_bin.close()
         return
     class MsmDumpTable(object):
@@ -949,6 +964,11 @@ class DebugImage_v2():
                 root_table.version >> 20, root_table.version & 0xFFFFF, root_table.num_entries))
             print_out_str('--------')
 
+            out_dir =  ram_dump.outdir
+            sdi_dump_out = open(os.path.join(out_dir , 'sdi_dump_table.txt') , 'w')
+            sdi_dump_out.write("DumpTable base = 0x{0:02x} \n".format(root_table.phys_addr))
+            sdi_dump_out.write("DumpTable Src = {0}\n".format(root_table.name))
+
             for i in range(0, root_table.num_entries):
                 this_entry = root_table.phys_addr + dump_table_entry_offset + \
                     i * dump_entry_size
@@ -1018,9 +1038,12 @@ class DebugImage_v2():
                     print_out_str('Parsing debug information for {0}. Version: {1} Magic: {2:x} Source: {3}'.format(
                         client_name, dump_data_version, dump_data_magic,
                         dump_data_name))
-
-
-
+                    sdi_dump_out.write("Id = {0} type = {1} Addr = 0x{2:02x} "
+                    "version {3}  magic {4} DataAddr 0x{5:02x}  DataLen {6} "
+                    "Dataname {7} \n"
+                    .format(client_id,client_type,client_addr,
+                    dump_data_version,dump_data_magic,dump_data_addr,
+                    dump_data_len,dump_data_name))
                     if dump_data_magic != MEMDUMPV2_MAGIC and dump_data_magic != MEMDUMPV_HYP_MAGIC:
                         print_out_str("!!! Magic {0:x} doesn't match! No context will be parsed".format(dump_data_magic))
                         continue
@@ -1028,6 +1051,7 @@ class DebugImage_v2():
                     getattr(DebugImage_v2, func)(
                         self, dump_data_version, dump_data_addr,
                         dump_data_addr + dump_data_len, client_id, ram_dump)
+            sdi_dump_out.close()
         else:
             dump_table_num_entry_offset = ram_dump.field_offset(
                 'struct md_table', 'num_regions')
