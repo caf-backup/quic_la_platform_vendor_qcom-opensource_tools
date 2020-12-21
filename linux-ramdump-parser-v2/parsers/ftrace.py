@@ -282,54 +282,17 @@ class FtraceParser(RamParser):
                     swapper_entry =  True
                     comm_flag = False
                     comm_flag_dash = False
-                    for ii in line.split("sched_switch:")[1].split(" "):
-                        if ii != "":
-                            if comm_flag == False:
-                                prev_comm = ii
-                                comm_flag =  True
-                                if ":" in prev_comm:
-                                    break
-                        if "-" in ii:
-                          comm_flag_dash =  True
-                        if ":" in ii and comm_flag:
-                                if comm_flag_dash:
-                                  prev_comm = prev_comm + " - " + ii
-                                  break
-                                else:
-                                  prev_comm = prev_comm + ":" + ii
-                                  break
-                    comm_flag = False
-                    comm_flag_dash = False
-                    for ii in line.split("sched_switch:")[1].split("==>")[1].split(" "):
-                        if ii != "":
-                            if comm_flag == False:
-                                curr_comm = ii
-                                comm_flag =  True
-                                if ":" in curr_comm:
-                                    break
-                        if "-" in ii:
-                          comm_flag_dash =  True
-                        if ":" in ii and comm_flag:
-                                if comm_flag_dash:
-                                  curr_comm = curr_comm + " - " + ii
-                                  break
-                                else:
-                                  curr_comm = curr_comm + ":" + ii
-                                  break
-                    #print "prev_comm = {0}".format(prev_comm)
-                    switch_map[cpu_number] = curr_comm
+                    prev_comm = line.split("prev_comm=")[1].split(" ")[0]
+                    prev_id = line.split("prev_pid=")[1].split(" ")[0]
+
+                    curr_comm = line.split("next_comm=")[1].split(" ")[0]
+                    curr_id = line.split("next_pid=")[1].split(" ")[0]
+
+                    switch_map[cpu_number] = curr_comm + "-" + curr_id
                     if "swapper" not in prev_comm:
                         #pid = prev_comm.split(":")[1]
-                        if ":" in prev_comm:
-                            temp_prev_comm = prev_comm
-                            if len(temp_prev_comm.split(":")) == 3:
-                                pid = temp_prev_comm.split(":")[2]
-                                temp_prev_comm = temp_prev_comm.replace(pid, "")
-                                temp_prev_comm = temp_prev_comm[:-1]
-                            elif len(temp_prev_comm.split(":")) == 2:
-                                pid = temp_prev_comm.split(":")[1]
-                                temp_prev_comm = temp_prev_comm.replace(pid, "")
-                                temp_prev_comm = temp_prev_comm[:-1]
+                        temp_prev_comm = prev_comm
+                        pid = prev_id
 
                         if pendig_process == False:
                             for pi in pending_update_list:
@@ -351,7 +314,7 @@ class FtraceParser(RamParser):
                             ftrace_file_map[str(cpu_number)].write(line.replace("<TBD>", temp_prev_comm + "-" + pid))
 
                     else:
-                        pid = prev_comm.split(":")
+                        #pid = prev_comm.split(":")
                         #ftrace_out.write(line.replace("next_pid", pid))
                         if pendig_process == False:
                             for pi in pending_update_list:
@@ -374,20 +337,9 @@ class FtraceParser(RamParser):
                             currcomm_ctask = '<idle>-0'
                         temp_curr_comm = currcomm_ctask
                         if swapper_entry and currcomm_ctask:
-                            pid = "0"
-                            if ":" in currcomm_ctask:
-                                temp_curr_comm = currcomm_ctask
-                                if len(temp_curr_comm.split(":")) == 3:
-                                    pid = temp_curr_comm.split(":")[2]
-                                    temp_curr_comm = temp_curr_comm.replace(pid,"")
-                                    temp_curr_comm = temp_curr_comm[:-1]
-                                elif len(temp_curr_comm.split(":")) == 2:
-                                    pid = temp_curr_comm.split(":")[1]
-                                    temp_curr_comm = temp_curr_comm.replace(pid,"")
-                                    temp_curr_comm = temp_curr_comm[:-1]
                             if "swapper" not in currcomm_ctask:
-                                ftrace_out.write(line.replace("<TBD>", temp_curr_comm+"-"+pid))
-                                ftrace_file_map[str(cpu_number)].write(line.replace("<TBD>", temp_curr_comm+"-"+pid))
+                                ftrace_out.write(line.replace("<TBD>", temp_curr_comm))
+                                ftrace_file_map[str(cpu_number)].write(line.replace("<TBD>", temp_curr_comm))
                             else:
                                 ftrace_out.write(line.replace("<TBD>", "<idle>-0"))
                                 ftrace_file_map[str(cpu_number)].write(line.replace("<TBD>", "<idle>-0"))
