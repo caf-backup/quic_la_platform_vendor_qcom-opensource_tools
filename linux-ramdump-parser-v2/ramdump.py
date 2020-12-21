@@ -1343,6 +1343,7 @@ class RamDump():
         socinfo_version = 0
         socinfo_build_id = 'DUMMY'
         chosen_board = None
+        use_predefined = False
 
         boards = get_supported_boards()
 
@@ -1360,15 +1361,11 @@ class RamDump():
                     entry_item_offset = self.field_offset('struct smem_private_entry', 'item')
                     item_size_offset = self.field_offset('struct smem_private_entry', 'size')
                 else:
-                    print_out_str(
-                        '!!!! Could not get a necessary offset for auto detection!')
-                    print_out_str(
-                        '!!!! Please check the gdb path which is used for offsets!')
-                    print_out_str('!!!! Also check that the vmlinux is not stripped')
-                    print_out_str('!!!! Exiting...')
-                    sys.exit(1)
+                    print_out_str('!!!! Could not get a necessary offset for auto detection!')
+                    print_out_str('!!!! Try to use predefined offset!')
+                    use_predefined = True
             for board in boards:
-                if self.minidump:
+                if self.minidump or use_predefined:
                     if hasattr(board, 'smem_addr_buildinfo'):
                         socinfo_start = board.smem_addr_buildinfo
                         if add_offset:
