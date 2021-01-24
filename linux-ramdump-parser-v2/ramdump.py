@@ -1,4 +1,4 @@
-# Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
+# Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -505,38 +505,39 @@ class RamDump():
 
     def determine_phys_offset(self):
         vmalloc_start = self.modules_end - self.kaslr_offset
-        min_image_align = 0x00200000
+        for min_image_align in [0x00200000, 0x00080000, 0x00008000]:
 
-        phys_base = 0xffffffff
-        phys_end = 0
-        for a in self.ebi_files:
-            _, start, end, path = a
-            if "DDR" in os.path.basename(path):
-                if start < phys_base:
-                    phys_base = start
-                if end > phys_end:
-                    phys_end = end
+            phys_base = 0xffffffff
+            phys_end = 0
+            for a in self.ebi_files:
+                _, start, end, path = a
+                if "DDR" in os.path.basename(path):
+                    if start < phys_base:
+                        phys_base = start
+                    if end > phys_end:
+                        phys_end = end
 
-        if phys_end > 0xffffffff:
-            phys_end = 0xffffffff
+            if phys_end > 0xffffffff:
+                phys_end = 0xffffffff
 
-        print_out_str("phys_base: {0:x} phys_end: {1:x}".format(phys_base, phys_end))
+            print_out_str("phys_base: {0:x} phys_end: {1:x} step: {2:x}".format(
+                            phys_base, phys_end, min_image_align))
 
-        kimage_load_addr = phys_base;
-        while (kimage_load_addr < phys_end):
-            kimage_voffset = self.modules_end - kimage_load_addr
-            addr = self.address_of("kimage_voffset") - self.kaslr_offset - \
-                   vmalloc_start + kimage_load_addr
-            if self.arm64:
-                val = self.read_u64(addr, False)
-            else:
-                val = self.read_u32(addr, False)
-            if val is None:
-                val = 0
-            val = int(val)
-            if (int(kimage_voffset) == val):
-                return kimage_load_addr
-            kimage_load_addr = kimage_load_addr + min_image_align
+            kimage_load_addr = phys_base
+            while (kimage_load_addr < phys_end):
+                kimage_voffset = self.modules_end - kimage_load_addr
+                addr = self.address_of("kimage_voffset") - self.kaslr_offset - \
+                    vmalloc_start + kimage_load_addr
+                if self.arm64:
+                    val = self.read_u64(addr, False)
+                else:
+                    val = self.read_u32(addr, False)
+                if val is None:
+                    val = 0
+                val = int(val)
+                if (int(kimage_voffset) == val):
+                    return kimage_load_addr
+                kimage_load_addr = kimage_load_addr + min_image_align
 
         return 0
 
