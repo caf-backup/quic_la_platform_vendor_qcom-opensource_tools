@@ -1,4 +1,4 @@
-# Copyright (c) 2013-2015, 2020 The Linux Foundation. All rights reserved.
+# Copyright (c) 2013-2015, 2020-2021 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -44,6 +44,7 @@ class GpuParser(RamParser):
             (self.parse_scratch_memory, "Scratch Memory", 'gpuinfo.txt'),
             (self.parse_memstore_memory, "Memstore", 'gpuinfo.txt'),
             (self.parse_context_data, "Open Contexts", 'gpuinfo.txt'),
+            (self.parse_active_context_data, "Active Contexts", 'gpuinfo.txt'),
             (self.parse_open_process_data, "Open Processes", 'gpuinfo.txt'),
             (self.parse_pagetables, "Process Pagetables", 'gpuinfo.txt'),
             (self.dump_gpu_snapshot, "GPU Snapshot", 'gpuinfo.txt'),
@@ -63,6 +64,7 @@ class GpuParser(RamParser):
             (self.parse_scratch_memory_54, "Scratch Memory", 'gpuinfo.txt'),
             (self.parse_memstore_memory_54, "Memstore", 'gpuinfo.txt'),
             (self.parse_context_data, "Open Contexts", 'gpuinfo.txt'),
+            (self.parse_active_context_data, "Active Contexts", 'gpuinfo.txt'),
             (self.parse_open_process_data, "Open Processes", 'gpuinfo.txt'),
             (self.parse_pagetables, "Process Pagetables", 'gpuinfo.txt'),
             (self.dump_gpu_snapshot, "GPU Snapshot", 'gpuinfo.txt'),
@@ -133,6 +135,17 @@ class GpuParser(RamParser):
                                        "ADRENO_DRAW_CONTEXT_PTR"))
         context_idr = dump.read('device_3d0.dev.context_idr')
         self.rtw.walk_radix_tree(context_idr, self.print_context_data)
+
+    def parse_active_context_data(self, dump):
+        format_str = '{0:20} {1:20} {2:20} {3:30}'
+        self.writeln(format_str.format("CONTEXT ID", "PID", "PROCESS_NAME",
+                                       "ADRENO_DRAW_CONTEXT_PTR"))
+        node_addr = dump.read('device_3d0.active_list.next')
+        list_elem_offset = dump.field_offset('struct adreno_context',
+                                             'active_node')
+        active_context_list_walker = linux_list.ListWalker(dump, node_addr,
+                                                           list_elem_offset)
+        active_context_list_walker.walk(node_addr, self.print_context_data)
 
     def parse_open_process_mementry(self, dump):
         self.writeln('WARNING: Some nodes can be corrupted one, Ignore them.')
@@ -226,7 +239,7 @@ class GpuParser(RamParser):
         self.writeln('cur_rb_id: ' + str(cur_rb_id))
         self.writeln('next_rb: ' + strhex(next_rb))
         self.writeln('next_rb_id: ' + str(next_rb_id))
-        self.writeln('prev_rb_ptr: ' + strhex(prev_rb))
+        self.writeln('prev_rb: ' + strhex(prev_rb))
         self.writeln('prev_rb_id: ' + str(prev_rb_id))
 
     def parse_kgsl_data_54(self, dump):
@@ -236,14 +249,14 @@ class GpuParser(RamParser):
         reg_phys = dump.read('device_3d0.dev.reg_phys')
         reg_virt = dump.read('device_3d0.dev.reg_virt')
         ft_policy = dump.read('device_3d0.ft_policy')
-        long_ib_detect = dump.read('device_3d0.long_ib_detect')
+        long_ib_detect = dump.read_bool('device_3d0.long_ib_detect')
         lm_enabled = dump.read_bool('device_3d0.lm_enabled')
         acd_enabled = dump.read_bool('device_3d0.acd_enabled')
         hwcg_enabled = dump.read_bool('device_3d0.hwcg_enabled')
         throttling_enabled = dump.read_bool('device_3d0.throttling_enabled')
         sptp_pc_enabled = dump.read_bool('device_3d0.sptp_pc_enabled')
         bcl_enabled = dump.read_bool('device_3d0.bcl_enabled')
-        speed_bin = dump.read('device_3d0.speed_bin')
+        speed_bin = dump.read('device_3d0.dev.speed_bin')
         cur_rb = dump.read('device_3d0.cur_rb')
         next_rb = dump.read('device_3d0.next_rb')
         prev_rb = dump.read('device_3d0.prev_rb')
@@ -274,7 +287,7 @@ class GpuParser(RamParser):
         self.writeln('cur_rb_id: ' + str(cur_rb_id))
         self.writeln('next_rb: ' + strhex(next_rb))
         self.writeln('next_rb_id: ' + str(next_rb_id))
-        self.writeln('prev_rb_ptr: ' + strhex(prev_rb))
+        self.writeln('prev_rb: ' + strhex(prev_rb))
         self.writeln('prev_rb_id: ' + str(prev_rb_id))
 
     def parse_kgsl_mem(self, dump):
@@ -566,6 +579,7 @@ class GpuParser(RamParser):
         pwrctrl_address = dump.read('device_3d0.dev.pwrctrl')
         active_pwrlevel = dump.read('device_3d0.dev.pwrctrl.active_pwrlevel')
         prev_pwrlevel = dump.read('device_3d0.dev.pwrctrl.previous_pwrlevel')
+        default_pwrlevel = dump.read('device_3d0.dev.pwrctrl.default_pwrlevel')
         power_flags = dump.read('device_3d0.dev.pwrctrl.power_flags')
         ctrl_flags = dump.read('device_3d0.dev.pwrctrl.ctrl_flags')
         min_pwrlevel = dump.read('device_3d0.dev.pwrctrl.min_pwrlevel')
@@ -599,6 +613,7 @@ class GpuParser(RamParser):
         self.writeln('pwrctrl_address:  ' + strhex(pwrctrl_address))
         self.writeln('active_pwrlevel:  ' + str(active_pwrlevel))
         self.writeln('previous_pwrlevel:  ' + str(prev_pwrlevel))
+        self.writeln('default_pwrlevel:  ' + str(default_pwrlevel))
         self.writeln('power_flags:  ' + strhex(power_flags))
         self.writeln('ctrl_flags:  ' + strhex(ctrl_flags))
         self.writeln('min_pwrlevel:  ' + str(min_pwrlevel))
