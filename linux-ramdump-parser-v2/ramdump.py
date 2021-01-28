@@ -1709,7 +1709,7 @@ class RamDump():
         """
         try:
             addr = self.gdbmi.address_of(symbol)
-            if (addr & 0xFF000000000000) == 0:
+            if ((addr & 0xFF000000000000) == 0) and self.arm64:
                 for mod_tbl_ent in self.lookup_table:
                     if symbol in str(mod_tbl_ent) and symbol == mod_tbl_ent[2]:
                         addr = mod_tbl_ent[0]
