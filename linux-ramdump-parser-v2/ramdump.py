@@ -587,6 +587,7 @@ class RamDump():
         self.autodump = options.autodump
         self.module_table = module_table.module_table_class()
         self.hyp = options.hyp
+        self.lookup_table = []
         # Save all paths given from --mod_path option. These will be searched for .ko.unstripped files
         if options.mod_path_list:
             for path in options.mod_path_list:
@@ -693,7 +694,6 @@ class RamDump():
             self.gdbmi.kaslr_offset = self.get_kaslr_offset()
 
         self.wlan = options.wlan
-        self.lookup_table = []
         self.config = []
         self.config_dict = {}
         if self.arm64:
@@ -1646,6 +1646,7 @@ class RamDump():
                 else:
                     return
                 name = os.path.basename(name)
+                name = name.replace("-","_")
                 # Prefer .ko.unstripped
                 if ko_file_list.get(name, '').endswith('.ko.unstripped') and file.endswith('.ko'):
                     return
@@ -1714,6 +1715,7 @@ class RamDump():
                     if symbol in str(mod_tbl_ent) and symbol == mod_tbl_ent[2]:
                         addr = mod_tbl_ent[0]
                         return addr
+                return addr
             else:
                 return addr
         except gdbmi.GdbMIException:
