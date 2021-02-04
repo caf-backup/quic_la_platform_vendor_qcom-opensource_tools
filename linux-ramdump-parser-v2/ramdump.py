@@ -1,4 +1,4 @@
-# Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
+# Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -505,38 +505,39 @@ class RamDump():
 
     def determine_phys_offset(self):
         vmalloc_start = self.modules_end - self.kaslr_offset
-        min_image_align = 0x00200000
+        for min_image_align in [0x00200000, 0x00080000, 0x00008000]:
 
-        phys_base = 0xffffffff
-        phys_end = 0
-        for a in self.ebi_files:
-            _, start, end, path = a
-            if "DDR" in os.path.basename(path):
-                if start < phys_base:
-                    phys_base = start
-                if end > phys_end:
-                    phys_end = end
+            phys_base = 0xffffffff
+            phys_end = 0
+            for a in self.ebi_files:
+                _, start, end, path = a
+                if "DDR" in os.path.basename(path):
+                    if start < phys_base:
+                        phys_base = start
+                    if end > phys_end:
+                        phys_end = end
 
-        if phys_end > 0xffffffff:
-            phys_end = 0xffffffff
+            if phys_end > 0xffffffff:
+                phys_end = 0xffffffff
 
-        print_out_str("phys_base: {0:x} phys_end: {1:x}".format(phys_base, phys_end))
+            print_out_str("phys_base: {0:x} phys_end: {1:x} step: {2:x}".format(
+                            phys_base, phys_end, min_image_align))
 
-        kimage_load_addr = phys_base;
-        while (kimage_load_addr < phys_end):
-            kimage_voffset = self.modules_end - kimage_load_addr
-            addr = self.address_of("kimage_voffset") - self.kaslr_offset - \
-                   vmalloc_start + kimage_load_addr
-            if self.arm64:
-                val = self.read_u64(addr, False)
-            else:
-                val = self.read_u32(addr, False)
-            if val is None:
-                val = 0
-            val = int(val)
-            if (int(kimage_voffset) == val):
-                return kimage_load_addr
-            kimage_load_addr = kimage_load_addr + min_image_align
+            kimage_load_addr = phys_base
+            while (kimage_load_addr < phys_end):
+                kimage_voffset = self.modules_end - kimage_load_addr
+                addr = self.address_of("kimage_voffset") - self.kaslr_offset - \
+                    vmalloc_start + kimage_load_addr
+                if self.arm64:
+                    val = self.read_u64(addr, False)
+                else:
+                    val = self.read_u32(addr, False)
+                if val is None:
+                    val = 0
+                val = int(val)
+                if (int(kimage_voffset) == val):
+                    return kimage_load_addr
+                kimage_load_addr = kimage_load_addr + min_image_align
 
         return 0
 
@@ -1608,7 +1609,7 @@ class RamDump():
                     # being treated as belonging to a particular kernel module
                     mod_tbl_ent.kallsyms_table.append(
                         (sym_addr, sym_name + '[' + mod_tbl_ent.name + ']', sym_type, i,
-                         st_name, st_shndx, st_size))
+                         st_name, st_shndx, st_size,sym_name))
             mod_tbl_ent.kallsyms_table.sort()
             if self.dump_module_kallsyms:
                 self.dump_mod_kallsyms_sym_table(mod_tbl_ent.name, mod_tbl_ent.kallsyms_table)
@@ -1658,7 +1659,7 @@ class RamDump():
         if self.is_config_defined("CONFIG_KALLSYMS"):
             for mod_tbl_ent in self.module_table.module_table:
                 for sym in mod_tbl_ent.kallsyms_table:
-                    self.lookup_table.append((sym[0], sym[1]))
+                    self.lookup_table.append((sym[0], sym[1],sym[7]))
         else:
             for mod_tbl_ent in self.module_table.module_table:
                 for sym in mod_tbl_ent.sym_lookup_table:
@@ -1707,7 +1708,14 @@ class RamDump():
         '0xffffffc000c7a0a8L'
         """
         try:
-            return self.gdbmi.address_of(symbol)
+            addr = self.gdbmi.address_of(symbol)
+            if ((addr & 0xFF000000000000) == 0) and self.arm64:
+                for mod_tbl_ent in self.lookup_table:
+                    if symbol in str(mod_tbl_ent) and symbol == mod_tbl_ent[2]:
+                        addr = mod_tbl_ent[0]
+                        return addr
+            else:
+                return addr
         except gdbmi.GdbMIException:
             pass
 
