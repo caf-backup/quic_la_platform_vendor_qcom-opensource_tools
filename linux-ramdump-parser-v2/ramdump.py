@@ -1609,7 +1609,7 @@ class RamDump():
                     # being treated as belonging to a particular kernel module
                     mod_tbl_ent.kallsyms_table.append(
                         (sym_addr, sym_name + '[' + mod_tbl_ent.name + ']', sym_type, i,
-                         st_name, st_shndx, st_size))
+                         st_name, st_shndx, st_size,sym_name))
             mod_tbl_ent.kallsyms_table.sort()
             if self.dump_module_kallsyms:
                 self.dump_mod_kallsyms_sym_table(mod_tbl_ent.name, mod_tbl_ent.kallsyms_table)
@@ -1659,7 +1659,7 @@ class RamDump():
         if self.is_config_defined("CONFIG_KALLSYMS"):
             for mod_tbl_ent in self.module_table.module_table:
                 for sym in mod_tbl_ent.kallsyms_table:
-                    self.lookup_table.append((sym[0], sym[1]))
+                    self.lookup_table.append((sym[0], sym[1],sym[7]))
         else:
             for mod_tbl_ent in self.module_table.module_table:
                 for sym in mod_tbl_ent.sym_lookup_table:
@@ -1708,7 +1708,14 @@ class RamDump():
         '0xffffffc000c7a0a8L'
         """
         try:
-            return self.gdbmi.address_of(symbol)
+            addr = self.gdbmi.address_of(symbol)
+            if ((addr & 0xFF000000000000) == 0) and self.arm64:
+                for mod_tbl_ent in self.lookup_table:
+                    if symbol in str(mod_tbl_ent) and symbol == mod_tbl_ent[2]:
+                        addr = mod_tbl_ent[0]
+                        return addr
+            else:
+                return addr
         except gdbmi.GdbMIException:
             pass
 
