@@ -1,4 +1,4 @@
-# Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
+# Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -505,38 +505,39 @@ class RamDump():
 
     def determine_phys_offset(self):
         vmalloc_start = self.modules_end - self.kaslr_offset
-        min_image_align = 0x00200000
+        for min_image_align in [0x00200000, 0x00080000, 0x00008000]:
 
-        phys_base = 0xffffffff
-        phys_end = 0
-        for a in self.ebi_files:
-            _, start, end, path = a
-            if "DDR" in os.path.basename(path):
-                if start < phys_base:
-                    phys_base = start
-                if end > phys_end:
-                    phys_end = end
+            phys_base = 0xffffffff
+            phys_end = 0
+            for a in self.ebi_files:
+                _, start, end, path = a
+                if "DDR" in os.path.basename(path):
+                    if start < phys_base:
+                        phys_base = start
+                    if end > phys_end:
+                        phys_end = end
 
-        if phys_end > 0xffffffff:
-            phys_end = 0xffffffff
+            if phys_end > 0xffffffff:
+                phys_end = 0xffffffff
 
-        print_out_str("phys_base: {0:x} phys_end: {1:x}".format(phys_base, phys_end))
+            print_out_str("phys_base: {0:x} phys_end: {1:x} step: {2:x}".format(
+                            phys_base, phys_end, min_image_align))
 
-        kimage_load_addr = phys_base;
-        while (kimage_load_addr < phys_end):
-            kimage_voffset = self.modules_end - kimage_load_addr
-            addr = self.address_of("kimage_voffset") - self.kaslr_offset - \
-                   vmalloc_start + kimage_load_addr
-            if self.arm64:
-                val = self.read_u64(addr, False)
-            else:
-                val = self.read_u32(addr, False)
-            if val is None:
-                val = 0
-            val = int(val)
-            if (int(kimage_voffset) == val):
-                return kimage_load_addr
-            kimage_load_addr = kimage_load_addr + min_image_align
+            kimage_load_addr = phys_base
+            while (kimage_load_addr < phys_end):
+                kimage_voffset = self.modules_end - kimage_load_addr
+                addr = self.address_of("kimage_voffset") - self.kaslr_offset - \
+                    vmalloc_start + kimage_load_addr
+                if self.arm64:
+                    val = self.read_u64(addr, False)
+                else:
+                    val = self.read_u32(addr, False)
+                if val is None:
+                    val = 0
+                val = int(val)
+                if (int(kimage_voffset) == val):
+                    return kimage_load_addr
+                kimage_load_addr = kimage_load_addr + min_image_align
 
         return 0
 
@@ -629,8 +630,10 @@ class RamDump():
                 file_path = os.path.join(options.autodump, 'ap_minidump.elf')
             self.ram_elf_file = file_path
             if not os.path.exists(file_path):
-                print_out_str("!!! ELF file open failed")
-                sys.exit(1)
+                print_out_str("ELF file not exists, try to generate")
+                if minidump_util.generate_elf(options.autodump):
+                    print_out_str("!!! ELF file generate failed")
+                    sys.exit(1)
             fd = open(file_path, 'rb')
             self.elffile = ELFFile(fd)
             for idx, s in enumerate(self.elffile.iter_segments()):
@@ -767,8 +770,10 @@ class RamDump():
 
                 print_out_str('!!! Exiting now')
                 sys.exit(1)
-
-        stext = self.address_of('stext')
+        if self.get_kernel_version() > (5, 7, 0):
+            stext = self.address_of('primary_entry')
+        else:
+            stext = self.address_of('stext')
         if self.kimage_voffset is None:
             self.kernel_text_offset = stext - self.page_offset
         else:
@@ -856,7 +861,7 @@ class RamDump():
         f = None
         try:
             dir_path = os.path.dirname(file_path)
-            if not os.path.exists(dir_path) and 'w' in mode:
+            if not os.path.exists(dir_path) and ('w' in mode or 'a' in mode):
                 os.makedirs(dir_path)
             f = open(file_path, mode)
         except:
@@ -1341,6 +1346,7 @@ class RamDump():
         socinfo_version = 0
         socinfo_build_id = 'DUMMY'
         chosen_board = None
+        use_predefined = False
 
         boards = get_supported_boards()
 
@@ -1358,15 +1364,11 @@ class RamDump():
                     entry_item_offset = self.field_offset('struct smem_private_entry', 'item')
                     item_size_offset = self.field_offset('struct smem_private_entry', 'size')
                 else:
-                    print_out_str(
-                        '!!!! Could not get a necessary offset for auto detection!')
-                    print_out_str(
-                        '!!!! Please check the gdb path which is used for offsets!')
-                    print_out_str('!!!! Also check that the vmlinux is not stripped')
-                    print_out_str('!!!! Exiting...')
-                    sys.exit(1)
+                    print_out_str('!!!! Could not get a necessary offset for auto detection!')
+                    print_out_str('!!!! Try to use predefined offset!')
+                    use_predefined = True
             for board in boards:
-                if self.minidump:
+                if self.minidump or use_predefined:
                     if hasattr(board, 'smem_addr_buildinfo'):
                         socinfo_start = board.smem_addr_buildinfo
                         if add_offset:
