@@ -174,7 +174,7 @@ class MemStats(RamParser):
             total_free = self.pages_to_mb(total_free)
 
             # slab Memory
-            if ramdump.kernel_version >= (5, 10):
+            if self.ramdump.kernel_version >= (5, 10):
                 slab_rec = self.ramdump.read_word(
                    'vm_node_stat[NR_SLAB_RECLAIMABLE_B]')
                 slab_unrec = self.ramdump.read_word(
