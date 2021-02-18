@@ -67,6 +67,7 @@ class GpuParser(RamParser):
             (self.parse_active_context_data, "Active Contexts", 'gpuinfo.txt'),
             (self.parse_open_process_data, "Open Processes", 'gpuinfo.txt'),
             (self.parse_pagetables, "Process Pagetables", 'gpuinfo.txt'),
+            (self.parse_gmu_data_54, "GMU Details", 'gpuinfo.txt'),
             (self.dump_gpu_snapshot, "GPU Snapshot", 'gpuinfo.txt'),
             (self.parse_fence_data, "Fences", 'gpu_sync_fences.txt'),
             (self.parse_open_process_mementry, "Open Process Mementries",
@@ -1022,6 +1023,81 @@ class GpuParser(RamParser):
         self.writeln(format_str.format(
             str(pid), strhex(pt_base), strhex(ttbr0_val),
             strhex(context_idr_val), str(attached_val)))
+
+    def parse_gmu_data_54(self, dump):
+        devp_addr = dump.read('kgsl_driver.devp')
+        gmu_core = dump.struct_field_addr(devp_addr,
+                                          'struct kgsl_device', 'gmu_core')
+        gmu_on = dump.read_structure_field(gmu_core,
+                                           'struct gmu_core_device', 'flags')
+        if not ((gmu_on >> 4) & 1):
+            self.writeln('GMU not enabled.')
+            return
+
+        a6xx_gmu_dev = dump.sibling_field_addr(devp_addr, 'struct a6xx_device',
+                                               'adreno_dev', 'gmu')
+        flags = dump.read_structure_field(a6xx_gmu_dev,
+                                          'struct a6xx_gmu_device', 'flags')
+        idle_level = dump.read_structure_field(a6xx_gmu_dev,
+                                               'struct a6xx_gmu_device',
+                                               'idle_level')
+        global_entries = dump.read_structure_field(a6xx_gmu_dev,
+                                                   'struct a6xx_gmu_device',
+                                                   'global_entries')
+        preall_addr = dump.struct_field_addr(a6xx_gmu_dev,
+                                             'struct a6xx_gmu_device',
+                                             'preallocations')
+        preallocations = dump.read_bool(preall_addr)
+        log_stream_addr = dump.struct_field_addr(a6xx_gmu_dev,
+                                                 'struct a6xx_gmu_device',
+                                                 'log_stream_enable')
+        log_stream_enable = dump.read_bool(log_stream_addr)
+        cm3_fault = dump.read_structure_field(a6xx_gmu_dev,
+                                              'struct a6xx_gmu_device',
+                                              'cm3_fault')
+
+        self.writeln('idle_level: ' + str(idle_level))
+        self.writeln('internal gmu flags: ' + strhex(flags))
+        self.writeln('global_entries: ' + str(global_entries))
+        self.writeln('preallocations: ' + str(preallocations))
+        self.writeln('log_stream_enable: ' + str(log_stream_enable))
+        self.writeln('cm3_fault: ' + str(cm3_fault))
+
+        num_clks = dump.read_structure_field(a6xx_gmu_dev,
+                                             'struct a6xx_gmu_device',
+                                             'num_clks')
+        clks = dump.read_structure_field(a6xx_gmu_dev,
+                                         'struct a6xx_gmu_device', 'clks')
+        clk_id_addr = dump.read_structure_field(clks,
+                                                'struct clk_bulk_data', 'id')
+        clk_id = dump.read_cstring(clk_id_addr)
+
+        self.writeln('num_clks: ' + str(num_clks))
+        self.writeln('clock consumer ID: ' + str(clk_id))
+
+        gmu_logs = dump.read_structure_field(a6xx_gmu_dev,
+                                             'struct a6xx_gmu_device',
+                                             'gmu_log')
+        hostptr = dump.read_structure_field(gmu_logs,
+                                            'struct gmu_memdesc', 'hostptr')
+        size = dump.read_structure_field(gmu_logs,
+                                         'struct gmu_memdesc', 'size')
+
+        self.writeln('\nTrace Details:')
+        self.writeln('\tStart Address: ' + strhex(hostptr))
+        self.writeln('\tSize: ' + str(size))
+
+        if size == 0:
+            self.writeln('Invalid size. Aborting gmu trace dump.')
+            return
+        else:
+            file = self.ramdump.open_file('gpu_parser/gmu_trace.bin', 'wb')
+            self.writeln('Dumping ' + str_convert_to_kb(size) +
+                         ' starting from ' + strhex(hostptr) +
+                         ' to gmu_trace.bin')
+            data = self.ramdump.read_binarystring(hostptr, size)
+            file.write(data)
+            file.close()
 
     def dump_gpu_snapshot(self, dump):
         devp_addr = dump.read('kgsl_driver.devp')
