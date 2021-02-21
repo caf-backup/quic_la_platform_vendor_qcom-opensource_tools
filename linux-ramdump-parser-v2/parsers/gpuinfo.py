@@ -115,19 +115,23 @@ class GpuParser(RamParser):
         dump = self.ramdump
         context_id = str(dump.read_structure_field(
             ctx_addr, 'struct kgsl_context', 'id'))
+        if context_id == "0":
+            return
 
         proc_priv_offset = dump.field_offset('struct kgsl_context',
                                              'proc_priv')
         proc_priv = dump.read_pointer(ctx_addr + proc_priv_offset)
-        pid = str(dump.read_structure_field(
-            proc_priv, 'struct kgsl_process_private', 'pid'))
+        pid = dump.read_structure_field(proc_priv,
+                                        'struct kgsl_process_private', 'pid')
+        upid_offset = dump.field_offset('struct pid', 'numbers')
+        upid = dump.read_int(pid + upid_offset)
 
         comm_offset = dump.field_offset('struct kgsl_process_private',
                                         'comm')
         comm = str(dump.read_cstring(proc_priv + comm_offset))
         ptr = strhex(ctx_addr)
         format_str = '{0:20} {1:20} {2:20} {3:30}'
-        self.writeln(format_str.format(context_id, str(pid), comm, ptr))
+        self.writeln(format_str.format(context_id, str(upid), comm, ptr))
 
     def parse_context_data(self, dump):
         format_str = '{0:20} {1:20} {2:20} {3:30}'
@@ -170,6 +174,8 @@ class GpuParser(RamParser):
                               format_string):
         pid = dump.read_structure_field(kgsl_private_base_addr,
                                         'struct kgsl_process_private', 'pid')
+        upid_offset = dump.field_offset('struct pid', 'numbers')
+        upid = dump.read_int(pid + upid_offset)
 
         comm_offset = dump.field_offset('struct kgsl_process_private', 'comm')
         pname = str(dump.read_cstring(kgsl_private_base_addr + comm_offset))
@@ -180,10 +186,10 @@ class GpuParser(RamParser):
 
         try:
             self.rtw.walk_radix_tree(mementry_rt, self.__print_mementry_info,
-                                     pid, pname, [True])
+                                     upid, pname, [True])
         except Exception:
-            self.writeln("Ramdump has a corrupted mementry: pid: " + str(pid) +
-                         " comm: " + pname)
+            self.writeln("Ramdump has a corrupted mementry: pid: " + str(upid)
+                         + " comm: " + pname)
 
     def __print_mementry_info(self, mementry_addr, pid, pname, print_header):
         dump = self.ramdump
@@ -555,6 +561,8 @@ class GpuParser(RamParser):
                         context_pointer, 'struct kgsl_context', 'proc_priv')
                     pid = dump.read_structure_field(
                         proc_priv, 'struct kgsl_process_private', 'pid')
+                    upid_offset = dump.field_offset('struct pid', 'numbers')
+                    upid = dump.read_int(pid + upid_offset)
                 else:
                     global_ts = 'NULL'
                     fault_policy = 'NULL'
@@ -567,7 +575,7 @@ class GpuParser(RamParser):
 
                 dispatcher_temp.extend([i, global_ts, fault_policy,
                                         fault_recovery, drawobj_type,
-                                        timestamp, flags, context_id, pid])
+                                        timestamp, flags, context_id, upid])
 
                 dispatcher_result.append(dispatcher_temp)
                 head = (head + 1) % ADRENO_DISPATCH_DRAWQUEUE_SIZE
@@ -956,6 +964,8 @@ class GpuParser(RamParser):
     def walk_process_private(self, kgsl_private_base_addr, dump, format_str):
         pid = dump.read_structure_field(
             kgsl_private_base_addr, 'struct kgsl_process_private', 'pid')
+        upid_offset = dump.field_offset('struct pid', 'numbers')
+        upid = dump.read_int(pid + upid_offset)
 
         comm_offset = dump.field_offset('struct kgsl_process_private', 'comm')
         pname = dump.read_cstring(kgsl_private_base_addr + comm_offset)
@@ -970,7 +980,7 @@ class GpuParser(RamParser):
         val = dump.read_slong(stats_addr)
 
         self.writeln(format_str.format(
-            str(pid), str(pname), hex(kgsl_private_base_addr),
+            str(upid), str(pname), hex(kgsl_private_base_addr),
             hex(kgsl_pagetable_address), str_convert_to_kb(val)))
 
     def parse_pagetables(self, dump):
