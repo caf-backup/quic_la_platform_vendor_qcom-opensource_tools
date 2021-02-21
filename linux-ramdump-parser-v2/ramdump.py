@@ -1267,7 +1267,10 @@ class RamDump():
             mod_sym_path = mod_tbl_ent.get_sym_path()
             if mod_sym_path != '':
                 where = os.path.abspath(mod_sym_path)
-                ld_mod_sym = "Data.LOAD.Elf " + where + " " + str(hex(mod_tbl_ent.module_offset)) +  " /NoCODE /NoClear /NAME " + mod_tbl_ent.name + " /reloctype 0x3" + "\n"
+                if 'wlan' in mod_tbl_ent.name:
+                    ld_mod_sym = "Data.LOAD.Elf " + where + " " + str(hex(mod_tbl_ent.module_offset)) +  " /NoCODE /NoClear /NAME " + mod_tbl_ent.name + " /reloctype 0x3" + "\n"
+                else:
+                    ld_mod_sym = "Data.LOAD.Elf " + where + " /NoCODE /NoClear /NAME " + mod_tbl_ent.name + " /reloctype 0x3" + "\n"
                 startup_script.write(ld_mod_sym)
 
         if not self.minidump:
