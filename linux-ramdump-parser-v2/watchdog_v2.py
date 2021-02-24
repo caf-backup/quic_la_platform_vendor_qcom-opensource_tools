@@ -15,6 +15,7 @@ import re
 from print_out import print_out_str
 from bitops import is_set
 from parser_util import register_parser, RamParser
+from sched_info import cpu_isolation_mask
 
 # name from tz dump, corresponding T32 register, whether or not to
 # print_out_str (the function name)
@@ -1385,14 +1386,9 @@ def get_wdog_timing(ramdump):
         cpu_online_bits = ramdump.read_word('__cpu_online_mask')
     else:
         cpu_online_bits = ramdump.read_word('cpu_online_bits')
-    if (ramdump.kernel_version >= (4, 9, 0)):
-        cpu_isolated_bits = ramdump.read_word('__cpu_isolated_mask')
-    elif (ramdump.kernel_version >= (4, 4, 0)):
-        cpu_isolated_bits = ramdump.read_word('cpu_isolated_bits')
-    else:
-        cpu_isolated_bits = 0
-    if cpu_isolated_bits is None:
-        cpu_isolated_bits = 0
+
+    cpu_isolated_bits = cpu_isolation_mask(ramdump)
+
     if not ramdump.minidump:
         wdog_task = ramdump.read_structure_field(
             wdog_data_addr, 'struct msm_watchdog_data', 'watchdog_task')
