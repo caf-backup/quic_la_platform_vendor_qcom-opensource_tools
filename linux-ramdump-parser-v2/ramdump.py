@@ -880,6 +880,7 @@ class RamDump():
             self.gdbmi = gdbmi.GdbMI(self.gdb_path, self.vmlinux,
                                  self.kaslr_offset or 0)
             self.gdbmi.open() #openning gdb session with vmlinux
+            self.gdbmi.setup_module_table(self.module_table)
             if self.kaslr_offset is None:
                 self.determine_kaslr_offset()
                 self.gdbmi.kaslr_offset = self.get_kaslr_offset()
@@ -888,6 +889,7 @@ class RamDump():
         self.gdbmi = gdbmi.GdbMI(self.gdb_path, self.vmlinux,
                                  self.kaslr_offset or 0)
         self.gdbmi.open() #openning gdb session with vmlinux
+        self.gdbmi.setup_module_table(self.module_table)
         if self.kaslr_offset is None:
             self.determine_kaslr_offset()
             self.gdbmi.kaslr_offset = self.get_kaslr_offset()
