@@ -1520,7 +1520,8 @@ class RamDump():
             s = line.split(' ')
             if len(s) != 3:
                 continue
-
+            if (("$x" in s[2].rstrip()) or ("$d" in s[2].rstrip())):
+                continue
             entry = (int(s[0], 16) + kaslr, s[2].rstrip())
 
             # The symbol file contains many artificial symbols which we don't care about.
