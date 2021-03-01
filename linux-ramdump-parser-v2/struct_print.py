@@ -119,6 +119,10 @@ class struct_print_class(object):
             func_name = Struct.get_cstring
         elif (node.data_type == 'list_head') or (data_type == 'hlist_head'):
             func_name = Struct.get_pointer
+        elif data_type == 'rw_semaphore':
+            func_name = Struct.get_address
+        elif data_type == 'mutex':
+            func_name = Struct.get_address
         else:
             s1 = 'error: unknown data type {0:s} for field {1:s}\n'.format(data_type, name)
             print(s1)
@@ -182,4 +186,31 @@ class struct_print_class(object):
                     list_walker.walk(node.val, self.hlist_head_walk_func)
                 s1 = '\t}\n'
                 self.out_file.write(s1)
+            elif (node.data_type == 'rw_semaphore'):
+                rw_semaphore_addr = node.val
+                count = self.ramdump.read_structure_field(rw_semaphore_addr, 'struct rw_semaphore', 'count')
+                owner = self.ramdump.read_structure_field(rw_semaphore_addr, 'struct rw_semaphore', 'owner')
+                # Remove flag bits
+                owner = owner & ~0x7
+                s1 = '\t{0:12s} : {1:s} : count = {2:s} : owner = {3:s}\n'.format(node.name, self.to_hex(node.val), self.to_hex(count), self.to_hex(owner))
+                self.out_file.write(s1)
+                if owner:
+                    comm_addr = owner + self.ramdump.field_offset('struct task_struct', 'comm')
+                    comm = self.ramdump.read_cstring(comm_addr, max_length=16)
+                    pid_addr = owner + self.ramdump.field_offset('struct task_struct', 'pid')
+                    pid = self.ramdump.read_int(pid_addr)
+                    self.out_file.write('\t\towner comm = {} pid = {}\n'.format(comm, pid))
+            elif (node.data_type == 'mutex'):
+                mutex_addr = node.val
+                owner = self.ramdump.read_structure_field(mutex_addr, 'struct mutex', 'owner')
+                # Remove flag bits
+                owner = owner & ~0x7
+                s1 = '\t{0:12s} : {1:s} : owner = {2:s}\n'.format(node.name, self.to_hex(node.val), self.to_hex(owner))
+                self.out_file.write(s1)
+                if owner:
+                    comm_addr = owner + self.ramdump.field_offset('struct task_struct', 'comm')
+                    comm = self.ramdump.read_cstring(comm_addr, max_length=16)
+                    pid_addr = owner + self.ramdump.field_offset('struct task_struct', 'pid')
+                    pid = self.ramdump.read_int(pid_addr)
+                    self.out_file.write('\t\towner comm = {} pid = {}\n'.format(comm, pid))
         self.out_file.write('}\n')
