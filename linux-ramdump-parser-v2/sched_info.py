@@ -16,6 +16,7 @@ DEFAULT_MIGRATION_NR=32
 DEFAULT_MIGRATION_COST=500000
 DEFAULT_RT_PERIOD=1000000
 DEFAULT_RT_RUNTIME=950000
+SCHED_CAPACITY_SHIFT=10
 
 cpu_online_bits = 0
 
@@ -53,7 +54,10 @@ def verify_active_cpus(ramdump):
         online = ramdump.read_int(rq_addr + online_offset)
         cpu_online_bits |= (online << i)
 
-    if (ramdump.kernel_version >= (4, 9, 0)):
+    print("cpu_online_bits.. {0}".format(cpu_online_bits))
+    if (ramdump.kernel_version >= (5, 10, 0)):
+        cpu_isolated_bits = ramdump.read_word('__cpu_active_mask')
+    elif (ramdump.kernel_version >= (4, 9, 0)):
         cpu_isolated_bits = ramdump.read_word('__cpu_isolated_mask')
     elif (ramdump.kernel_version >= (4, 4, 0)):
         cpu_isolated_bits = ramdump.read_word('cpu_isolated_bits')
@@ -115,7 +119,12 @@ def dump_cpufreq_data(ramdump):
 
         cap_orig = ramdump.read_structure_field(rq_addr, 'struct rq', 'cpu_capacity_orig')
         curr_cap = ramdump.read_structure_field(rq_addr, 'struct rq', 'cpu_capacity')
-        thermal_cap = ramdump.read_word(ramdump.array_index(ramdump.address_of('thermal_cap_cpu'), 'unsigned long', i))
+        if (ramdump.kernel_version >= (5, 10, 0)):
+            max_thermal_cap = (1 << SCHED_CAPACITY_SHIFT)
+            thermal_pressure = ramdump.read_u64(ramdump.address_of('thermal_pressure') + ramdump.per_cpu_offset(i))
+            thermal_cap = max_thermal_cap - thermal_pressure
+        else:
+            thermal_cap = ramdump.read_word(ramdump.array_index(ramdump.address_of('thermal_cap_cpu'), 'unsigned long', i))
 
         arch_scale = ramdump.read_int(ramdump.address_of('cpu_scale') + ramdump.per_cpu_offset(i))
 
