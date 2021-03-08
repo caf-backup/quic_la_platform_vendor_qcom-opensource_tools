@@ -2617,14 +2617,15 @@ class MDPinfo(RamParser):
                 self.outfile.write('%-21.5s%-11.5s%-13.7s%-13.5s%s\n' % ("TIME", "PID", "ADDRESS", "VAL", "BLK_ID"))
                 sde_reglog_start = 0
                 sde_reglog_repeat = 0
-                if (reg_log.curr != reg_log.last):
-                    sde_reglog_start = reg_log.curr
+                sde_reglog_curr = reg_log.curr % SDE_REGLOG_ENTRY
+                if (sde_reglog_curr != reg_log.last):
+                    sde_reglog_start = sde_reglog_curr
                 else:
                     sde_reglog_repeat = 1
                 sde_reglog_count = 0
                 while (sde_reglog_count < SDE_REGLOG_ENTRY):
                     i = sde_reglog_start % SDE_REGLOG_ENTRY
-                    if (i == reg_log.curr):
+                    if (i == sde_reglog_curr):
                         if (sde_reglog_repeat):
                             break
                         else:
@@ -2644,13 +2645,67 @@ class MDPinfo(RamParser):
                         break
                     self.outfile.write('%-20.5d ' % (log_log.time))
                     self.outfile.write('%-10.1d ' % (log_log.pid))
-                    self.outfile.write('0x%-10.1x ' % (log_log.addr))
-                    self.outfile.write('0x%-10.1x ' % (log_log.val))
-                    self.outfile.write('0x%-10.1x ' % (log_log.blk_id))
+                    self.outfile.write('%-10.1x ' % (log_log.addr))
+                    self.outfile.write('%-10.1x ' % (log_log.val))
+                    self.outfile.write('%-10.1x ' % (log_log.blk_id))
                     self.outfile.write('\n')
                 self.outfile.close()
             except:
                 pass
+
+            #Combining reglog with eventlog
+            f_evtlog = self.ramdump.open_file('sde_evtlog_parsed.txt', 'r')
+            f_reglog = self.ramdump.open_file('sde_reglog.txt', 'r')
+            self.outfile = self.ramdump.open_file('sde_evtlog_reglog_merged.txt', 'w')
+            evtlog = f_evtlog.readline()
+            reglog = f_reglog.readline()
+            curr_timestamp = 0
+
+            while (evtlog and reglog):
+                if "FUNCTION_NAME" in evtlog:
+                    evtlog = f_evtlog.readline()
+                if "TIME" in reglog:
+                    reglog = f_reglog.readline()
+                if not evtlog or not reglog:
+                    break
+
+                evtlog_tmp = re.split(r'==>|: |\n', evtlog)
+                data_tmp = evtlog_tmp[2].split("[", 1)
+                reglog_tmp = re.sub(r'\s+', ' ', reglog)
+                reglog_tmp = reglog.split()
+
+                if (int(evtlog_tmp[1]) > int(reglog_tmp[0])):
+                    self.outfile.write('{:<54}{:<29}{:<6}{:<3}{:<200}'.format("sde_reg_write", "==>"+str(reglog_tmp[0])+": "+str(int(reglog_tmp[0]) - curr_timestamp), "["+reglog_tmp[1]+"]","[N]", reglog_tmp[2] + " " + reglog_tmp[3] + " " + reglog_tmp[4]))
+                    self.outfile.write('\n')
+                    reglog = f_reglog.readline()
+                    curr_timestamp = int(reglog_tmp[0])
+                else:
+                    self.outfile.write('{:<54}{:<29}{:<200}'.format(evtlog_tmp[0], "==>"+str(evtlog_tmp[1])+": "+str(int(evtlog_tmp[1]) - curr_timestamp),"["+data_tmp[1]))
+                    evtlog = f_evtlog.readline()
+                    curr_timestamp = int(evtlog_tmp[1])
+                    self.outfile.write('\n')
+
+            while(evtlog):
+                evtlog_tmp = re.split(r'==>|: |\n', evtlog)
+                data_tmp = evtlog_tmp[2].split("[", 1)
+                self.outfile.write('{:<54}{:<29}{:<200}'.format(evtlog_tmp[0], "==>"+str(evtlog_tmp[1])+": "+str(int(evtlog_tmp[1]) - curr_timestamp),"["+data_tmp[1]))
+                evtlog = f_evtlog.readline()
+                curr_timestamp = int(evtlog_tmp[1])
+                self.outfile.write('\n')
+
+            while(reglog):
+                reglog_tmp = re.sub(r'\s+', ' ', reglog)
+                reglog_tmp = reglog.split()
+                self.outfile.write('{:<54}{:<29}{:<6}{:<3}{:<200}'.format("sde_reg_write", "==>"+str(reglog_tmp[0])+": "+str(int(reglog_tmp[0]) - curr_timestamp), "["+reglog_tmp[1]+"]","[N]", reglog_tmp[2] + " " + reglog_tmp[3] + " " + reglog_tmp[4]))
+                self.outfile.write('\n')
+                curr_timestamp = int(reglog_tmp[0])
+                reglog = f_reglog.readline()
+
+            f_evtlog.close()
+            f_reglog.close()
+            self.outfile.close()
+            self.ramdump.remove_file('sde_reglog.txt')
+
         else:
             for blk in mdss_dbg.blk_arr:
                 if blk.is_empty():
