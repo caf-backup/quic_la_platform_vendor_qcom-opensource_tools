@@ -461,6 +461,11 @@ class RamDump():
 
             return 0
 
+        def pac_frame_update(self,frame):
+            frame.fp = self.ramdump.pac_ignore(frame.fp)
+            frame.sp = self.ramdump.pac_ignore(frame.sp)
+            frame.lr = self.ramdump.pac_ignore(frame.lr)
+            frame.pc = self.ramdump.pac_ignore(frame.pc)
         def unwind_backtrace(self, sp, fp, pc, lr, extra_str='',
                              out_file=None):
             offset = 0
@@ -471,6 +476,7 @@ class RamDump():
             frame.sp = sp
             frame.lr = lr
             frame.pc = pc
+            self.pac_frame_update(frame)
             backtrace = '\n'
             while True:
                 where = frame.pc
@@ -494,6 +500,7 @@ class RamDump():
                 backtrace += pstring + '\n'
 
                 urc = self.unwind_frame(frame)
+                self.pac_frame_update(frame)
                 if urc < 0:
                     break
                 frame_count = frame_count + 1
@@ -503,6 +510,29 @@ class RamDump():
                     break
             return backtrace
 
+    def createMask(self,a, b):
+       r = 0
+       i = a
+       while(i <= b):
+           r |= 1 << i
+           i = i +1
+
+       return r;
+    def pac_ignore(self,data):
+        pac_check = 0xffffff0000000000
+        top_bit_ignore = 0xff00000000000000
+        if data is None or not self.arm64:
+            return data
+        if (data & pac_check) == pac_check or (data & pac_check) == 0:
+            return data
+        # When address tagging is used
+        # The PAC field is Xn[54:bottom_PAC_bit].
+        # In the PAC field definitions, bottom_PAC_bit == 64-TCR_ELx.TnSZ,
+        # TCR_ELx.TnSZ is set to 25. so 64-25=39
+        pac_mack = self.createMask(39,54)
+        result = pac_mack | data
+        result = result | top_bit_ignore
+        return result
     def determine_phys_offset(self):
         vmalloc_start = self.modules_end - self.kaslr_offset
         for min_image_align in [0x00200000, 0x00080000, 0x00008000]:
@@ -550,6 +580,7 @@ class RamDump():
         self.tz_start = 0
         self.ebi_start = 0
         self.cpu_type = None
+        self.tbi_mask = None
         self.hw_id = options.force_hardware or None
         self.hw_version = options.force_hardware_version or None
         self.offset_table = []
@@ -1478,6 +1509,8 @@ class RamDump():
         self.hw_id = board.board_num
         self.cpu_type = board.cpu
         self.imem_fname = board.imem_file_name
+        if hasattr(board, 'tbi_mask'):
+            self.tbi_mask = board.tbi_mask
         if hasattr(board, 'kaslr_addr'):
             self.kaslr_addr = board.kaslr_addr
         else:
