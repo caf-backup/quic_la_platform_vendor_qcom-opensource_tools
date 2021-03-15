@@ -1,4 +1,4 @@
-# Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
+# Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -505,38 +505,39 @@ class RamDump():
 
     def determine_phys_offset(self):
         vmalloc_start = self.modules_end - self.kaslr_offset
-        min_image_align = 0x00200000
+        for min_image_align in [0x00200000, 0x00080000, 0x00008000]:
 
-        phys_base = 0xffffffff
-        phys_end = 0
-        for a in self.ebi_files:
-            _, start, end, path = a
-            if "DDR" in os.path.basename(path):
-                if start < phys_base:
-                    phys_base = start
-                if end > phys_end:
-                    phys_end = end
+            phys_base = 0xffffffff
+            phys_end = 0
+            for a in self.ebi_files:
+                _, start, end, path = a
+                if "DDR" in os.path.basename(path):
+                    if start < phys_base:
+                        phys_base = start
+                    if end > phys_end:
+                        phys_end = end
 
-        if phys_end > 0xffffffff:
-            phys_end = 0xffffffff
+            if phys_end > 0xffffffff:
+                phys_end = 0xffffffff
 
-        print_out_str("phys_base: {0:x} phys_end: {1:x}".format(phys_base, phys_end))
+            print_out_str("phys_base: {0:x} phys_end: {1:x} step: {2:x}".format(
+                            phys_base, phys_end, min_image_align))
 
-        kimage_load_addr = phys_base;
-        while (kimage_load_addr < phys_end):
-            kimage_voffset = self.modules_end - kimage_load_addr
-            addr = self.address_of("kimage_voffset") - self.kaslr_offset - \
-                   vmalloc_start + kimage_load_addr
-            if self.arm64:
-                val = self.read_u64(addr, False)
-            else:
-                val = self.read_u32(addr, False)
-            if val is None:
-                val = 0
-            val = int(val)
-            if (int(kimage_voffset) == val):
-                return kimage_load_addr
-            kimage_load_addr = kimage_load_addr + min_image_align
+            kimage_load_addr = phys_base
+            while (kimage_load_addr < phys_end):
+                kimage_voffset = self.modules_end - kimage_load_addr
+                addr = self.address_of("kimage_voffset") - self.kaslr_offset - \
+                    vmalloc_start + kimage_load_addr
+                if self.arm64:
+                    val = self.read_u64(addr, False)
+                else:
+                    val = self.read_u32(addr, False)
+                if val is None:
+                    val = 0
+                val = int(val)
+                if (int(kimage_voffset) == val):
+                    return kimage_load_addr
+                kimage_load_addr = kimage_load_addr + min_image_align
 
         return 0
 
@@ -586,6 +587,7 @@ class RamDump():
         self.autodump = options.autodump
         self.module_table = module_table.module_table_class()
         self.hyp = options.hyp
+        self.lookup_table = []
         # Save all paths given from --mod_path option. These will be searched for .ko.unstripped files
         if options.mod_path_list:
             for path in options.mod_path_list:
@@ -692,7 +694,6 @@ class RamDump():
             self.gdbmi.kaslr_offset = self.get_kaslr_offset()
 
         self.wlan = options.wlan
-        self.lookup_table = []
         self.config = []
         self.config_dict = {}
         if self.arm64:
@@ -769,8 +770,10 @@ class RamDump():
 
                 print_out_str('!!! Exiting now')
                 sys.exit(1)
-
-        stext = self.address_of('stext')
+        if self.get_kernel_version() > (5, 7, 0):
+            stext = self.address_of('primary_entry')
+        else:
+            stext = self.address_of('stext')
         if self.kimage_voffset is None:
             self.kernel_text_offset = stext - self.page_offset
         else:
@@ -1264,7 +1267,7 @@ class RamDump():
             mod_sym_path = mod_tbl_ent.get_sym_path()
             if mod_sym_path != '':
                 where = os.path.abspath(mod_sym_path)
-                ld_mod_sym = 'task.symbol.loadmod "{}"\n'.format(where)
+                ld_mod_sym = "Data.LOAD.Elf " + where + " " + str(hex(mod_tbl_ent.module_offset)) +  " /NoCODE /NoClear /NAME " + mod_tbl_ent.name + " /reloctype 0x3" + "\n"
                 startup_script.write(ld_mod_sym)
 
         if not self.minidump:
@@ -1343,6 +1346,7 @@ class RamDump():
         socinfo_version = 0
         socinfo_build_id = 'DUMMY'
         chosen_board = None
+        use_predefined = False
 
         boards = get_supported_boards()
 
@@ -1360,15 +1364,11 @@ class RamDump():
                     entry_item_offset = self.field_offset('struct smem_private_entry', 'item')
                     item_size_offset = self.field_offset('struct smem_private_entry', 'size')
                 else:
-                    print_out_str(
-                        '!!!! Could not get a necessary offset for auto detection!')
-                    print_out_str(
-                        '!!!! Please check the gdb path which is used for offsets!')
-                    print_out_str('!!!! Also check that the vmlinux is not stripped')
-                    print_out_str('!!!! Exiting...')
-                    sys.exit(1)
+                    print_out_str('!!!! Could not get a necessary offset for auto detection!')
+                    print_out_str('!!!! Try to use predefined offset!')
+                    use_predefined = True
             for board in boards:
-                if self.minidump:
+                if self.minidump or use_predefined:
                     if hasattr(board, 'smem_addr_buildinfo'):
                         socinfo_start = board.smem_addr_buildinfo
                         if add_offset:
@@ -1558,10 +1558,15 @@ class RamDump():
             next_list_ent = self.read_pointer(next_list_ent + next_offset)
 
     def parse_symbols_of_one_module(self, mod_tbl_ent, ko_file_list):
-        if mod_tbl_ent.name not in ko_file_list:
+        name_index = [s for s in ko_file_list.keys() if mod_tbl_ent.name in s]
+        if len(name_index) == 0:
             print_out_str('!! Object not found for {}'.format(mod_tbl_ent.name))
             return
 
+        if mod_tbl_ent.name not in ko_file_list and name_index[0] in ko_file_list:
+            temp_data = ko_file_list[name_index[0]]
+            del ko_file_list[name_index[0]]
+            ko_file_list[mod_tbl_ent.name] = temp_data
         if not mod_tbl_ent.set_sym_path(ko_file_list[mod_tbl_ent.name]):
             return
 
@@ -1609,7 +1614,7 @@ class RamDump():
                     # being treated as belonging to a particular kernel module
                     mod_tbl_ent.kallsyms_table.append(
                         (sym_addr, sym_name + '[' + mod_tbl_ent.name + ']', sym_type, i,
-                         st_name, st_shndx, st_size))
+                         st_name, st_shndx, st_size,sym_name))
             mod_tbl_ent.kallsyms_table.sort()
             if self.dump_module_kallsyms:
                 self.dump_mod_kallsyms_sym_table(mod_tbl_ent.name, mod_tbl_ent.kallsyms_table)
@@ -1646,6 +1651,7 @@ class RamDump():
                 else:
                     return
                 name = os.path.basename(name)
+                name = name.replace("-","_")
                 # Prefer .ko.unstripped
                 if ko_file_list.get(name, '').endswith('.ko.unstripped') and file.endswith('.ko'):
                     return
@@ -1659,7 +1665,7 @@ class RamDump():
         if self.is_config_defined("CONFIG_KALLSYMS"):
             for mod_tbl_ent in self.module_table.module_table:
                 for sym in mod_tbl_ent.kallsyms_table:
-                    self.lookup_table.append((sym[0], sym[1]))
+                    self.lookup_table.append((sym[0], sym[1],sym[7]))
         else:
             for mod_tbl_ent in self.module_table.module_table:
                 for sym in mod_tbl_ent.sym_lookup_table:
@@ -1708,7 +1714,15 @@ class RamDump():
         '0xffffffc000c7a0a8L'
         """
         try:
-            return self.gdbmi.address_of(symbol)
+            addr = self.gdbmi.address_of(symbol)
+            if ((addr & 0xFF000000000000) == 0) and self.arm64:
+                for mod_tbl_ent in self.lookup_table:
+                    if symbol in str(mod_tbl_ent) and symbol == mod_tbl_ent[2]:
+                        addr = mod_tbl_ent[0]
+                        return addr
+                return addr
+            else:
+                return addr
         except gdbmi.GdbMIException:
             pass
 
