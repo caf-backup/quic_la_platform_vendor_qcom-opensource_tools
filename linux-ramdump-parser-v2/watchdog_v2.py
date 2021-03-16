@@ -1149,6 +1149,7 @@ class TZRegDump_v2():
             bt = self.core_regs.regs['r13_svc']
             fp = self.core_regs.regs['r11']
 
+        pc = ram_dump.pac_ignore(pc)
         a = ram_dump.unwind_lookup(pc)
         if a is not None:
             symname, offset = a
@@ -1158,6 +1159,7 @@ class TZRegDump_v2():
         print_out_str(
             'Core {3} PC: {0}+{1:x} <{2:x}>'.format(symname, offset,
                                                     pc, self.core))
+        lr = ram_dump.pac_ignore(lr)
         a = ram_dump.unwind_lookup(lr)
         if a is not None:
             symname, offset = a
@@ -1192,6 +1194,7 @@ class TZRegDump_v2():
             bt = self.core_regs.regs['r13_svc']
             fp = self.core_regs.regs['r11']
 
+        pc = ram_dump.pac_ignore(pc)
         a = ram_dump.unwind_lookup(pc)
         if a is not None:
             symname, offset = a
@@ -1201,6 +1204,7 @@ class TZRegDump_v2():
         print_out_str(
             'Core {3} PC: {0}+{1:x} <{2:x}>'.format(symname, offset,
                                                     pc, self.core))
+        lr = ram_dump.pac_ignore(lr)
         a = ram_dump.unwind_lookup(lr)
         if a is not None:
             symname, offset = a

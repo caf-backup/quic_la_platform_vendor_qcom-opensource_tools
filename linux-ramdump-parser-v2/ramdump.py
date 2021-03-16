@@ -1882,6 +1882,7 @@ class RamDump():
         table[low] <= addr <= table[high]
         """
 
+        addr = self.pac_ignore(addr)
         table = self.lookup_table
         low = 0
         high = len(self.lookup_table) - 1
