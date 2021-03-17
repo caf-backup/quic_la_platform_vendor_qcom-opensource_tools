@@ -1267,7 +1267,7 @@ class RamDump():
             mod_sym_path = mod_tbl_ent.get_sym_path()
             if mod_sym_path != '':
                 where = os.path.abspath(mod_sym_path)
-                ld_mod_sym = 'task.symbol.loadmod "{}"\n'.format(where)
+                ld_mod_sym = "Data.LOAD.Elf " + where + " " + str(hex(mod_tbl_ent.module_offset)) +  " /NoCODE /NoClear /NAME " + mod_tbl_ent.name + " /reloctype 0x3" + "\n"
                 startup_script.write(ld_mod_sym)
 
         if not self.minidump:
@@ -1558,10 +1558,15 @@ class RamDump():
             next_list_ent = self.read_pointer(next_list_ent + next_offset)
 
     def parse_symbols_of_one_module(self, mod_tbl_ent, ko_file_list):
-        if mod_tbl_ent.name not in ko_file_list:
+        name_index = [s for s in ko_file_list.keys() if mod_tbl_ent.name in s]
+        if len(name_index) == 0:
             print_out_str('!! Object not found for {}'.format(mod_tbl_ent.name))
             return
 
+        if mod_tbl_ent.name not in ko_file_list and name_index[0] in ko_file_list:
+            temp_data = ko_file_list[name_index[0]]
+            del ko_file_list[name_index[0]]
+            ko_file_list[mod_tbl_ent.name] = temp_data
         if not mod_tbl_ent.set_sym_path(ko_file_list[mod_tbl_ent.name]):
             return
 
