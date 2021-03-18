@@ -761,6 +761,7 @@ class RamDump():
                                 modules_vsize
 
         print_out_str("Kernel version vmlinux: {0}".format(self.kernel_version))
+        self.field_offset("struct trace_entry", "preempt_count")
         self.kimage_vaddr = self.kimage_vaddr + self.get_kaslr_offset()
         self.modules_end = self.page_offset
         if self.arm64:
