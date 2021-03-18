@@ -1757,14 +1757,24 @@ class RamDump():
         >>> hex(dump.address_of('linux_banner'))
         '0xffffffc000c7a0a8L'
         """
+        flag = False
+        sym_name = symbol
         try:
             addr = self.gdbmi.address_of(symbol)
             if ((addr & 0xFF000000000000) == 0) and self.arm64:
                 for mod_tbl_ent in self.lookup_table:
-                    if symbol in str(mod_tbl_ent) and symbol == mod_tbl_ent[2]:
+                    if "." in symbol:
+                        sym_name = symbol.split(".")[0]
+                        var = ".".join(symbol.split(".")[1:])
+                        sym_type = self.type_of(sym_name)
+                        var_offset = self.field_offset(sym_type, var)
+                        flag = True
+                    if sym_name in str(mod_tbl_ent) and sym_name == mod_tbl_ent[2]:
                         addr = mod_tbl_ent[0]
-                        return addr
-                return addr
+                if flag:
+                    return addr + var_offset
+                else:
+                    return addr
             else:
                 return addr
         except gdbmi.GdbMIException:
@@ -1814,6 +1824,19 @@ class RamDump():
         #print "hex of address in get_symbol_info1 {0}".format(hex(addr1))
         symbol_obj =  self.gdbmi.get_symbol_info(addr1)
         return symbol_obj.symbol
+
+    def type_of(self, symbol):
+        """
+            this will be helpful to get the type of symbol.
+            eg :
+            >>>dump.type_of("kgsl_driver")
+            struct kgsl_driver
+
+        """
+        try:
+            return self.gdbmi.type_of(symbol)
+        except gdbmi.GdbMIException:
+            pass
 
     def field_offset(self, the_type, field):
         """Gets the offset of a field from the base of its containing struct.

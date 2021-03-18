@@ -191,6 +191,17 @@ class GdbMI(object):
         result = self._run_for_one(cmd)
         return gdb_hex_to_dec(result)
 
+    def type_of(self, symbol):
+        """ Returns the type of symbol.
+
+        Example:
+        >>> gdbmi.type_of("kgsl_driver")
+        struct kgsl_driver
+        """
+        cmd = 'print &{0}'.format(symbol)
+        result = self._run_for_one(cmd)
+        return result.split("*)")[0].split("= (")[1]
+
     def field_offset(self, the_type, field):
         """Returns the offset of a field in a struct or type.
 
