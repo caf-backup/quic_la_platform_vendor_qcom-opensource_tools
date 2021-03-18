@@ -728,7 +728,11 @@ class RamDump():
         self.config = []
         self.config_dict = {}
         if self.arm64:
-            self.page_offset = 0xffffffc000000000
+            if self.get_kernel_version() >= (5, 4):
+                va_bits = 39
+                self.page_offset = -(1 << va_bits) % (1 << 64)
+            else:
+                self.page_offset = 0xffffffc000000000
             self.thread_size = 16384
         if options.page_offset is not None:
             print_out_str(
