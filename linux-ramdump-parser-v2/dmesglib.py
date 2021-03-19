@@ -215,6 +215,8 @@ class DmesgLib(object):
 
                 if end - text_start < text_len:
                     text_len = end - text_start
+                if text_len < 0:
+                    text_len = 0
 
                 text = self.ramdump.read_cstring(data_addr +
                                                     text_start, text_len)
@@ -230,7 +232,7 @@ class DmesgLib(object):
             caller_id_data = caller_data & ~0x80000000
             caller_id_data = tid_info + str(caller_id_data)
             for line in text.splitlines():
-                msg = u"[{time:12.6f}] [{caller_id_data:6}] {line}\n".format(
+                msg = u"[{time:12.6f}][{caller_id_data:>6}] {line}\n".format(
                     time=time_stamp / 1000000000.0,
                     line=line,caller_id_data=caller_id_data)
                 self.outfile.write(msg)
