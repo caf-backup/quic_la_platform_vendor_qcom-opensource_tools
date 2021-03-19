@@ -50,6 +50,8 @@ class SdeDbgBase(Struct):
             'reg_base_list': Struct.get_pointer,
             'enable_reg_dump' : Struct.get_u32,
             'panic_on_err' : Struct.get_u32,
+            'dbgbus_sde': Struct.get_address,
+            'dbgbus_vbif_rt': Struct.get_address,
         }
 
 class RangeDumpFbNode(Struct):
@@ -2706,6 +2708,46 @@ class MDPinfo(RamParser):
             self.outfile.close()
             self.ramdump.remove_file('sde_reglog.txt')
 
+            dbgbus_sde = Struct(self.ramdump, mdss_dbg.dbgbus_sde,
+                            struct_name="struct sde_dbg_sde_debug_bus",
+                            fields={'cmn': Struct.get_address})
+            dbgbus_sde_cmn = Struct(self.ramdump, dbgbus_sde.cmn,
+                            struct_name="struct sde_dbg_debug_bus_common",
+                            fields={'dumped_content': Struct.get_pointer,
+                                    'content_size': Struct.get_u32})
+
+            dbgbus_vbif = Struct(self.ramdump, mdss_dbg.dbgbus_vbif_rt,
+                            struct_name="struct sde_dbg_sde_debug_bus",
+                            fields={'cmn': Struct.get_address})
+            dbgbus_vbif_cmn = Struct(self.ramdump, dbgbus_vbif.cmn,
+                            struct_name="struct sde_dbg_debug_bus_common",
+                            fields={'dumped_content': Struct.get_pointer,
+                                    'content_size': Struct.get_u32})
+
+            self.outfile = self.ramdump.open_file('sde_dbgbus.txt', 'w')
+            i = 0
+
+            self.outfile.write('=================================sde debug bus points=================================\n\n')
+            self.outfile.write('{:<12}{:<12}{:<12}{:<15}'.format("wr_addr", "block_id", "test_id", "val"))
+            self.outfile.write('\n')
+            while (i < dbgbus_sde_cmn.content_size):
+                j = 0
+                while (j < 16):
+                    self.outfile.write('%-10.8x ' % (self.ramdump.read_u32(dbgbus_sde_cmn.dumped_content + (i*4) + j)))
+                    j = j + 4
+                self.outfile.write('\n\n')
+                i = i + 4
+
+            i = 0
+            self.outfile.write('\n\n=================================vbif debug bus points=================================\n\n')
+            while (i < dbgbus_vbif_cmn.content_size):
+                j = 0
+                while (j < 16):
+                    self.outfile.write('%-10.8x ' % (self.ramdump.read_u32(dbgbus_vbif_cmn.dumped_content + (i*4) + j)))
+                    j = j + 4
+                self.outfile.write('\n')
+                i = i + 4
+            self.outfile.close()
         else:
             for blk in mdss_dbg.blk_arr:
                 if blk.is_empty():
