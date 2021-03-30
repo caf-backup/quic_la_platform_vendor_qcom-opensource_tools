@@ -400,8 +400,10 @@ if __name__ == '__main__':
 
     # Always verify Scheduler requirement for active_cpus on 64-bit platforms.
     if options.arm64:
-        verify_active_cpus(dump)
-
+        try:
+            verify_active_cpus(dump)
+        except Exception as err:
+            print_out_str('Unable to extract active cpus  info')
     # we called parser.add_option with dest=p.cls.__name__ above,
     # so if the user passed that option then `options' will have a
     # p.cls.__name__ attribute.
