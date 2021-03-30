@@ -281,8 +281,11 @@ if __name__ == '__main__':
     try:
         import local_settings
         try:
+            gdb_ndk_path = None
             if options.arm64:
                 gdb_path = gdb_path or local_settings.gdb64_path
+                if hasattr(local_settings, 'gdb64_ndk_path'):
+                    gdb_ndk_path = local_settings.gdb64_ndk_path
                 nm_path = nm_path or local_settings.nm64_path
                 objdump_path = objdump_path or local_settings.objdump64_path
             else:
@@ -332,7 +335,7 @@ if __name__ == '__main__':
     if options.everything:
         options.qtf = True
 
-    dump = RamDump(options, nm_path, gdb_path, objdump_path)
+    dump = RamDump(options, nm_path, gdb_path, objdump_path,gdb_ndk_path)
 
     if options.eval:
         if options.eval == '-':
