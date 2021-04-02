@@ -571,7 +571,7 @@ class RamDump():
 
         return 0
 
-    def __init__(self, options, nm_path, gdb_path, objdump_path):
+    def __init__(self, options, nm_path, gdb_path, objdump_path,gdb_ndk_path):
         self.ebi_files = []
         self.ebi_files_minidump = []
         self.ebi_pa_name_map = {}
@@ -587,13 +587,34 @@ class RamDump():
         self.vmlinux = options.vmlinux
         self.nm_path = nm_path
         self.gdb_path = gdb_path
+        self.gdb_ndk_path = gdb_ndk_path
         self.objdump_path = objdump_path
         self.outdir = options.outdir
         self.imem_fname = None
-        self.gdbmi = gdbmi.GdbMI(self.gdb_path, self.vmlinux,
-                                 self.kaslr_offset or 0)
-        self.gdbmi.open()
         self.arm64 = options.arm64
+        self.ndk_comaptible = False
+        self.lookup_table = []
+
+        if gdb_ndk_path:
+            self.gdbmi = gdbmi.GdbMI(self.gdb_ndk_path, self.vmlinux,
+                                     self.kaslr_offset or 0)
+            self.gdbmi.open()
+            sanity_data = self.address_of("kimage_voffset")
+            if self.arm64:
+                self.gdbmi.setup_aarch('aarch64')
+                if (sanity_data and (sanity_data & 0xFF000000000000) == 0):
+                    print_out_str('RELR tags not compatible with NDK GDB')
+                elif sanity_data is not None:
+                    print_out_str('vmlinux is ndk-compatible')
+                    self.ndk_comaptible = True
+            if not self.ndk_comaptible:
+                self.gdbmi.close()
+
+        if not self.ndk_comaptible:
+            self.gdbmi = gdbmi.GdbMI(self.gdb_path, self.vmlinux,
+                        self.kaslr_offset or 0)
+            self.gdbmi.open()
+
         self.page_offset = 0xc0000000
         self.thread_size = 8192
         self.qtf_path = options.qtf_path
@@ -618,7 +639,6 @@ class RamDump():
         self.autodump = options.autodump
         self.module_table = module_table.module_table_class()
         self.hyp = options.hyp
-        self.lookup_table = []
         # Save all paths given from --mod_path option. These will be searched for .ko.unstripped files
         if options.mod_path_list:
             for path in options.mod_path_list:
@@ -913,8 +933,12 @@ class RamDump():
                                  0)
             self.gdbmi.open()
         except Exception as err:
-            self.gdbmi = gdbmi.GdbMI(self.gdb_path, self.vmlinux,
-                                 self.kaslr_offset or 0)
+            if self.ndk_compatible == False:
+                self.gdbmi = gdbmi.GdbMI(self.gdb_path, self.vmlinux,
+                                     self.kaslr_offset or 0)
+            else:
+                self.gdbmi = gdbmi.GdbMI(self.gdb_ndk_path, self.vmlinux,
+                                     self.kaslr_offset or 0)
             self.gdbmi.open() #openning gdb session with vmlinux
             self.gdbmi.setup_module_table(self.module_table)
             if self.kaslr_offset is None:
@@ -922,7 +946,11 @@ class RamDump():
                 self.gdbmi.kaslr_offset = self.get_kaslr_offset()
     def gdmi_switch_close(self):
         self.gdbmi.close() #closing gdb session with hyp elf
-        self.gdbmi = gdbmi.GdbMI(self.gdb_path, self.vmlinux,
+        if self.ndk_compatible == False:
+            self.gdbmi = gdbmi.GdbMI(self.gdb_path, self.vmlinux,
+                                 self.kaslr_offset or 0)
+        else:
+            self.gdbmi = gdbmi.GdbMI(self.gdb_ndk_path, self.vmlinux,
                                  self.kaslr_offset or 0)
         self.gdbmi.open() #openning gdb session with vmlinux
         self.gdbmi.setup_module_table(self.module_table)

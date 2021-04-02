@@ -181,6 +181,12 @@ class GdbMI(object):
         """Return GDB version"""
         return self._run_for_first('show version')
 
+    def setup_aarch(self,type):
+        self.aarch_set = True
+        cmd = 'set architecture ' + type
+        result = self._run_for_one(cmd)
+        return
+
     def frame_field_offset(self, frame_name, the_type, field):
         """Returns the offset of a field in a struct or type of selected frame
         if there are two vairable with same na,e in source code.
