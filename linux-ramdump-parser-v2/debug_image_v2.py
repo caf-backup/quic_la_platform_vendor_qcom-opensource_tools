@@ -304,7 +304,7 @@ class DebugImage_v2():
                         break
                     regset_name = msm_dump_regset_ids[regset_id]
                     print_out_str("regset_name = {0}".format(regset_name))
-                    regset_addr = ram_dump.read_u32(registers_addr + regset_addr_offset,False)
+                    regset_addr = ram_dump.read_u64(registers_addr + regset_addr_offset,False)
                     regset_size = ram_dump.sizeof('struct msm_dump_aarch64_gprs')
                     if regset_size is None:
                         regset_size = 0x110
