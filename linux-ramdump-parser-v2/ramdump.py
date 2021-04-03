@@ -592,7 +592,7 @@ class RamDump():
         self.outdir = options.outdir
         self.imem_fname = None
         self.arm64 = options.arm64
-        self.ndk_comaptible = False
+        self.ndk_compatible = False
         self.lookup_table = []
 
         if gdb_ndk_path:
@@ -606,11 +606,11 @@ class RamDump():
                     print_out_str('RELR tags not compatible with NDK GDB')
                 elif sanity_data is not None:
                     print_out_str('vmlinux is ndk-compatible')
-                    self.ndk_comaptible = True
-            if not self.ndk_comaptible:
+                    self.ndk_compatible = True
+            if not self.ndk_compatible:
                 self.gdbmi.close()
 
-        if not self.ndk_comaptible:
+        if not self.ndk_compatible:
             self.gdbmi = gdbmi.GdbMI(self.gdb_path, self.vmlinux,
                         self.kaslr_offset or 0)
             self.gdbmi.open()
@@ -736,8 +736,11 @@ class RamDump():
             self.vttbr_data = hyp_dump.vttbr_el2_data
             self.s2_walk = True
             self.gdbmi.close() #closing gdb session with hyp elf
-
-            self.gdbmi = gdbmi.GdbMI(self.gdb_path, self.vmlinux,
+            if self.ndk_compatible:
+                self.gdbmi = gdbmi.GdbMI(self.gdb_ndk_path, self.vmlinux,
+                                     self.kaslr_offset or 0)
+            else:
+                self.gdbmi = gdbmi.GdbMI(self.gdb_path, self.vmlinux,
                                      self.kaslr_offset or 0)
             self.gdbmi.open() #openning gdb session with vmlinux
         if self.kaslr_offset is None:
