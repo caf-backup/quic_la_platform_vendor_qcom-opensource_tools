@@ -1591,7 +1591,7 @@ class RamDump():
                 continue
             if (("$x" in s[2].rstrip()) or ("$d" in s[2].rstrip())):
                 continue
-            entry = (int(s[0], 16) + kaslr, s[2].rstrip())
+            entry = (int(s[0], 16) + kaslr, s[2].rstrip(),"")
 
             # The symbol file contains many artificial symbols which we don't care about.
             if entry[0] < _text or entry[0] >= _end:
