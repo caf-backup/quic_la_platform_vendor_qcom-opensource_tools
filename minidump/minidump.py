@@ -41,21 +41,21 @@ class minidump():
 
         filename = os.path.join("", rawdump)
         if not os.path.exists(filename):
-            print "rawdump not exist"
+            print ("rawdump not exist")
             return False
         f = open(filename, "rb")
         head_buf = f.read(head_size)
         (sig, version, valid, data, context, reset_trigger, dump_size, total_size, sections_count) = struct.unpack_from(head, head_buf, 0)
-        if sig != "Raw_Dmp!":
-            print "rawdump signal is not Raw_Dmp!"
+        if sig != b'Raw_Dmp!':
+            print ("rawdump signal is not Raw_Dmp!")
             return False
         if valid != 1:
             if valid == 2:
-                print "Ramdump not complete: no space was left on device during the dump operation."
-                print "This usually happens when a full dump is set to be written to a rawdump partion."
-                print "Please check if the value of /sys/kernel/dload/dload_mode is set to 'mini'."
+                print ("Ramdump not complete: no space was left on device during the dump operation.")
+                print ("This usually happens when a full dump is set to be written to a rawdump partion.")
+                print ("Please check if the value of /sys/kernel/dload/dload_mode is set to 'mini'.")
             else:
-                print "Valid tag not set!"
+                print ("Valid tag not set!")
             return False
         count = 0
         section_list = []
@@ -67,7 +67,7 @@ class minidump():
             count += 1
 
         if option == 'list':
-            print "File list in rawdump:"
+            print ("File list in rawdump:")
             print("name, section_offset, paddr, section_size, section_type, valid, version")
         elif option == 'split':
             print("Split rawdump %s to seperate file to %s ..." % (rawdump, self.out_folder))
@@ -77,7 +77,7 @@ class minidump():
              % (sig, version, valid, data, context, reset_trigger, dump_size, total_size, sections_count))
         for i, one_section in enumerate(section_list):
             valid, version, section_type, section_offset, section_size, paddr, info, name = struct.unpack_from(section_head, one_section, 0)
-            name = string.strip(name, '\0')
+            name = name.decode().strip('\0')
             file_list[name] = {}
             file_list[name]['size'] = section_size
             file_list[name]['paddr'] = paddr
@@ -111,7 +111,7 @@ class minidump():
 
         #   filename = os.path.join(out_folder, "load.cmm")
         #       with open(filename) as f:
-        for line in cmmbuf.split('\n'):
+        for line in cmmbuf.decode().split('\n'):
             m = re.search("d.load.binary\s+(\S+)\s+([0-9a-fA-FxX]+)", line)
             if m:
                 filename = m.group(1)
@@ -123,7 +123,7 @@ class minidump():
         else:
             return
 
-        for fname,bs in file_list.iteritems():
+        for fname,bs in iter(file_list.items()):
             if 'base' in bs.keys():
                 base = bs['base']
             elif 'paddr' in bs.keys():
@@ -141,16 +141,16 @@ class minidump():
         self.out_folder = out_folder
 
 def help():
-        print " minidump tool v1.1"
-        print "%s [-s|-l|-c|-d|-m|-k] <rawdump> [out_folder] " % sys.argv[0]
-        print " -l  list files in sbldump.bin"
-        print " -s  split to seperate files"
+        print (" minidump tool v1.1")
+        print ("%s [-s|-l|-c|-d|-m|-k] <rawdump> [out_folder] " % sys.argv[0])
+        print (" -l  list files in sbldump.bin")
+        print (" -s  split to seperate files")
 
 if __name__=='__main__':
     try:
-        opts, args = getopt.gnu_getopt(sys.argv[1:], "lsdckm")
-    except getopt.GetoptError, err:
-        print str(err)
+        opts, args = getopt.gnu_getopt(sys.argv[1:], "ls")
+    except getopt.GetoptError:
+        print ("please check usage")
         help()
         sys.exit(-1)
 
