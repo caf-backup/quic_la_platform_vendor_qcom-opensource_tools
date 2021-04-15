@@ -32,6 +32,7 @@ import parser_util
 import minidump_util
 from importlib import import_module
 import module_table
+from mm import mm_init
 
 FP = 11
 SP = 13
@@ -904,6 +905,9 @@ class RamDump():
             self.gdbmi.setup_module_table(self.module_table)
             if self.dump_global_symbol_table:
                 self.dump_global_symbol_lookup_table()
+
+        mm_init(self)
+
 
     def __del__(self):
         self.gdbmi.close()
