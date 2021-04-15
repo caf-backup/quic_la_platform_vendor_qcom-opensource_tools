@@ -652,6 +652,8 @@ class RamDump():
         self.hyp_dump = None
         self.ttbr = None
         self.vttbr = None
+        self.hlos_tcr_el1 = None
+        self.hlos_sctlr_el1 = None
         if self.minidump:
             try:
                 mod = import_module('elftools.elf.elffile')
@@ -1260,6 +1262,19 @@ class RamDump():
                         startup_script.write('Data.Set SPR:0x30A20 %Quad 0x000000FF440C0400\n')
                         startup_script.write('Data.Set SPR:0x30A30 %Quad 0x0000000000000000\n')
                         startup_script.write('Data.Set SPR:0x30100 %Quad 0x0000000034D5D91D\n')
+                    elif self.cpu_type == 'ARMV9-A':
+                        if self.hlos_tcr_el1:
+                            startup_script.write('Data.Set SPR:0x30202 %Quad 0x{0:x}\n'.format(
+                            self.hlos_tcr_el1))
+                        else:
+                            startup_script.write('Data.Set SPR:0x30202 %Quad 0x00000032B5193519\n')
+                        startup_script.write('Data.Set SPR:0x30A20 %Quad 0x000000FF440C0400\n')
+                        startup_script.write('Data.Set SPR:0x30A30 %Quad 0x0000000000000000\n')
+                        if self.hlos_sctlr_el1:
+                            startup_script.write('Data.Set SPR:0x30100 %Quad 0x{0:x}\n'.format(
+                            self.hlos_sctlr_el1))
+                        else:
+                            startup_script.write('Data.Set SPR:0x30100 %Quad 0x0000000004C5D93D\n')
                     else:
                         startup_script.write('Data.Set SPR:0x30202 %Quad 0x00000032B5193519\n')
                         startup_script.write('Data.Set SPR:0x30A20 %Quad 0x000000FF440C0400\n')
