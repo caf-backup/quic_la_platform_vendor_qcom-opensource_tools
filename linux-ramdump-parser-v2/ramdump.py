@@ -1702,6 +1702,8 @@ class RamDump():
                 # FORMAT of record:
                 # sym_addr, syn_name[mod_name], sym_type, idx_elf_sym, st_name, st_shndx, st_size
                 ###
+                if (sym_name is None or mod_tbl_ent.name is None):
+                    continue
                 if sym_addr:
                     # when sym_addr is 0, it means the symbol is undefined
                     # will not add undefined symbols here to avoid address 0x0
