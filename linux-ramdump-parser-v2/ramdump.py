@@ -1190,6 +1190,9 @@ class RamDump():
             startup_script.write('sys.cpu CORTEXA53\n')
         else:
             startup_script.write('sys.cpu {0}\n'.format(self.cpu_type))
+            startup_script.write('SYStem.Option MMUSPACES ON\n')
+            startup_script.write('SYStem.Option ZONESPACES OFF\n')
+
         startup_script.write('sys.up\n')
 
         if is_cortex_a53 and not self.arm64:
@@ -1243,20 +1246,24 @@ class RamDump():
                             self.hlos_sctlr_el1))
                         else:
                             startup_script.write('Data.Set SPR:0x30100 %Quad 0x0000000004C5D93D\n')
+                        corevcpu_path = os.path.join(self.outdir,'corevcpu0_regs.cmm')
+                        if os.path.exists(corevcpu_path):
+                            startup_script.write('do ' + corevcpu_path + '\n')
                     else:
                         startup_script.write('Data.Set SPR:0x30202 %Quad 0x00000032B5193519\n')
                         startup_script.write('Data.Set SPR:0x30A20 %Quad 0x000000FF440C0400\n')
                         startup_script.write('Data.Set SPR:0x30A30 %Quad 0x0000000000000000\n')
                         startup_script.write('Data.Set SPR:0x30100 %Quad 0x0000000004C5D93D\n')
 
+                startup_script.write('TRANSlation.COMMON NS:0xF000000000000000--0xffffffffffffffff\n')
+                startup_script.write('trans.tablewalk on\n')
+                startup_script.write('trans.on\n')
+                if not self.svm:
                     startup_script.write('Register.Set CPSR 0x3C5\n')
                     startup_script.write('MMU.Delete\n')
                     startup_script.write('MMU.SCAN PT 0xFFFFFF8000000000--0xFFFFFFFFFFFFFFFF\n')
                     startup_script.write('mmu.on\n')
                     startup_script.write('mmu.pt.list 0xffffff8000000000\n')
-                if self.svm:
-                        startup_script.write('trans.tablewalk on\n')
-                        startup_script.write('trans.on\n')
             else:
                 # ARM-32: MMU is enabled by default on most platforms.
                 mmu_enabled = 1
