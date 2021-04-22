@@ -1100,9 +1100,13 @@ class TZCpuCtx_v2():
                         tcr_el1 = tcr_el1 ^ ramdump.tbi_mask
                         outfile.write(
                             '{0} 0x{1:x}\n'.format(cpu_per_regiter_format[t32_name], tcr_el1))
+                        if ramdump.hlos_tcr_el1 is None:
+                            ramdump.hlos_tcr_el1 = tcr_el1
                     else:
                         outfile.write(
                             '{0} 0x{1:x}\n'.format(cpu_per_regiter_format[t32_name], self.regs[reg_name]))
+                    if 'sctlr_el1' in t32_name and ramdump.hlos_sctlr_el1 is None:
+                        ramdump.hlos_sctlr_el1 = self.regs[reg_name]
                 else:
                     outfile.write(
                         'r.s {0} 0x{1:x}\n'.format(t32_name, self.regs[reg_name]))
