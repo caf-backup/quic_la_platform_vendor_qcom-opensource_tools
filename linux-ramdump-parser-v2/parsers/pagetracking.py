@@ -12,7 +12,7 @@
 from print_out import print_out_str
 from parser_util import register_parser, RamParser
 from mm import pfn_to_page, page_buddy, page_count, for_each_pfn
-from mm import page_to_pfn
+from mm import page_to_pfn, pfn_to_section
 import sys
 import os
 from collections import defaultdict
@@ -29,11 +29,6 @@ class PageTracking(RamParser):
         else:
             self.page_ext_offset = self.ramdump.field_offset(
                             'struct pglist_data', 'node_page_ext')
-
-        if self.ramdump.is_config_defined('CONFIG_SPARSEMEM'):
-            self.mem_section_size = self.ramdump.sizeof("struct mem_section")
-        else:
-            self.mem_section_size = 0
 
         '''
         Following based upon definition in include/linux/mmzone.h
@@ -53,7 +48,7 @@ class PageTracking(RamParser):
         self.stack_slabs = self.ramdump.address_of('stack_slabs')
         self.stack_slabs_size = self.ramdump.sizeof('void *')
 
-    def page_trace(self, pfn, mem_section, alloc):
+    def page_trace(self, pfn, alloc):
         trace_offset = 0
         nr_entries_offset = 0
         trace_entries_offset = 0
@@ -103,21 +98,15 @@ class PageTracking(RamParser):
             phys = pfn << 12
             if phys is None or phys == 0:
                 return
-            if self.ramdump.is_config_defined('CONFIG_MEMORY_HOTPLUG'):
-                section_size_bits = int(self.ramdump.get_config_val(
-                                    'CONFIG_HOTPLUG_SIZE_BITS'))
-                offset = phys >> section_size_bits
-            else:
-                offset = phys >> 30
-            if self.ramdump.is_config_defined('CONFIG_SPARSEMEM'):
-                mem_section_0_offset = (
-                        mem_section + offset * self.mem_section_size)
-                page_ext = self.ramdump.read_word(
-                            mem_section_0_offset + self.page_ext_offset)
-            else:
-                page_ext = self.ramdump.read_word(
-                                mem_section + self.page_ext_offset)
-
+            mem_section = pfn_to_section(self.ramdump, pfn)
+            page_ext = self.ramdump.read_word(mem_section + self.page_ext_offset)
+            """
+            page_ext will be null here if the first page of a section is not valid.
+            See page_ext_init().
+            """
+            if not page_ext:
+                return
+ 
             if self.ramdump.arm64:
                 temp_page_ext = page_ext + (pfn * page_ext_size)
             else:
@@ -199,7 +188,7 @@ class PageTracking(RamParser):
 
         return alloc_str, order, pid, ts_nsec
 
-    def parse_output(self, pfn, mem_section, out_tracking, out_tracking_freed,
+    def parse_output(self, pfn, out_tracking, out_tracking_freed,
                      page_size, sorted_pages):
         str_f = "PFN : 0x{0:x}-0x{1:x} Page : 0x{2:x} Order : {3} PID : {4} ts_nsec {5}\n{" \
               "6}\n"
@@ -207,9 +196,7 @@ class PageTracking(RamParser):
         order = 0
         if (page_buddy(self.ramdump, page) or
             page_count(self.ramdump, page) == 0):
-            function_list, order, pid, ts_nsec = self.page_trace(pfn,
-                                                                 mem_section,
-                                                                 False)
+            function_list, order, pid, ts_nsec = self.page_trace(pfn, False)
             if function_list == -1:
                 return
             out_tracking_freed.write(str_f.format(pfn, pfn + (1 << order) - 1,
@@ -217,8 +204,7 @@ class PageTracking(RamParser):
                                                   function_list))
             return
 
-        function_list, order, pid, ts_nsec = self.page_trace(pfn,
-                                                        mem_section, True)
+        function_list, order, pid, ts_nsec = self.page_trace(pfn, True)
         if function_list == -1:
             return
         if order >= self.max_order:
@@ -333,15 +319,6 @@ class PageTracking(RamParser):
                 print_out_str('CONFIG_PAGE_OWNER_ENABLE_DEFAULT not defined')
                 return
 
-        mem_section = None
-        if (self.ramdump.kernel_version >= (3, 19, 0)):
-            if self.ramdump.is_config_defined('CONFIG_SPARSEMEM'):
-                mem_section = self.ramdump.read_word('mem_section')
-                if self.ramdump.kernel_version >= (4, 14):
-                    mem_section = self.ramdump.read_word(mem_section)
-            else:
-                mem_section = self.ramdump.address_of('contig_page_data')
-
         out_tracking = self.ramdump.open_file('page_tracking.txt')
         out_frequency = self.ramdump.open_file('page_frequency.txt')
         out_tracking_freed = self.ramdump.open_file('page_tracking_freed.txt')
@@ -350,11 +327,11 @@ class PageTracking(RamParser):
 
         if g_optimization is True:
             for pfn in range(start_pfn, end_pfn):
-                self.parse_output(pfn, mem_section, out_tracking,
+                self.parse_output(pfn, out_tracking,
                                   out_tracking_freed, page_size, sorted_pages)
         else:
             for pfn in for_each_pfn(self.ramdump):
-                self.parse_output(pfn, mem_section, out_tracking,
+                self.parse_output(pfn, out_tracking,
                                   out_tracking_freed, page_size, sorted_pages)
 
         sortdict = {}
