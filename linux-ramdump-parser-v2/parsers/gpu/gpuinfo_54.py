@@ -289,6 +289,9 @@ class GpuParser_54(RamParser):
                                                   'struct adreno_device',
                                                   'bcl_enabled')
         bcl_enabled = dump.read_bool(bcl_enabled_addr)
+        ifpc_count = dump.read_structure_field(self.devp,
+                                               'struct adreno_device',
+                                               'ifpc_count')
         speed_bin = dump.read_structure_field(self.devp, 'struct kgsl_device',
                                               'speed_bin')
         cur_rb = dump.read_structure_field(self.devp,
@@ -319,6 +322,7 @@ class GpuParser_54(RamParser):
         self.writeln('throttling_enabled: ' + str(throttling_enabled))
         self.writeln('sptp_pc_enabled: ' + str(sptp_pc_enabled))
         self.writeln('bcl_enabled: ' + str(bcl_enabled))
+        self.writeln('ifpc_count: ' + str(ifpc_count))
         self.writeln('speed_bin: ' + str(speed_bin))
         self.writeln('cur_rb: ' + strhex(cur_rb))
         self.writeln('cur_rb_id: ' + str(cur_rb_id))
