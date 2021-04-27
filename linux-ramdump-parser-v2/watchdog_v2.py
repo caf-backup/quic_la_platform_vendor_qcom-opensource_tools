@@ -15,6 +15,7 @@ import re
 from print_out import print_out_str
 from bitops import is_set
 from parser_util import register_parser, RamParser
+from sched_info import cpu_isolation_mask
 
 # name from tz dump, corresponding T32 register, whether or not to
 # print_out_str (the function name)
@@ -1096,6 +1097,10 @@ class TZCpuCtx_v2():
                 if t32_name in cpu_per_regiter_format.keys():
                     outfile.write(
                         '{0} 0x{1:x}\n'.format(cpu_per_regiter_format[t32_name], self.regs[reg_name]))
+                    if 'sctlr_el1' in t32_name and ramdump.hlos_sctlr_el1 is None:
+                        ramdump.hlos_sctlr_el1 = self.regs[reg_name]
+                    if 'tcr_el1' in t32_name and ramdump.hlos_tcr_el1 is None:
+                        ramdump.hlos_tcr_el1 = self.regs[reg_name]
                 else:
                     outfile.write(
                         'r.s {0} 0x{1:x}\n'.format(t32_name, self.regs[reg_name]))
@@ -1142,6 +1147,7 @@ class TZRegDump_v2():
             bt = self.core_regs.regs['r13_svc']
             fp = self.core_regs.regs['r11']
 
+        pc = ram_dump.pac_ignore(pc)
         a = ram_dump.unwind_lookup(pc)
         if a is not None:
             symname, offset = a
@@ -1151,6 +1157,7 @@ class TZRegDump_v2():
         print_out_str(
             'Core {3} PC: {0}+{1:x} <{2:x}>'.format(symname, offset,
                                                     pc, self.core))
+        lr = ram_dump.pac_ignore(lr)
         a = ram_dump.unwind_lookup(lr)
         if a is not None:
             symname, offset = a
@@ -1185,6 +1192,7 @@ class TZRegDump_v2():
             bt = self.core_regs.regs['r13_svc']
             fp = self.core_regs.regs['r11']
 
+        pc = ram_dump.pac_ignore(pc)
         a = ram_dump.unwind_lookup(pc)
         if a is not None:
             symname, offset = a
@@ -1194,6 +1202,7 @@ class TZRegDump_v2():
         print_out_str(
             'Core {3} PC: {0}+{1:x} <{2:x}>'.format(symname, offset,
                                                     pc, self.core))
+        lr = ram_dump.pac_ignore(lr)
         a = ram_dump.unwind_lookup(lr)
         if a is not None:
             symname, offset = a
@@ -1385,14 +1394,9 @@ def get_wdog_timing(ramdump):
         cpu_online_bits = ramdump.read_word('__cpu_online_mask')
     else:
         cpu_online_bits = ramdump.read_word('cpu_online_bits')
-    if (ramdump.kernel_version >= (4, 9, 0)):
-        cpu_isolated_bits = ramdump.read_word('__cpu_isolated_mask')
-    elif (ramdump.kernel_version >= (4, 4, 0)):
-        cpu_isolated_bits = ramdump.read_word('cpu_isolated_bits')
-    else:
-        cpu_isolated_bits = 0
-    if cpu_isolated_bits is None:
-        cpu_isolated_bits = 0
+
+    cpu_isolated_bits = cpu_isolation_mask(ramdump)
+
     if not ramdump.minidump:
         wdog_task = ramdump.read_structure_field(
             wdog_data_addr, 'struct msm_watchdog_data', 'watchdog_task')
