@@ -605,14 +605,16 @@ class RamDump():
                                      self.kaslr_offset or 0)
             self.gdbmi.open()
             sanity_data = self.address_of("kimage_voffset")
+            self.kernel_version = (0, 0, 0)
             if self.arm64:
                 self.gdbmi.setup_aarch('aarch64')
                 if (sanity_data and (sanity_data & 0xFF000000000000) == 0):
                     print_out_str('RELR tags not compatible with NDK GDB')
-                elif sanity_data is not None:
+                elif sanity_data is not None and self.get_kernel_version() >= (5, 10):
                     print_out_str('vmlinux is ndk-compatible')
                     self.ndk_compatible = True
             if not self.ndk_compatible:
+                print_out_str("vmlinux not ndk compatible\n")
                 self.gdbmi.close()
 
         if not self.ndk_compatible:
@@ -1730,6 +1732,9 @@ class RamDump():
             self.walk_depth(path, on_file)
 
         for mod_tbl_ent in self.module_table.module_table:
+            if mod_tbl_ent.name is None:
+                print_out_str('!! Object name not extracted properly..checking next!!')
+                continue
             self.parse_symbols_of_one_module(mod_tbl_ent, ko_file_list)
 
     def add_symbols_to_global_lookup_table(self):
