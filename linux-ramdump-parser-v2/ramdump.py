@@ -1370,7 +1370,7 @@ class RamDump():
             elif is_cortex_a53:
                 t32_binary = 'C:\\T32\\bin\\windows64\\t32MARM64.exe'
             else:
-                t32_binary = 'c:\\t32\\t32MARM.exe'
+                t32_binary = 'c:\\T32\\bin\\windows64\\t32MARM.exe'
             t32_bat.write(('start '+ t32_binary + ' -c ' + out_path + '/t32_config.t32, ' +
                           out_path + '/t32_startup_script.cmm'))
             t32_bat.close()
