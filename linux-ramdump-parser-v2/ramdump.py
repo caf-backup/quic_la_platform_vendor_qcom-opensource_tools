@@ -592,9 +592,7 @@ class RamDump():
         self.objdump_path = objdump_path
         self.outdir = options.outdir
         self.imem_fname = None
-        self.gdbmi = gdbmi.GdbMI(self.gdb_path, self.vmlinux,
-                                 self.kaslr_offset or 0)
-        self.gdbmi.open()
+        self.gdbmi = None
         self.gdbmi_hyp = None
         self.arm64 = options.arm64
         self.ndk_compatible = False
