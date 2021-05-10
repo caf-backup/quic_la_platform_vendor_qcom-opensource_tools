@@ -24,6 +24,7 @@ address = []
 data = []
 dcc_sink = []
 next_ll_offset = []
+MAX_LOOP_COUNT = 4096
 
 def bm(msb, lsb):
     'Creates a bitmask from msb to lsb'
@@ -154,15 +155,19 @@ def read_config(config_pt):
         elif descriptor == loop_descriptor:
             loop_offset = val & bm(config_loopoffset - 1, 0)
             loop_count = bvalsel(27, config_loopoffset, val)
+            if loop_count > MAX_LOOP_COUNT:
+                print ("loop offset is wrong or SRAM is corrupted\n")
+                exit()
 
             if loop_offset == 0:
                 continue
-
-            loop_nr = list_nr[-1] - list_nr[-loop_offset]
-            list_nr.append(loop_nr * loop_count + list_nr[-1])
-            count = count + 1
-            add_loop_addr(loop_nr, loop_count)
-
+            try:
+                loop_nr = list_nr[-1] - list_nr[-loop_offset]
+                list_nr.append(loop_nr * loop_count + list_nr[-1])
+                count = count + 1
+                add_loop_addr(loop_nr, loop_count)
+            except Exception as err:
+                pass
         elif descriptor == rd_mod_wr_descriptor:
             '''
             Skip over mask and value of rd_mod_wr.

@@ -1,4 +1,4 @@
-# Copyright (c) 2016-2020 The Linux Foundation. All rights reserved.
+# Copyright (c) 2016-2021 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -10,6 +10,7 @@
 # GNU General Public License for more details.
 
 from parser_util import register_parser, RamParser
+import os
 import linux_list as llist
 
 VM_ALLOC = 0x00000002
@@ -109,7 +110,9 @@ class MemStats(RamParser):
         return other_mem
 
     def calculate_ionmem(self):
-        if self.ramdump.kernel_version >= (5, 4):
+        if self.ramdump.kernel_version >= (5, 10):
+            grandtotal = 0
+        elif self.ramdump.kernel_version >= (5, 4):
             grandtotal = self.ramdump.read_u64('total_heap_bytes')
         else:
             number_of_ion_heaps = self.ramdump.read_int('num_heaps')
@@ -174,7 +177,12 @@ class MemStats(RamParser):
             total_free = self.pages_to_mb(total_free)
 
             # slab Memory
-            if (self.ramdump.kernel_version >= (4, 14)):
+            if self.ramdump.kernel_version >= (5, 10):
+                slab_rec = self.ramdump.read_word(
+                   'vm_node_stat[NR_SLAB_RECLAIMABLE_B]')
+                slab_unrec = self.ramdump.read_word(
+                   'vm_node_stat[NR_SLAB_UNRECLAIMABLE_B]')
+            elif (self.ramdump.kernel_version >= (4, 14)):
                 slab_rec = self.ramdump.read_word(
                    'vm_node_stat[NR_SLAB_RECLAIMABLE]')
                 slab_unrec = self.ramdump.read_word(
@@ -184,7 +192,6 @@ class MemStats(RamParser):
                         'vm_zone_stat[NR_SLAB_RECLAIMABLE]')
                 slab_unrec = self.ramdump.read_word(
                         'vm_zone_stat[NR_SLAB_UNRECLAIMABLE]')
-
             total_slab = self.pages_to_mb(slab_rec + slab_unrec)
             # others
             other_mem = self.calculate_vm_node_zone_stat()
@@ -263,14 +270,6 @@ class MemStats(RamParser):
         # vmalloc area
         self.calculate_vmalloc()
 
-        if type(ion_mem) is str:
-            accounted_mem = total_free + total_slab + kgsl_memory + stat_val + \
-                            self.vmalloc_size + other_mem
-        else:
-            accounted_mem = total_free + total_slab + ion_mem + kgsl_memory + \
-                        stat_val + self.vmalloc_size + other_mem
-
-        unaccounted_mem = total_mem - accounted_mem
 
         # Output prints
         out_mem_stat.write('{0:30}: {1:8} MB'.format(
@@ -279,7 +278,21 @@ class MemStats(RamParser):
                             "Free memory:", total_free))
         out_mem_stat.write('\n{0:30}: {1:8} MB'.format(
                             "Total Slab memory:", total_slab))
-        out_mem_stat.write('\n{0:30}: {1:8} MB'.format(
+        if self.ramdump.kernel_version >= (5, 10):
+            log_location = os.path.dirname(out_mem_stat.name)
+            try:
+                dma_heap_file = os.path.join(log_location, "total_dma_heap.txt")
+                if os.path.isfile(dma_heap_file):
+                    fin = open(dma_heap_file, 'r')
+                    fin_list = fin.readlines()
+                    fin.close()
+                    ion_mem = int(fin_list[0].split(" ")[-1].replace("MB", ""))
+                    out_mem_stat.write("\n{0:30}: {1:8} MB".format("Total DMA memory", ion_mem))
+            except:
+                ion_mem = "Please refer total_dma_heap.txt"
+                out_mem_stat.write('\nTotal ion memory: Please refer total_dma_heap.txt')
+        else:
+            out_mem_stat.write('\n{0:30}: {1:8} MB'.format(
                             "Total ion memory:", ion_mem))
         out_mem_stat.write('\n{0:30}: {1:8} MB'.format(
                             "KGSL ", kgsl_memory))
@@ -291,6 +304,16 @@ class MemStats(RamParser):
                             "Others  ", other_mem))
         out_mem_stat.write('\n{0:30}: {1:8} MB'.format(
                             "Cached  ",cached))
+
+        if type(ion_mem) is str:
+            accounted_mem = total_free + total_slab + kgsl_memory + stat_val + \
+                            self.vmalloc_size + other_mem
+        else:
+            accounted_mem = total_free + total_slab + ion_mem + kgsl_memory + \
+                        stat_val + self.vmalloc_size + other_mem
+
+        unaccounted_mem = total_mem - accounted_mem
+
         out_mem_stat.write('\n\n{0:30}: {1:8} MB'.format(
                             "Total Unaccounted Memory ",unaccounted_mem))
 

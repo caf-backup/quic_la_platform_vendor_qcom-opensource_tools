@@ -70,11 +70,20 @@ class GdbMI(object):
         """Open the connection to the ``gdbmi`` backend. Not needed if using
         ``gdbmi`` as a context manager (recommended).
         """
+        if sys.platform.startswith("win"):
+            import ctypes
+            SEM_NOGPFAULTERRORBOX = 0x0002 # From MSDN
+            ctypes.windll.kernel32.SetErrorMode(SEM_NOGPFAULTERRORBOX);
+            subprocess_flags = 0x8000000 #win32con.CREATE_NO_WINDOW?
+        else:
+            subprocess_flags = 0
+
         self._gdbmi = subprocess.Popen(
             [self.gdb_path, '--interpreter=mi2', self.elf],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
-            universal_newlines=True
+            universal_newlines=True,
+            creationflags=subprocess_flags
         )
         self._flush_gdbmi()
 
@@ -131,11 +140,14 @@ class GdbMI(object):
             if cmd in self._cache:
                 return GdbMIResult(self._cache[cmd], [])
 
-        self._gdbmi.stdin.write(cmd.rstrip('\n') + '\n')
-        self._gdbmi.stdin.flush()
-
         output = []
         oob_output = []
+        try:
+            self._gdbmi.stdin.write(cmd.rstrip('\n') + '\n')
+            self._gdbmi.stdin.flush()
+        except Exception as err:
+            return GdbMIResult(output, oob_output)
+
         while True:
             line = self._gdbmi.stdout.readline()
             """
@@ -153,6 +165,8 @@ class GdbMI(object):
                 line = line[1:]
                 # strip the leading and trailing "
                 line = line[1:-1]
+                if line.startswith("\\n"):
+                    continue
                 # strip any trailing (possibly escaped) newlines
                 if line.endswith('\\n'):
                     line = line[:-2]
@@ -181,6 +195,12 @@ class GdbMI(object):
         """Return GDB version"""
         return self._run_for_first('show version')
 
+    def setup_aarch(self,type):
+        self.aarch_set = True
+        cmd = 'set architecture ' + type
+        result = self._run_for_one(cmd)
+        return
+
     def frame_field_offset(self, frame_name, the_type, field):
         """Returns the offset of a field in a struct or type of selected frame
         if there are two vairable with same na,e in source code.
@@ -190,6 +210,17 @@ class GdbMI(object):
         cmd = 'print /x (int)&(({0} *)0)->{1}'.format(the_type, field)
         result = self._run_for_one(cmd)
         return gdb_hex_to_dec(result)
+
+    def type_of(self, symbol):
+        """ Returns the type of symbol.
+
+        Example:
+        >>> gdbmi.type_of("kgsl_driver")
+        struct kgsl_driver
+        """
+        cmd = 'print &{0}'.format(symbol)
+        result = self._run_for_one(cmd)
+        return result.split("*)")[0].split("= (")[1]
 
     def field_offset(self, the_type, field):
         """Returns the offset of a field in a struct or type.
