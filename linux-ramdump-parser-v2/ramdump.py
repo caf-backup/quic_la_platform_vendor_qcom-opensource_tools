@@ -1742,6 +1742,8 @@ class RamDump():
         if self.is_config_defined("CONFIG_KALLSYMS"):
             for mod_tbl_ent in self.module_table.module_table:
                 for sym in mod_tbl_ent.kallsyms_table:
+                    if sym[1].startswith('$x') or sym[1].startswith('$d'):
+                        continue
                     self.lookup_table.append((sym[0], sym[1],sym[7]))
         else:
             for mod_tbl_ent in self.module_table.module_table:
