@@ -592,9 +592,7 @@ class RamDump():
         self.objdump_path = objdump_path
         self.outdir = options.outdir
         self.imem_fname = None
-        self.gdbmi = gdbmi.GdbMI(self.gdb_path, self.vmlinux,
-                                 self.kaslr_offset or 0)
-        self.gdbmi.open()
+        self.gdbmi = None
         self.gdbmi_hyp = None
         self.arm64 = options.arm64
         self.ndk_compatible = False
@@ -605,14 +603,16 @@ class RamDump():
                                      self.kaslr_offset or 0)
             self.gdbmi.open()
             sanity_data = self.address_of("kimage_voffset")
+            self.kernel_version = (0, 0, 0)
             if self.arm64:
                 self.gdbmi.setup_aarch('aarch64')
                 if (sanity_data and (sanity_data & 0xFF000000000000) == 0):
                     print_out_str('RELR tags not compatible with NDK GDB')
-                elif sanity_data is not None:
+                elif sanity_data is not None and self.get_kernel_version() >= (5, 10):
                     print_out_str('vmlinux is ndk-compatible')
                     self.ndk_compatible = True
             if not self.ndk_compatible:
+                print_out_str("vmlinux not ndk compatible\n")
                 self.gdbmi.close()
 
         if not self.ndk_compatible:
@@ -1190,6 +1190,9 @@ class RamDump():
             startup_script.write('sys.cpu CORTEXA53\n')
         else:
             startup_script.write('sys.cpu {0}\n'.format(self.cpu_type))
+            startup_script.write('SYStem.Option MMUSPACES ON\n')
+            startup_script.write('SYStem.Option ZONESPACES OFF\n')
+
         startup_script.write('sys.up\n')
 
         if is_cortex_a53 and not self.arm64:
@@ -1243,20 +1246,24 @@ class RamDump():
                             self.hlos_sctlr_el1))
                         else:
                             startup_script.write('Data.Set SPR:0x30100 %Quad 0x0000000004C5D93D\n')
+                        corevcpu_path = os.path.join(self.outdir,'corevcpu0_regs.cmm')
+                        if os.path.exists(corevcpu_path):
+                            startup_script.write('do ' + corevcpu_path + '\n')
                     else:
                         startup_script.write('Data.Set SPR:0x30202 %Quad 0x00000032B5193519\n')
                         startup_script.write('Data.Set SPR:0x30A20 %Quad 0x000000FF440C0400\n')
                         startup_script.write('Data.Set SPR:0x30A30 %Quad 0x0000000000000000\n')
                         startup_script.write('Data.Set SPR:0x30100 %Quad 0x0000000004C5D93D\n')
 
+                startup_script.write('TRANSlation.COMMON NS:0xF000000000000000--0xffffffffffffffff\n')
+                startup_script.write('trans.tablewalk on\n')
+                startup_script.write('trans.on\n')
+                if not self.svm:
                     startup_script.write('Register.Set CPSR 0x3C5\n')
                     startup_script.write('MMU.Delete\n')
                     startup_script.write('MMU.SCAN PT 0xFFFFFF8000000000--0xFFFFFFFFFFFFFFFF\n')
                     startup_script.write('mmu.on\n')
                     startup_script.write('mmu.pt.list 0xffffff8000000000\n')
-                if self.svm:
-                        startup_script.write('trans.tablewalk on\n')
-                        startup_script.write('trans.on\n')
             else:
                 # ARM-32: MMU is enabled by default on most platforms.
                 mmu_enabled = 1
@@ -1723,6 +1730,9 @@ class RamDump():
             self.walk_depth(path, on_file)
 
         for mod_tbl_ent in self.module_table.module_table:
+            if mod_tbl_ent.name is None:
+                print_out_str('!! Object name not extracted properly..checking next!!')
+                continue
             self.parse_symbols_of_one_module(mod_tbl_ent, ko_file_list)
 
     def add_symbols_to_global_lookup_table(self):
