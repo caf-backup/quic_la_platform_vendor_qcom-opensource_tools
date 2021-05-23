@@ -582,6 +582,7 @@ class RamDump():
         self.ebi_start = 0
         self.cpu_type = None
         self.tbi_mask = None
+        self.svm_kaslr_offset = None
         self.hw_id = options.force_hardware or None
         self.hw_version = options.force_hardware_version or None
         self.offset_table = []
@@ -592,9 +593,7 @@ class RamDump():
         self.objdump_path = objdump_path
         self.outdir = options.outdir
         self.imem_fname = None
-        self.gdbmi = gdbmi.GdbMI(self.gdb_path, self.vmlinux,
-                                 self.kaslr_offset or 0)
-        self.gdbmi.open()
+        self.gdbmi = None
         self.gdbmi_hyp = None
         self.arm64 = options.arm64
         self.ndk_compatible = False
@@ -605,14 +604,16 @@ class RamDump():
                                      self.kaslr_offset or 0)
             self.gdbmi.open()
             sanity_data = self.address_of("kimage_voffset")
+            self.kernel_version = (0, 0, 0)
             if self.arm64:
                 self.gdbmi.setup_aarch('aarch64')
                 if (sanity_data and (sanity_data & 0xFF000000000000) == 0):
                     print_out_str('RELR tags not compatible with NDK GDB')
-                elif sanity_data is not None:
+                elif sanity_data is not None and self.get_kernel_version() >= (5, 10):
                     print_out_str('vmlinux is ndk-compatible')
                     self.ndk_compatible = True
             if not self.ndk_compatible:
+                print_out_str("vmlinux not ndk compatible\n")
                 self.gdbmi.close()
 
         if not self.ndk_compatible:
@@ -1390,8 +1391,8 @@ class RamDump():
         return self.kaslr_offset
 
     def determine_kaslr_offset(self):
-        if self.svm:
-            self.kaslr_offset = 0x180000
+        if self.svm and self.svm_kaslr_offset:
+            self.kaslr_offset = self.svm_kaslr_offset
             self.kaslr_addr = None
             return
         else:
@@ -1545,6 +1546,8 @@ class RamDump():
             self.kaslr_addr = board.kaslr_addr
         else:
             self.kaslr_addr = None
+        if hasattr(board, 'svm_kaslr_offset'):
+            self.svm_kaslr_offset = board.svm_kaslr_offset
         self.board = board
         return True
 
@@ -1730,12 +1733,17 @@ class RamDump():
             self.walk_depth(path, on_file)
 
         for mod_tbl_ent in self.module_table.module_table:
+            if mod_tbl_ent.name is None:
+                print_out_str('!! Object name not extracted properly..checking next!!')
+                continue
             self.parse_symbols_of_one_module(mod_tbl_ent, ko_file_list)
 
     def add_symbols_to_global_lookup_table(self):
         if self.is_config_defined("CONFIG_KALLSYMS"):
             for mod_tbl_ent in self.module_table.module_table:
                 for sym in mod_tbl_ent.kallsyms_table:
+                    if sym[1].startswith('$x') or sym[1].startswith('$d'):
+                        continue
                     self.lookup_table.append((sym[0], sym[1],sym[7]))
         else:
             for mod_tbl_ent in self.module_table.module_table:
