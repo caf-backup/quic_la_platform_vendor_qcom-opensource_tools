@@ -243,8 +243,6 @@ class DebugImage_v2():
     def parse_cpu_ctx(self, version, start, end, client_id, ram_dump):
         core = client_id - client.MSM_DUMP_DATA_CPU_CTX
 
-        print_out_str(
-            'Parsing CPU{2} context start {0:x} end {1:x} version {3} client_id-> {4}'.format(start, end, core,version,client_id))
         if version == 32 or version == "32":
             try:
                 cpu_type_offset  = ram_dump.field_offset(
@@ -283,12 +281,14 @@ class DebugImage_v2():
                                 'struct msm_dump_cpu_register_entry', 'regset_addr')
                 if regset_addr_offset is None:
                     regset_addr_offset = 0x8
-
+                cpu_index = ram_dump.read_u32(start + cpu_index_offset,False)
+                
+                print_out_str(
+                    'Parsing CPU{2:x} context start {0:x} end {1:x} version {3} client_id-> {4:x}'.format(start, end, cpu_index,version,client_id))
                 cpu_type = ram_dump.read_u32(start + cpu_type_offset,False)
                 print_out_str("cpu_type = {0}".format(msm_dump_cpu_type[cpu_type]))
                 ctx_type = ram_dump.read_u32(start + ctx_type_offset,False)
                 print_out_str("ctx_type = {0}".format(msm_dump_ctx_type[ctx_type]))
-                cpu_index = ram_dump.read_u32(start + cpu_index_offset,False)
                 print_out_str("cpu_index = {0}".format(cpu_index))
                 regset_num_register = ram_dump.read_u32(start + regset_num_register_offset,False)
                 registers = start + registers_offset
