@@ -382,6 +382,22 @@ class MemoryManagementSubsystem:
         self.rd = ramdump
         self.SECTION_SIZE_BITS = 0
 
+    def lookup_page_ext(self, pfn):
+        if not self.rd.is_config_defined('CONFIG_PAGE_EXTENSION'):
+            return None
+
+        if not self.rd.is_config_defined('CONFIG_SPARSEMEM'):
+            contig_page_data = self.rd.address_of('contig_page_data')
+            offset = self.rd.field_offset('struct pglist_data', 'node_page_ext')
+            page_ext = self.rd.read_word(contig_page_data + offset)
+        else:
+            mem_section = pfn_to_section(self.rd, pfn)
+            offset = self.rd.field_offset('struct mem_section', 'page_ext')
+            page_ext = self.rd.read_word(mem_section + offset)
+
+        return page_ext
+
+
 class Sparsemem:
     def __init__(self, ramdump):
         self.rd = ramdump
