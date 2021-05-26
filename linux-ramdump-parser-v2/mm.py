@@ -399,16 +399,26 @@ class Sparsemem:
         sections_per_root = 4096 // memsection_struct_size
         root_nr = section_nr // sections_per_root
         section_nr = section_nr % sections_per_root
-        mem_section_base = ramdump.read_word('mem_section')
 
-        if ramdump.is_config_defined('CONFIG_SPARSEMEM_EXTREME'):
-            #struct mem_section *mem_section[NR_SECTION_ROOTS];
+        if ramdump.is_config_defined('CONFIG_SPARSEMEM_EXTREME') and \
+                ramdump.kernel_version >= (4, 14):
+            #struct mem_section **mem_section
+            mem_section_base = ramdump.read_word('mem_section')
+            offset = pointer_size * root_nr
+            ptr = ramdump.read_word(mem_section_base + offset)
+            offset = memsection_struct_size * section_nr
+            mem_section_ptr = ptr + offset
+        elif ramdump.is_config_defined('CONFIG_SPARSEMEM_EXTREME') and \
+                ramdump.kernel_version < (4, 14):
+            #struct mem_section *mem_section[NR_SECTION_ROOTS]
+            mem_section_base = ramdump.address_of('mem_section')
             offset = pointer_size * root_nr
             ptr = ramdump.read_word(mem_section_base + offset)
             offset = memsection_struct_size * section_nr
             mem_section_ptr = ptr + offset
         else:
             #struct mem_section mem_section[NR_SECTION_ROOTS][SECTIONS_PER_ROOT];
+            mem_section_base = ramdump.address_of('mem_section')
             offset = memsection_struct_size * (section_nr + root_nr * sections_per_root)
             mem_section_ptr = mem_section_base + offset
 
