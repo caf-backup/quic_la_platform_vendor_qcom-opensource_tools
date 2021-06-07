@@ -624,7 +624,7 @@ class RamDump():
         self.page_offset = 0xc0000000
         self.thread_size = 8192
         self.qtf_path = options.qtf_path
-        self.qtf = options.qtf
+        self.ftrace_format = options.ftrace_format
         self.skip_qdss_bin = options.skip_qdss_bin
         self.debug = options.debug
         self.dcc = False
