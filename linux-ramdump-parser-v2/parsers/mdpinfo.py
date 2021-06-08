@@ -50,6 +50,8 @@ class SdeDbgBase(Struct):
             'reg_base_list': Struct.get_pointer,
             'enable_reg_dump' : Struct.get_u32,
             'panic_on_err' : Struct.get_u32,
+            'dbgbus_sde': Struct.get_address,
+            'dbgbus_vbif_rt': Struct.get_address,
         }
 
 class RangeDumpFbNode(Struct):
@@ -2383,7 +2385,6 @@ class MDPinfo(RamParser):
                                   'last_dump': Struct.get_u32})
 
                 SDE_EVTLOG_ENTRY = 8192
-                SDE_EVTLOG_MAX_DATA = self.ramdump.sizeof('(*(sde_dbg_base.evtlog)).logs[0].data')/4
                 self.outfile.write('%-60.50s%-20.5s%-8.5s%-8.5s%s\n' % ("FUNC", "TIME", "PID", "CPU", "DATA"))
                 sde_evtlog_start = 0
                 sde_evtlog_repeat = 0
@@ -2610,21 +2611,22 @@ class MDPinfo(RamParser):
                           struct_name="struct sde_dbg_reglog",
                           fields={'enable': Struct.get_u32,
                                   'last': Struct.get_u32,
-                                  'curr': Struct.get_u32,
+                                  'curr': Struct.get_u64,
                                   'logs': Struct.get_address,
                                   'last_dump': Struct.get_u32})
                 SDE_REGLOG_ENTRY = 1024
                 self.outfile.write('%-21.5s%-11.5s%-13.7s%-13.5s%s\n' % ("TIME", "PID", "ADDRESS", "VAL", "BLK_ID"))
                 sde_reglog_start = 0
                 sde_reglog_repeat = 0
-                if (reg_log.curr != reg_log.last):
-                    sde_reglog_start = reg_log.curr
+                sde_reglog_curr = abs(reg_log.curr % SDE_REGLOG_ENTRY)
+                if (sde_reglog_curr != reg_log.last):
+                    sde_reglog_start = sde_reglog_curr + 1
                 else:
                     sde_reglog_repeat = 1
                 sde_reglog_count = 0
                 while (sde_reglog_count < SDE_REGLOG_ENTRY):
                     i = sde_reglog_start % SDE_REGLOG_ENTRY
-                    if (i == reg_log.curr):
+                    if (i == sde_reglog_curr):
                         if (sde_reglog_repeat):
                             break
                         else:
@@ -2644,13 +2646,107 @@ class MDPinfo(RamParser):
                         break
                     self.outfile.write('%-20.5d ' % (log_log.time))
                     self.outfile.write('%-10.1d ' % (log_log.pid))
-                    self.outfile.write('0x%-10.1x ' % (log_log.addr))
-                    self.outfile.write('0x%-10.1x ' % (log_log.val))
-                    self.outfile.write('0x%-10.1x ' % (log_log.blk_id))
+                    self.outfile.write('%-10.1x ' % (log_log.addr))
+                    self.outfile.write('%-10.1x ' % (log_log.val))
+                    self.outfile.write('%-10.1x ' % (log_log.blk_id))
                     self.outfile.write('\n')
                 self.outfile.close()
             except:
                 pass
+
+            #Combining reglog with eventlog
+            f_evtlog = self.ramdump.open_file('sde_evtlog_parsed.txt', 'r')
+            f_reglog = self.ramdump.open_file('sde_reglog.txt', 'r')
+            self.outfile = self.ramdump.open_file('sde_evtlog_reglog_merged.txt', 'w')
+            evtlog = f_evtlog.readline()
+            reglog = f_reglog.readline()
+            curr_timestamp = 0
+            self.outfile.write('{:<54}{:<29}{:<6}{:<3}{:<200}\n'.format("EVTLOG_REGLOG_MERGED", "TIMESTAMP", "PID", "CPU", "DATA"))
+            while (evtlog and reglog):
+                if "FUNCTION_NAME" in evtlog:
+                    evtlog = f_evtlog.readline()
+                if "TIME" in reglog:
+                    reglog = f_reglog.readline()
+                if "COMMIT" in evtlog:
+                    evtlog = f_evtlog.readline()
+                if not evtlog or not reglog:
+                    break
+
+                evtlog_tmp = re.split(r'==>|: |\n', evtlog, 2)
+                data_tmp = evtlog_tmp[2].split("[", 1)
+                reglog_tmp = re.sub(r'\s+', ' ', reglog)
+                reglog_tmp = reglog.split()
+
+                if (int(evtlog_tmp[1]) > int(reglog_tmp[0])):
+                    self.outfile.write('{:<54}{:<29}{:<6}{:<3}{:<200}'.format("sde_reg_write", "==>"+str(reglog_tmp[0])+": "+str(int(reglog_tmp[0]) - curr_timestamp), "["+reglog_tmp[1]+"]","[N]", reglog_tmp[2] + " " + reglog_tmp[3] + " " + reglog_tmp[4]))
+                    reglog = f_reglog.readline()
+                    curr_timestamp = int(reglog_tmp[0])
+                    self.outfile.write('\n')
+                else:
+                    self.outfile.write('{:<54}{:<29}{:<200}'.format(evtlog_tmp[0], "==>"+str(evtlog_tmp[1])+": "+str(int(evtlog_tmp[1]) - curr_timestamp),"["+data_tmp[1]))
+                    evtlog = f_evtlog.readline()
+                    curr_timestamp = int(evtlog_tmp[1])
+
+            while(evtlog):
+                evtlog_tmp = re.split(r'==>|: |\n', evtlog, 2)
+                data_tmp = evtlog_tmp[2].split("[", 1)
+                self.outfile.write('{:<54}{:<29}{:<200}'.format(evtlog_tmp[0], "==>"+str(evtlog_tmp[1])+": "+str(int(evtlog_tmp[1]) - curr_timestamp),"["+data_tmp[1]))
+                evtlog = f_evtlog.readline()
+                curr_timestamp = int(evtlog_tmp[1])
+
+            while(reglog):
+                reglog_tmp = re.sub(r'\s+', ' ', reglog)
+                reglog_tmp = reglog.split()
+                self.outfile.write('{:<54}{:<29}{:<6}{:<3}{:<200}'.format("sde_reg_write", "==>"+str(reglog_tmp[0])+": "+str(int(reglog_tmp[0]) - curr_timestamp), "["+reglog_tmp[1]+"]","[N]", reglog_tmp[2] + " " + reglog_tmp[3] + " " + reglog_tmp[4]))
+                self.outfile.write('\n')
+                curr_timestamp = int(reglog_tmp[0])
+                reglog = f_reglog.readline()
+
+            f_evtlog.close()
+            f_reglog.close()
+            self.outfile.close()
+            self.ramdump.remove_file('sde_reglog.txt')
+
+            dbgbus_sde = Struct(self.ramdump, mdss_dbg.dbgbus_sde,
+                            struct_name="struct sde_dbg_sde_debug_bus",
+                            fields={'cmn': Struct.get_address})
+            dbgbus_sde_cmn = Struct(self.ramdump, dbgbus_sde.cmn,
+                            struct_name="struct sde_dbg_debug_bus_common",
+                            fields={'dumped_content': Struct.get_pointer,
+                                    'content_size': Struct.get_u32})
+
+            dbgbus_vbif = Struct(self.ramdump, mdss_dbg.dbgbus_vbif_rt,
+                            struct_name="struct sde_dbg_sde_debug_bus",
+                            fields={'cmn': Struct.get_address})
+            dbgbus_vbif_cmn = Struct(self.ramdump, dbgbus_vbif.cmn,
+                            struct_name="struct sde_dbg_debug_bus_common",
+                            fields={'dumped_content': Struct.get_pointer,
+                                    'content_size': Struct.get_u32})
+
+            self.outfile = self.ramdump.open_file('sde_dbgbus.txt', 'w')
+            i = 0
+
+            self.outfile.write('=================================sde debug bus points=================================\n\n')
+            self.outfile.write('{:<12}{:<12}{:<12}{:<15}'.format("wr_addr", "block_id", "test_id", "val"))
+            self.outfile.write('\n\n')
+            while (i < dbgbus_sde_cmn.content_size):
+                j = 0
+                while (j < 16):
+                    self.outfile.write('%-10.8x ' % (self.ramdump.read_u32(dbgbus_sde_cmn.dumped_content + (i*4) + j)))
+                    j = j + 4
+                self.outfile.write('\n')
+                i = i + 4
+
+            i = 0
+            self.outfile.write('\n\n=================================vbif debug bus points=================================\n\n')
+            while (i < dbgbus_vbif_cmn.content_size):
+                j = 0
+                while (j < 16):
+                    self.outfile.write('%-10.8x ' % (self.ramdump.read_u32(dbgbus_vbif_cmn.dumped_content + (i*4) + j)))
+                    j = j + 4
+                self.outfile.write('\n')
+                i = i + 4
+            self.outfile.close()
         else:
             for blk in mdss_dbg.blk_arr:
                 if blk.is_empty():
