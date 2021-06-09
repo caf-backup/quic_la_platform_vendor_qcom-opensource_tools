@@ -582,6 +582,7 @@ class RamDump():
         self.ebi_start = 0
         self.cpu_type = None
         self.tbi_mask = None
+        self.svm_kaslr_offset = None
         self.hw_id = options.force_hardware or None
         self.hw_version = options.force_hardware_version or None
         self.offset_table = []
@@ -1390,8 +1391,8 @@ class RamDump():
         return self.kaslr_offset
 
     def determine_kaslr_offset(self):
-        if self.svm:
-            self.kaslr_offset = 0x180000
+        if self.svm and self.svm_kaslr_offset:
+            self.kaslr_offset = self.svm_kaslr_offset
             self.kaslr_addr = None
             return
         else:
@@ -1545,6 +1546,8 @@ class RamDump():
             self.kaslr_addr = board.kaslr_addr
         else:
             self.kaslr_addr = None
+        if hasattr(board, 'svm_kaslr_offset'):
+            self.svm_kaslr_offset = board.svm_kaslr_offset
         self.board = board
         return True
 
@@ -1739,6 +1742,8 @@ class RamDump():
         if self.is_config_defined("CONFIG_KALLSYMS"):
             for mod_tbl_ent in self.module_table.module_table:
                 for sym in mod_tbl_ent.kallsyms_table:
+                    if sym[1].startswith('$x') or sym[1].startswith('$d'):
+                        continue
                     self.lookup_table.append((sym[0], sym[1],sym[7]))
         else:
             for mod_tbl_ent in self.module_table.module_table:
