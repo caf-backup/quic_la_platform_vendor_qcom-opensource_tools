@@ -165,6 +165,8 @@ class GdbMI(object):
                 line = line[1:]
                 # strip the leading and trailing "
                 line = line[1:-1]
+                if line.startswith("\\n"):
+                    continue
                 # strip any trailing (possibly escaped) newlines
                 if line.endswith('\\n'):
                     line = line[:-2]
