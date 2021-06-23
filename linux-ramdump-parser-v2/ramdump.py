@@ -598,6 +598,7 @@ class RamDump():
         self.arm64 = options.arm64
         self.ndk_compatible = False
         self.lookup_table = []
+        self.ko_file_names = []
 
         if gdb_ndk_path:
             self.gdbmi = gdbmi.GdbMI(self.gdb_ndk_path, self.vmlinux,
@@ -624,7 +625,7 @@ class RamDump():
         self.page_offset = 0xc0000000
         self.thread_size = 8192
         self.qtf_path = options.qtf_path
-        self.qtf = options.qtf
+        self.ftrace_format = options.ftrace_format
         self.skip_qdss_bin = options.skip_qdss_bin
         self.debug = options.debug
         self.dcc = False
@@ -1742,6 +1743,7 @@ class RamDump():
                 if ko_file_list.get(name, '').endswith('.ko.unstripped') and file.endswith('.ko'):
                     return
                 ko_file_list[name] = file
+                self.ko_file_names.append(name)
             self.walk_depth(path, on_file)
 
         for mod_tbl_ent in self.module_table.module_table:
