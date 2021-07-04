@@ -23,12 +23,36 @@ class PageTracking(RamParser):
     def __init__(self, *args):
         super(PageTracking, self).__init__(*args)
         self.trace_entry_size = self.ramdump.sizeof('unsigned long')
-        if self.ramdump.is_config_defined('CONFIG_SPARSEMEM'):
-            self.page_ext_offset = self.ramdump.field_offset(
-                            'struct mem_section', 'page_ext')
+        self.trace_offset = 0
+        self.nr_entries_offset = 0
+        self.trace_entries_offset = 0
+
+        if (self.ramdump.kernel_version <= (3, 19, 0)):
+            self.trace_offset = self.ramdump.field_offset('struct page', 'trace')
+            self.nr_entries_offset = self.ramdump.field_offset(
+                'struct stack_trace', 'nr_entries')
+            self.trace_entries_offset = self.ramdump.field_offset(
+                'struct page', 'trace_entries')
+
         else:
-            self.page_ext_offset = self.ramdump.field_offset(
-                            'struct pglist_data', 'node_page_ext')
+            self.trace_offset = self.ramdump.field_offset(
+                            'struct page_ext', 'trace')
+            if self.ramdump.is_config_defined('CONFIG_STACKDEPOT'):
+                self.trace_entries_offset = self.ramdump.field_offset(
+                        'struct stack_record', 'entries')
+            else:
+                self.trace_entries_offset = self.ramdump.field_offset(
+                            'struct page_ext', 'trace_entries')
+
+            self.nr_entries_offset = self.ramdump.field_offset(
+                        'struct page_ext', 'nr_entries')
+
+            self.page_ext_size = self.ramdump.sizeof("struct page_ext")
+            if self.ramdump.kernel_version >= (4, 9, 0):
+                self.page_owner_size = self.ramdump.sizeof("struct page_owner")
+                self.page_ext_size = self.page_ext_size + self.page_owner_size
+                self.page_owner_ops_offset = self.ramdump.read_structure_field(
+                    'page_owner_ops', 'struct page_ext_operations', 'offset')
 
         '''
         Following based upon definition in include/linux/mmzone.h
@@ -49,72 +73,41 @@ class PageTracking(RamParser):
         self.stack_slabs_size = self.ramdump.sizeof('void *')
 
     def page_trace(self, pfn, alloc):
-        trace_offset = 0
-        nr_entries_offset = 0
-        trace_entries_offset = 0
         offset = 0
         struct_holding_trace_entries = 0
 
         if not alloc and self.ramdump.kernel_version < (5, 4, 0):
             return -1, -1, -1, -1
 
-        if (self.ramdump.kernel_version <= (3, 19, 0)):
-            trace_offset = self.ramdump.field_offset('struct page', 'trace')
-            nr_entries_offset = self.ramdump.field_offset(
-                'struct stack_trace', 'nr_entries')
-            trace_entries_offset = self.ramdump.field_offset(
-                'struct page', 'trace_entries')
-
-        else:
-            trace_offset = self.ramdump.field_offset(
-                            'struct page_ext', 'trace')
-            if self.ramdump.is_config_defined('CONFIG_STACKDEPOT'):
-                trace_entries_offset = self.ramdump.field_offset(
-                        'struct stack_record', 'entries')
-            else:
-                trace_entries_offset = self.ramdump.field_offset(
-                            'struct page_ext', 'trace_entries')
-
-            nr_entries_offset = self.ramdump.field_offset(
-                        'struct page_ext', 'nr_entries')
-
-            page_ext_size = self.ramdump.sizeof("struct page_ext")
-            if self.ramdump.kernel_version >= (4, 9, 0):
-                page_owner_size = self.ramdump.sizeof("struct page_owner")
-                page_ext_size = page_ext_size + page_owner_size
-                page_owner_ops_offset = self.ramdump.read_structure_field(
-                    'page_owner_ops', 'struct page_ext_operations', 'offset')
-
         page = pfn_to_page(self.ramdump, pfn)
         order = 0
 
         if (self.ramdump.kernel_version <= (3, 19, 0)):
             nr_trace_entries = self.ramdump.read_int(
-                page + trace_offset + nr_entries_offset)
+                page + self.trace_offset + self.nr_entries_offset)
             struct_holding_trace_entries = page
             order = self.ramdump.read_structure_field(
                 page, 'struct page', 'order')
         else:
             phys = pfn << 12
             if phys is None or phys == 0:
-                return
-            mem_section = pfn_to_section(self.ramdump, pfn)
-            page_ext = self.ramdump.read_word(mem_section + self.page_ext_offset)
+                return -1, -1, -1, -1
+            page_ext = self.ramdump.mm.lookup_page_ext(pfn)
             """
             page_ext will be null here if the first page of a section is not valid.
             See page_ext_init().
             """
             if not page_ext:
-                return
+                return -1, -1, -1, -1
  
             if self.ramdump.arm64:
-                temp_page_ext = page_ext + (pfn * page_ext_size)
+                temp_page_ext = page_ext + (pfn * self.page_ext_size)
             else:
                 pfn_index = pfn - (self.ramdump.phys_offset >> 12)
-                temp_page_ext = page_ext + (pfn_index * page_ext_size)
+                temp_page_ext = page_ext + (pfn_index * self.page_ext_size)
 
             if self.ramdump.kernel_version >= (4, 9, 0):
-                temp_page_ext = temp_page_ext + page_owner_ops_offset
+                temp_page_ext = temp_page_ext + self.page_owner_ops_offset
                 order = self.ramdump.read_structure_field(
                             temp_page_ext, 'struct page_owner', 'order')
                 if alloc:
@@ -134,7 +127,7 @@ class PageTracking(RamParser):
 
             if not self.ramdump.is_config_defined('CONFIG_STACKDEPOT'):
                 nr_trace_entries = self.ramdump.read_int(
-                    temp_page_ext + nr_entries_offset)
+                    temp_page_ext + self.nr_entries_offset)
                 struct_holding_trace_entries = temp_page_ext
             else:
                 if self.ramdump.kernel_version >= (4, 9, 0):
@@ -164,7 +157,8 @@ class PageTracking(RamParser):
                     stack, 'struct stack_record', 'size')
 
                 struct_holding_trace_entries = stack
-
+        if nr_trace_entries is None:
+            return -1, -1, -1, -1
         if nr_trace_entries <= 0 or nr_trace_entries > 16:
             return -1, -1, -1, -1
         if order >= self.max_order:
@@ -173,7 +167,7 @@ class PageTracking(RamParser):
         alloc_str = ''
         for i in range(0, nr_trace_entries):
             addr = self.ramdump.read_word(
-                    struct_holding_trace_entries + trace_entries_offset + i *
+                    struct_holding_trace_entries + self.trace_entries_offset + i *
                     self.trace_entry_size)
 
             if not addr:
@@ -315,9 +309,15 @@ class PageTracking(RamParser):
             return
 
         if self.ramdump.kernel_version >= (4, 4):
-            if not self.ramdump.is_config_defined('CONFIG_PAGE_OWNER_ENABLE_DEFAULT'):
-                print_out_str('CONFIG_PAGE_OWNER_ENABLE_DEFAULT not defined')
-                return
+            if self.ramdump.kernel_version >= (5, 10):
+                page_owner_enabled = self.ramdump.address_of("page_owner_enabled")
+                if not self.ramdump.read_bool(page_owner_enabled):
+                    print_out_str("page_owner is not set in cmdline")
+                    return
+            else:
+                if not self.ramdump.is_config_defined('CONFIG_PAGE_OWNER_ENABLE_DEFAULT'):
+                    print_out_str('CONFIG_PAGE_OWNER_ENABLE_DEFAULT not defined')
+                    return
 
         out_tracking = self.ramdump.open_file('page_tracking.txt')
         out_frequency = self.ramdump.open_file('page_frequency.txt')
