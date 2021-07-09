@@ -1408,6 +1408,10 @@ class RamDump():
             self.kaslr_offset = self.svm_kaslr_offset
             self.kaslr_addr = None
             return
+        elif self.svm and not self.svm_kaslr_offset:
+            self.kaslr_offset = 0
+            self.kaslr_addr = None
+            return
         else:
             self.kaslr_offset = 0
             if self.kaslr_addr is None:
