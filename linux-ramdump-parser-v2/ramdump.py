@@ -1425,6 +1425,13 @@ class RamDump():
                     self.kaslr_offset = self.read_u64(self.kaslr_addr + 4, False)
                     print_out_str("The kaslr_offset extracted is: " + str(hex(self.kaslr_offset)))
 
+    def get_page_size(self):
+        if self.is_config_defined('CONFIG_ARM64_PAGE_SHIFT'):
+            PAGE_SHIFT = int(self.get_config_val('CONFIG_ARM64_PAGE_SHIFT'))
+        else:
+            PAGE_SHIFT = 12
+        return 1 << PAGE_SHIFT
+
     def get_hw_id(self, add_offset=True):
         socinfo_format = -1
         socinfo_id = -1
@@ -1668,6 +1675,56 @@ class RamDump():
         if not mod_tbl_ent.set_sym_path(ko_file_list[mod_tbl_ent.name]):
             return
 
+        try:
+            mod = import_module('elftools.elf.elffile')
+            ELFFile = mod.ELFFile
+            mod = import_module('elftools.elf.constants')
+            SHF = mod.SH_FLAGS
+            ARCH_SHF_SMALL = 0  # 0 for arm and arm64
+            SHF_RO_AFTER_INIT = 0x00200000  # custom for Linux
+            with open(mod_tbl_ent.get_sym_path(), 'rb') as fd:
+                elf = ELFFile(fd)
+                # This logic mirrors kernel/module.c:layout_sections and layout_and_allocate
+                # https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/kernel/module.c?h=v5.13#n2425
+                masks = [
+                    (SHF.SHF_EXECINSTR | SHF.SHF_ALLOC, ARCH_SHF_SMALL),
+                    (SHF.SHF_ALLOC, SHF.SHF_WRITE | ARCH_SHF_SMALL),
+                    (SHF_RO_AFTER_INIT | SHF.SHF_ALLOC, ARCH_SHF_SMALL),
+                    (SHF.SHF_WRITE | SHF.SHF_ALLOC, ARCH_SHF_SMALL),
+                    (ARCH_SHF_SMALL | SHF.SHF_ALLOC, 0)
+                ]
+                size = 0
+                mod_tbl_ent.section_offsets = {}
+                for mask in masks:
+                    for s in elf.iter_sections():
+                        sh_flags = s['sh_flags']
+                        # https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/kernel/module.c?h=v5.13#n3524
+                        if s.name == '.data..ro_after_init':
+                            sh_flags |= SHF_RO_AFTER_INIT
+                        if s.name == '__jump_table':
+                            sh_flags |= SHF_RO_AFTER_INIT
+                        # https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/kernel/module.c?h=v5.13#n2442
+                        if (sh_flags & mask[0]) != mask[0] \
+                            or (sh_flags & mask[1]) \
+                            or s.name in mod_tbl_ent.section_offsets.keys() \
+                            or s.name.startswith('.init') or s.name.startswith('.ARM.extab.init') or s.name.startswith('.ARM.exidx.init'):
+                            continue
+                        # this is internals of get_offset -- arch_mod_section_prepend not defined for arm or arm64 so far
+                        # https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/kernel/module.c?h=v5.13#n2397
+                        if s['sh_addralign']:
+                            size = (size + s['sh_addralign'] - 1) & ~(s['sh_addralign'] - 1)
+
+                        if s.name:
+                            # Add to section_offsets table!
+                            mod_tbl_ent.section_offsets[s.name] = size + mod_tbl_ent.module_offset
+                        size += s['sh_size']
+                    # This is the internals of debug_align
+                    # https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/kernel/module.c?h=v5.13#n2456
+                    if self.is_config_defined('CONFIG_ARCH_HAS_STRICT_MODULE_RWX'):
+                        size = (size + (self.get_page_size() - 1)) & ~(self.get_page_size() - 1)
+        except ImportError:
+            pass
+
         args = [self.nm_path, '-n', mod_tbl_ent.get_sym_path()]
         p = subprocess.run(args, stdout=subprocess.PIPE)
         symbols = p.stdout.decode().splitlines()
@@ -1819,26 +1876,8 @@ class RamDump():
         >>> hex(dump.address_of('linux_banner'))
         '0xffffffc000c7a0a8L'
         """
-        flag = False
-        sym_name = symbol
         try:
-            addr = self.gdbmi.address_of(symbol)
-            if ((addr & 0xFF000000000000) == 0) and self.arm64:
-                for mod_tbl_ent in self.lookup_table:
-                    if "." in symbol:
-                        sym_name = symbol.split(".")[0]
-                        var = ".".join(symbol.split(".")[1:])
-                        sym_type = self.type_of(sym_name)
-                        var_offset = self.field_offset(sym_type, var)
-                        flag = True
-                    if sym_name in str(mod_tbl_ent) and sym_name == mod_tbl_ent[2]:
-                        addr = mod_tbl_ent[0]
-                if flag:
-                    return addr + var_offset
-                else:
-                    return addr
-            else:
-                return addr
+            return self.gdbmi.address_of(symbol)
         except gdbmi.GdbMIException:
             if self.hyp:
                 try:
