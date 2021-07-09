@@ -9,11 +9,15 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 
-from parser_util import RamParser
-from print_out import print_out_str
 import linux_list
-import traceback
 import linux_radix_tree
+import traceback
+
+from parser_util import RamParser
+from parsers.gpu.gpu_snapshot import create_snapshot_from_ramdump
+from parsers.gpu.gpu_eventlog import parse_eventlog_buffer
+from print_out import print_out_str
+
 
 # Global Configurations
 ADRENO_DISPATCH_DRAWQUEUE_SIZE = 128
@@ -53,6 +57,7 @@ class GpuParser_510(RamParser):
             (self.parse_fence_data, "Fences", 'gpu_sync_fences.txt'),
             (self.parse_open_process_mementry, "Open Process Mementries",
              'open_process_mementries.txt'),
+            (self.parse_eventlog_data, "Eventlog Buffer", 'eventlog.txt'),
         ]
 
         self.rtw = linux_radix_tree.RadixTreeWalker(dump)
@@ -296,6 +301,9 @@ class GpuParser_510(RamParser):
         for i in range(KGSL_MAX_POOLS):
             self.writeln('\t' + str(pool_order[i]) + ' order pool size: ' +
                          str_convert_to_kb(pool_size[i]*PAGE_SIZE))
+
+    def parse_eventlog_data(self, dump):
+        parse_eventlog_buffer(self.writeln, dump)
 
     def parse_dispatcher_data(self, dump):
         dispatcher_addr = dump.struct_field_addr(self.devp,
@@ -935,6 +943,7 @@ class GpuParser_510(RamParser):
         atomic_snapshot = dump.read_bool(atomic_snapshot_addr)
         if not atomic_snapshot:
             self.writeln('No atomic snapshot detected.')
+            self.create_mini_snapshot(dump)
             return
 
         atomic_snapshot_offset = dump.field_offset(
@@ -946,6 +955,7 @@ class GpuParser_510(RamParser):
 
         if atomic_snapshot_base == 0 or atomic_snapshot_size == 0:
             self.writeln('Invalid atomic snapshot.')
+            self.create_mini_snapshot(dump)
             return
 
         self.writeln('Atomic Snapshot Details:')
@@ -958,3 +968,6 @@ class GpuParser_510(RamParser):
         self.writeln('\nData dumped to atomic_snapshot.bpmd')
         file.write(data)
         file.close()
+
+    def create_mini_snapshot(self, dump):
+        create_snapshot_from_ramdump(self.devp, dump)
