@@ -902,7 +902,7 @@ class RamDump():
             print_out_str('!!! Some features may be disabled!')
 
         self.unwind = self.Unwinder(self)
-        if not self.minidump and self.module_table.sym_paths_exist():
+        if self.module_table.sym_paths_exist():
             self.setup_module_symbols()
             self.gdbmi.setup_module_table(self.module_table)
             if self.dump_global_symbol_table:
@@ -1662,6 +1662,20 @@ class RamDump():
             self.module_table.add_entry(mod_tbl_ent)
             next_list_ent = self.read_pointer(next_list_ent + next_offset)
 
+    def retrieve_minidump_modules(self):
+        kmodules_seg = next((s for s in self.elffile.iter_sections() if s.name == 'KMODULES'), None)
+        if kmodules_seg is None:
+            return
+
+        kmodules_lines = self.read_cstring(kmodules_seg['sh_addr'], max_length=kmodules_seg['sh_size'])
+        for line in kmodules_lines.splitlines():
+            m = re.fullmatch(r"^name: (.+), base: (?:0x)?([0-9a-fA-F]+)\b.*", line)
+            if m is not None:
+                mod_tbl_ent = module_table.module_table_entry()
+                mod_tbl_ent.name = m.group(1)
+                mod_tbl_ent.module_offset = int(m.group(2), base=16)
+                self.module_table.add_entry(mod_tbl_ent)
+
     def parse_symbols_of_one_module(self, mod_tbl_ent, ko_file_list):
         name_index = [s for s in ko_file_list.keys() if mod_tbl_ent.name in s]
         if len(name_index) == 0:
@@ -1836,7 +1850,10 @@ class RamDump():
         self.lookup_table.sort()
 
     def setup_module_symbols(self):
-        self.retrieve_modules()
+        if self.minidump:
+            self.retrieve_minidump_modules()
+        else:
+            self.retrieve_modules()
         self.parse_module_symbols();
         self.add_symbols_to_global_lookup_table()
 
