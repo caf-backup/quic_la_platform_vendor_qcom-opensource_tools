@@ -23,13 +23,6 @@ class PageTracking(RamParser):
     def __init__(self, *args):
         super(PageTracking, self).__init__(*args)
         self.trace_entry_size = self.ramdump.sizeof('unsigned long')
-        if self.ramdump.is_config_defined('CONFIG_SPARSEMEM'):
-            self.page_ext_offset = self.ramdump.field_offset(
-                            'struct mem_section', 'page_ext')
-        else:
-            self.page_ext_offset = self.ramdump.field_offset(
-                            'struct pglist_data', 'node_page_ext')
-
         self.trace_offset = 0
         self.nr_entries_offset = 0
         self.trace_entries_offset = 0
@@ -99,8 +92,7 @@ class PageTracking(RamParser):
             phys = pfn << 12
             if phys is None or phys == 0:
                 return -1, -1, -1, -1
-            mem_section = pfn_to_section(self.ramdump, pfn)
-            page_ext = self.ramdump.read_word(mem_section + self.page_ext_offset)
+            page_ext = self.ramdump.mm.lookup_page_ext(pfn)
             """
             page_ext will be null here if the first page of a section is not valid.
             See page_ext_init().
@@ -165,7 +157,8 @@ class PageTracking(RamParser):
                     stack, 'struct stack_record', 'size')
 
                 struct_holding_trace_entries = stack
-
+        if nr_trace_entries is None:
+            return -1, -1, -1, -1
         if nr_trace_entries <= 0 or nr_trace_entries > 16:
             return -1, -1, -1, -1
         if order >= self.max_order:
@@ -236,15 +229,13 @@ class PageTracking(RamParser):
     def parse(self):
         ranges = None
         if self.ramdump.minidump:
-            addr = self.ramdump.address_of('md_pageowner_dump_addr')
-            if addr is None:
-                print_out_str("NOTE: " +
-                        "Pageowner Minidump is not supported")
-                return
             for eb_file in self.ramdump.ebi_files:
                 path1 = eb_file[3]
             path = os.path.join(path1.split("MD_S")[0], "md_PAGEOWNER.bin")
-            input_file = open(path, 'r')
+            if not os.path.exists(path):
+                print_out_str(path + " not found")
+                return
+            input_file = open(path, 'r', errors="ignore")
             lines = input_file.readlines()
             i = 0
             functions = defaultdict(list)
