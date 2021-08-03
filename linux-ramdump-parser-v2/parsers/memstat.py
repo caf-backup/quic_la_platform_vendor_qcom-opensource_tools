@@ -10,13 +10,21 @@
 # GNU General Public License for more details.
 
 from parser_util import register_parser, RamParser
+import os
 import linux_list as llist
+import linux_radix_tree
 
 VM_ALLOC = 0x00000002
 
 
 @register_parser('--print-memstat', 'Print memory stats ')
 class MemStats(RamParser):
+    def __init__(self, dump):
+        super(MemStats, self).__init__(dump)
+
+        if (self.ramdump.kernel_version >= (5, 4)):
+            self.zram_dev_rtw = linux_radix_tree.RadixTreeWalker(self.ramdump)
+            self.zram_mem_mb = 0
 
     def list_func(self, vmlist):
         vm = self.ramdump.read_word(vmlist + self.vm_offset)
@@ -109,7 +117,9 @@ class MemStats(RamParser):
         return other_mem
 
     def calculate_ionmem(self):
-        if self.ramdump.kernel_version >= (5, 4):
+        if self.ramdump.kernel_version >= (5, 10):
+            grandtotal = 0
+        elif self.ramdump.kernel_version >= (5, 4):
             grandtotal = self.ramdump.read_u64('total_heap_bytes')
         else:
             number_of_ion_heaps = self.ramdump.read_int('num_heaps')
@@ -144,6 +154,21 @@ class MemStats(RamParser):
                 grandtotal = grandtotal + total_allocated
         grandtotal = self.bytes_to_mb(grandtotal)
         return grandtotal
+
+    def calculate_zram_dev_mem_allocated(self, zram):
+        mem_pool = zram + self.ramdump.field_offset('struct zram', 'mem_pool')
+        mem_pool = self.ramdump.read_word(mem_pool)
+
+        pages_allocated = mem_pool + self.ramdump.field_offset('struct zs_pool',
+                                                              'pages_allocated')
+
+        stat_val = self.ramdump.read_word(pages_allocated)
+        if stat_val is None:
+            stat_val = 0
+        else:
+            stat_val = self.pages_to_mb(stat_val)
+
+        self.zram_mem_mb += stat_val
 
     def print_mem_stats(self, out_mem_stat):
         # Total memory
@@ -214,43 +239,42 @@ class MemStats(RamParser):
             if zram_index_idr is None:
                 stat_val = 0
             else:
-                #From Kernel 9.5, The 'struct radix_tree_root', 'rnode' is replaced by 'struct xarray', 'xa_head'
-                #   refer LA.UM.9.14/kernel/msm-5.4/include/linux/xarray.h
+                #'struct radix_tree_root' was replaced by 'struct xarray' on kernel 5.4+
                 if self.ramdump.kernel_version >= (5, 4):
-                    idr_layer_ary_offset = self.ramdump.field_offset(
-                            'struct xarray', 'xa_head')
-                    idr_layer_ary = self.ramdump.read_word(zram_index_idr +
+                    self.zram_dev_rtw.walk_radix_tree(zram_index_idr,
+                                          self.calculate_zram_dev_mem_allocated)
+                    stat_val = self.zram_mem_mb
+                else:
+                    if self.ramdump.kernel_version >= (4, 14):
+                        idr_layer_ary_offset = self.ramdump.field_offset(
+                                    'struct radix_tree_root', 'rnode')
+                        idr_layer_ary = self.ramdump.read_word(zram_index_idr +
+                                    idr_layer_ary_offset)
+                    else:
+                        idr_layer_ary_offset = self.ramdump.field_offset(
+                                    'struct idr_layer', 'ary')
+                        idr_layer_ary = self.ramdump.read_word(zram_index_idr +
                                                            idr_layer_ary_offset)
-                elif self.ramdump.kernel_version >= (4, 14):
-                    idr_layer_ary_offset = self.ramdump.field_offset(
-                            'struct radix_tree_root', 'rnode')
-                    idr_layer_ary = self.ramdump.read_word(zram_index_idr +
-                                                   idr_layer_ary_offset)
-                else:
-                    idr_layer_ary_offset = self.ramdump.field_offset(
-                                'struct idr_layer', 'ary')
-                    idr_layer_ary = self.ramdump.read_word(zram_index_idr +
-                                                       idr_layer_ary_offset)
-                try:
-                    zram_meta = idr_layer_ary + self.ramdump.field_offset(
-                                    'struct zram', 'meta')
-                    zram_meta = self.ramdump.read_word(zram_meta)
-                    mem_pool = zram_meta + self.ramdump.field_offset(
-                            'struct zram_meta', 'mem_pool')
-                    mem_pool = self.ramdump.read_word(mem_pool)
-                except TypeError:
-                    mem_pool = idr_layer_ary + self.ramdump.field_offset(
-                                'struct zram', 'mem_pool')
-                    mem_pool = self.ramdump.read_word(mem_pool)
-                if mem_pool is None:
-                    stat_val = 0
-                else:
-                    page_allocated = mem_pool + self.ramdump.field_offset(
-                                    'struct zs_pool', 'pages_allocated')
-                    stat_val = self.ramdump.read_word(page_allocated)
-                    if stat_val is None:
+                    try:
+                        zram_meta = idr_layer_ary + self.ramdump.field_offset(
+                                        'struct zram', 'meta')
+                        zram_meta = self.ramdump.read_word(zram_meta)
+                        mem_pool = zram_meta + self.ramdump.field_offset(
+                                'struct zram_meta', 'mem_pool')
+                        mem_pool = self.ramdump.read_word(mem_pool)
+                    except TypeError:
+                        mem_pool = idr_layer_ary + self.ramdump.field_offset(
+                                    'struct zram', 'mem_pool')
+                        mem_pool = self.ramdump.read_word(mem_pool)
+                    if mem_pool is None:
                         stat_val = 0
-                    stat_val = self.pages_to_mb(stat_val)
+                    else:
+                        page_allocated = mem_pool + self.ramdump.field_offset(
+                                        'struct zs_pool', 'pages_allocated')
+                        stat_val = self.ramdump.read_word(page_allocated)
+                        if stat_val is None:
+                            stat_val = 0
+                        stat_val = self.pages_to_mb(stat_val)
         else:
             zram_devices_word = self.ramdump.read_word('zram_devices')
             if zram_devices_word is not None:
@@ -267,14 +291,6 @@ class MemStats(RamParser):
         # vmalloc area
         self.calculate_vmalloc()
 
-        if type(ion_mem) is str:
-            accounted_mem = total_free + total_slab + kgsl_memory + stat_val + \
-                            self.vmalloc_size + other_mem
-        else:
-            accounted_mem = total_free + total_slab + ion_mem + kgsl_memory + \
-                        stat_val + self.vmalloc_size + other_mem
-
-        unaccounted_mem = total_mem - accounted_mem
 
         # Output prints
         out_mem_stat.write('{0:30}: {1:8} MB'.format(
@@ -283,7 +299,21 @@ class MemStats(RamParser):
                             "Free memory:", total_free))
         out_mem_stat.write('\n{0:30}: {1:8} MB'.format(
                             "Total Slab memory:", total_slab))
-        out_mem_stat.write('\n{0:30}: {1:8} MB'.format(
+        if self.ramdump.kernel_version >= (5, 10):
+            log_location = os.path.dirname(out_mem_stat.name)
+            try:
+                dma_heap_file = os.path.join(log_location, "total_dma_heap.txt")
+                if os.path.isfile(dma_heap_file):
+                    fin = open(dma_heap_file, 'r')
+                    fin_list = fin.readlines()
+                    fin.close()
+                    ion_mem = int(fin_list[0].split(" ")[-1].replace("MB", ""))
+                    out_mem_stat.write("\n{0:30}: {1:8} MB".format("Total DMA memory", ion_mem))
+            except:
+                ion_mem = "Please refer total_dma_heap.txt"
+                out_mem_stat.write('\nTotal ion memory: Please refer total_dma_heap.txt')
+        else:
+            out_mem_stat.write('\n{0:30}: {1:8} MB'.format(
                             "Total ion memory:", ion_mem))
         out_mem_stat.write('\n{0:30}: {1:8} MB'.format(
                             "KGSL ", kgsl_memory))
@@ -295,6 +325,16 @@ class MemStats(RamParser):
                             "Others  ", other_mem))
         out_mem_stat.write('\n{0:30}: {1:8} MB'.format(
                             "Cached  ",cached))
+
+        if type(ion_mem) is str:
+            accounted_mem = total_free + total_slab + kgsl_memory + stat_val + \
+                            self.vmalloc_size + other_mem
+        else:
+            accounted_mem = total_free + total_slab + ion_mem + kgsl_memory + \
+                        stat_val + self.vmalloc_size + other_mem
+
+        unaccounted_mem = total_mem - accounted_mem
+
         out_mem_stat.write('\n\n{0:30}: {1:8} MB'.format(
                             "Total Unaccounted Memory ",unaccounted_mem))
 

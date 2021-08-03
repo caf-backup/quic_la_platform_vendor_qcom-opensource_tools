@@ -1,4 +1,4 @@
-# Copyright (c) 2015-2018, 2020 The Linux Foundation. All rights reserved.
+# Copyright (c) 2015-2018, 2020-2021 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -12,6 +12,7 @@
 import linux_list
 from parser_util import register_parser, RamParser
 from operator import itemgetter
+from collections import OrderedDict
 
 @register_parser('--lpm', 'Parse LPM Driver info')
 class lpm(RamParser):
@@ -53,7 +54,7 @@ class lpm(RamParser):
         self.output.append("{}\n".format('Online CPUs'))
         for i in range(0, cpus):
                 self.output.append("{:10}{}:{}\n".format("", "CPU", i))
-        self.output.append("{}{}{}".format("\n", "-" * 81, "\n"))
+        self.output.append("{}{}{}".format("\n", "-" * 120, "\n"))
 
     def get_cluster_level_info(self, lpm_cluster):
         offset = self.ramdump.field_offset('struct lpm_cluster', 'nlevels')
@@ -143,12 +144,74 @@ class lpm(RamParser):
                 return
         self.clusters.append(lpm_cluster)
 
+    def get_pm_domains(self):
+
+        gpd_offset = self.ramdump.field_offset('struct generic_pm_domain', 'gpd_list_node')
+        head = self.ramdump.read_word(self.ramdump.address_of('gpd_list'), True)
+        self.head = head
+
+        gpd_walker = linux_list.ListWalker(self.ramdump, head, gpd_offset)
+        gpd_walker.walk(head, self.get_pm_domain_info)
+
+    def get_pm_domain_info(self, node):
+        if node == self.head:
+            return
+
+        name_offset = self.ramdump.field_offset('struct generic_pm_domain', 'name')
+        name = self.ramdump.read_cstring(self.ramdump.read_word(node + name_offset))
+        if not name:
+            return
+        name += ":idle_states:S{}"
+
+        state_count = self.ramdump.read_structure_field(node, 'struct generic_pm_domain', 'state_count')
+        #sanity check for state count , CPUIDLE_STATE_MAX
+        if state_count >= 10:
+            return
+        accounting_time = self.ramdump.read_structure_field(node, 'struct generic_pm_domain', 'accounting_time')
+        gpd_power_state_size = self.ramdump.sizeof('struct genpd_power_state')
+        power_state_offset = self.ramdump.field_offset('struct generic_pm_domain', 'states')
+
+
+        for i in range(state_count):
+            power_state_addr = self.ramdump.read_word(node + power_state_offset + i * gpd_power_state_size)
+
+            msec = self.ramdump.read_structure_field(power_state_addr, 'struct genpd_power_state', 'idle_time')
+            ktime = self.ramdump.read_s64('last_jiffies_update') - accounting_time
+            ktime = ktime // 10 ** 6
+
+            if msec:
+                msec += ktime
+            usage = self.ramdump.read_structure_field(power_state_addr, 'struct genpd_power_state', 'usage')
+            rejected = self.ramdump.read_structure_field(power_state_addr, 'struct genpd_power_state', 'rejected')
+            residency_ns = self.ramdump.read_structure_field(power_state_addr, 'struct genpd_power_state','residency_ns')
+
+
+            if not msec:
+                msec = "0"
+            if not usage:
+                usage = "0"
+            if not rejected:
+                rejected = "0"
+            if name:
+                msg = u"{name:30}  {msec:30}  {usage:30} {rejected:30}".format(name=name.format(i),msec=msec,usage=usage,rejected=rejected)
+                self.output.append(msg)
+
+            self.output.append("\n")
+
+        return
+
+    def print_pm_domain_info(self):
+        self.output.append("{}\n".format('Power Domain Info: '))
+        self.output.append("{:30}{:30}{:30}{:30} \n".format("Power domain", "Time Spent(msec)", "Usage ", "Rejected "))
+        self.get_pm_domains()
+        self.output.append("{}{}".format("-" * 81, "\n"))
+
     def get_clusters(self):
         lpm_root_node = self.ramdump.read_word(
             self.ramdump.address_of('lpm_root_node'), True)
         if lpm_root_node is None:
-                self.output_file.write("NOTE: 'lpm_root_node' not found\n")
-                return
+            self.output_file.write("NOTE: 'lpm_root_node' not found\n")
+            return
 
         self.clusters.append(lpm_root_node)
 
@@ -213,14 +276,14 @@ class lpm(RamParser):
 
                 self.output.append("\n")
 
-        self.output.append("{}{}".format("-" * 81, "\n"))
+        self.output.append("{}{}".format("-" * 120, "\n"))
 
     def get_lpm(self):
         self.get_clusters()
         for i in self.clusters:
                 self.get_cluster_info(i)
                 self.get_cluster_level_info(i)
-                self.output.append("{}{}".format("-" * 81, "\n"))
+                self.output.append("{}{}".format("-" * 120, "\n"))
 
         if self.ramdump.kernel_version >= (4,9,0):
             cpu_cluster_base = self.ramdump.address_of('lpm_root_node')
@@ -288,7 +351,7 @@ class lpm(RamParser):
         tstats = self.ramdump.read_word(stats + offset, True)
 
         self.get_time_stats(tstats, nlevels)
-        self.output.append("{}{}".format("-" * 81, "\n"))
+        self.output.append("{}{}".format("-" * 120, "\n"))
 
     def get_cpu_stats(self, cpu_stats_base, cpu):
         stats = cpu_stats_base + self.ramdump.per_cpu_offset(cpu)
@@ -303,7 +366,7 @@ class lpm(RamParser):
         tstats = self.ramdump.read_word(stats + offset, True)
 
         self.get_time_stats(tstats, nlevels)
-        self.output.append("{}{}".format("-" * 81, "\n"))
+        self.output.append("{}{}".format("-" * 120, "\n"))
 
     def get_stats(self):
         for i in self.clusters:
@@ -368,7 +431,7 @@ class lpm(RamParser):
         self.output.append("{:16}".format("TimeStamp"))
         self.output.append("{:8} {:8} {:8} ".format("Event", "CPU", "arg1"))
         self.output.append("{:16}{:16}{:16}\n".format("arg2", "arg3", "arg4"))
-        self.output.append("{}{}".format("-" * 81, "\n"))
+        self.output.append("{}{}".format("-" * 120, "\n"))
 
         lpm_debug = sorted(self.lpm_debug, key=itemgetter(0))
 
@@ -382,6 +445,106 @@ class lpm(RamParser):
 
                 self.output.append("\n")
 
+    def get_cpuidle_usage_details(self, state_usage_addr):
+        usage_stats = OrderedDict()
+        usage_stats['disable'] = self.ramdump.read_structure_field(state_usage_addr,
+                                                                    'struct cpuidle_state_usage',
+                                                                    'disabled')
+        usage_stats['usage'] = self.ramdump.read_structure_field(state_usage_addr,
+                                                                    'struct cpuidle_state_usage',
+                                                                    'usage')
+        usage_stats['time_ns'] = self.ramdump.read_structure_field(state_usage_addr,
+                                                                    'struct cpuidle_state_usage',
+                                                                    'time_ns')
+        usage_stats['rejected'] = self.ramdump.read_structure_field(state_usage_addr,
+                                                                    'struct cpuidle_state_usage',
+                                                                    'rejected')
+        usage_stats['s2idle_usage'] = self.ramdump.read_structure_field(state_usage_addr,
+                                                                    'struct cpuidle_state_usage',
+                                                                    's2idle_usage')
+        usage_stats['s2idle_time'] = self.ramdump.read_structure_field(state_usage_addr,
+                                                                    'struct cpuidle_state_usage',
+                                                                    's2idle_time')
+        return usage_stats
+
+    def print_state_description(self, data):
+        self.output.append("\n\n")
+        self.output.append("CPUIdle States Description\n\n")
+        self.output.append("{}{}".format("-" * 120, "\n"))
+        self.output.append(" {:^30} {:^50}\n".format("State", "Description"))
+        for key, value in data.items():
+            self.output.append("{:^30}  {:^50}\n".format(key, value))
+
+    def print_cpuidle_stats(self, data):
+        self.output.append("\n\n")
+        self.output.append("CPUIdle Statistics\n\n")
+
+        self.output.append("{:^8}{:^20}{:^16}{:^16}{:^25}{:^16}{:^16}{:^16}\n".format("CPU",
+                            "State", "Disabled", "Usage", "Time_ns",
+                            "Rejected", "S2idle_usage", "S2idle_time"))
+
+        self.output.append("{}{}".format("-" * 120, "\n"))
+        for cpu in data.keys():
+            self.output.append("{:^8}\n".format(cpu))
+            for state in data[cpu].keys():
+                self.output.append("{:^8}".format(""))
+                self.output.append("{:^20}".format(state))
+                for key, value in data[cpu][state].items():
+                    if not value:
+                        value = "0"
+                    if key == "time_ns":
+                        self.output.append("{:^25}".format(value))
+                    else:
+                        self.output.append("{:^16}".format(value))
+                self.output.append("\n")
+        self.output.append("\n{}{}".format("-" * 120, "\n"))
+
+    def get_cpuidle_statistics(self):
+        try:
+            # Read cpuidle_device
+            cpuidle_devices = self.ramdump.address_of('cpuidle_devices')
+            cpuidle_drivers = self.ramdump.address_of('cpuidle_drivers')
+            usage_details = {}
+            state_dict = OrderedDict()
+            for i in self.ramdump.iter_cpus():
+                # Check for current cpu
+                cpuidle_dev_addr = cpuidle_devices + self.ramdump.per_cpu_offset(i)
+                cpuidle_drv_addr = cpuidle_drivers + self.ramdump.per_cpu_offset(i)
+                cpuidle_dev = self.ramdump.read_word(cpuidle_dev_addr)
+                cpuidle_drv = self.ramdump.read_word(cpuidle_drv_addr)
+                state_count = self.ramdump.read_structure_field(cpuidle_drv,
+                                                                'struct cpuidle_driver',
+                                                                'state_count')
+                cpuidle_drv_states = cpuidle_drv + self.ramdump.field_offset(
+                                                                'struct cpuidle_driver',
+                                                                'states')
+                cpuidle_state_usage_offset = self.ramdump.field_offset(
+                                                                'struct cpuidle_device',
+                                                                'states_usage')
+                cpuidle_state_usage_base = cpuidle_dev + cpuidle_state_usage_offset
+                cpu = "CPU{}".format(i)
+                usage_details[cpu] = {}
+                for state in range(state_count):
+                    if state_count < 10: # CPUIDLE_STATE_MAX
+                        state_usage_addr = cpuidle_state_usage_base + \
+                                           state * self.ramdump.sizeof('struct cpuidle_state_usage')
+                        cpuidle_drv_state = cpuidle_drv_states + \
+                                           state * self.ramdump.sizeof('struct cpuidle_state')
+                        state_name = self.ramdump.read_cstring(cpuidle_drv_state, 16)
+                        desc_offset = self.ramdump.field_offset('struct cpuidle_state', 'desc')
+                        state_desc = self.ramdump.read_cstring(cpuidle_drv_state + desc_offset, 32)
+                        # Usage data per cpu per state
+                        state = "state{}({})".format(state, state_name)
+                        state_dict[state_name] = state_desc
+                        usage_details[cpu][state] = self.get_cpuidle_usage_details(state_usage_addr)
+                    else:
+                        break
+            self.print_state_description(state_dict)
+            self.print_cpuidle_stats(usage_details)
+        except Exception as err:
+            self.output.append("\nUnable to extract CPUIdle Statistics\n\n")
+            self.output.append("\n{}{}".format("-" * 120, "\n"))
+
     def parse(self):
         self.output_file = self.ramdump.open_file('lpm.txt')
         self.get_bits()
@@ -389,6 +552,8 @@ class lpm(RamParser):
         self.get_stats()
         self.get_debug_phys()
         self.print_debug_phys()
+        self.print_pm_domain_info()
+        self.get_cpuidle_statistics()
         for i in self.output:
                 self.output_file.write(i)
         self.output_file.close()
