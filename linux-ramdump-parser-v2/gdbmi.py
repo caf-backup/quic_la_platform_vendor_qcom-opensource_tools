@@ -14,6 +14,7 @@ import re
 import subprocess
 import module_table
 from print_out import print_out_str
+from tempfile import NamedTemporaryFile
 
 GDB_SENTINEL = '(gdb) '
 GDB_DATA_LINE = '~'
@@ -367,6 +368,12 @@ class GdbMI(object):
         elif match_2:
              return match_2.group(1).replace('\\\\n\\"', "")
         return None
+
+    def read_memory(self, start, end):
+        """Reads memory from within elf (e.g. const data). start and end should be kaslr-offset values"""
+        tmpfile = NamedTemporaryFile(mode='rb')
+        self._run("dump binary memory {} {}-{} {}-{}".format(tmpfile.name, start, self.kaslr_offset, end, self.kaslr_offset))
+        return tmpfile.read()
 
 
 if __name__ == '__main__':

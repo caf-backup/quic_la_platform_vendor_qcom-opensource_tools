@@ -2060,82 +2060,82 @@ class RamDump():
             a = ebi[0].read(length)
             return a
 
-    def read_dword(self, addr_or_name, virtual=True, cpu=None):
-        s = self.read_string(addr_or_name, '<Q', virtual, cpu)
+    def read_dword(self, addr_or_name, virtual=True, cpu=None, allow_elf=False):
+        s = self.read_string(addr_or_name, '<Q', virtual, cpu, allow_elf)
         return s[0] if s is not None else None
 
-    def read_word(self, addr_or_name, virtual=True, cpu=None):
+    def read_word(self, addr_or_name, virtual=True, cpu=None, allow_elf=False):
         """returns a word size (pointer) read from ramdump"""
         if self.arm64:
-            s = self.read_string(addr_or_name, '<Q', virtual, cpu)
+            s = self.read_string(addr_or_name, '<Q', virtual, cpu, allow_elf)
         else:
-            s = self.read_string(addr_or_name, '<I', virtual, cpu)
+            s = self.read_string(addr_or_name, '<I', virtual, cpu, allow_elf)
         return s[0] if s is not None else None
 
-    def read_halfword(self, addr_or_name, virtual=True, cpu=None):
+    def read_halfword(self, addr_or_name, virtual=True, cpu=None, allow_elf=False):
         """returns a value corresponding to half the word size"""
         if self.arm64:
-            s = self.read_string(addr_or_name, '<I', virtual, cpu)
+            s = self.read_string(addr_or_name, '<I', virtual, cpu, allow_elf)
         else:
-            s = self.read_string(addr_or_name, '<H', virtual, cpu)
+            s = self.read_string(addr_or_name, '<H', virtual, cpu, allow_elf)
         return s[0] if s is not None else None
 
-    def read_slong(self, addr_or_name, virtual=True, cpu=None):
+    def read_slong(self, addr_or_name, virtual=True, cpu=None, allow_elf=False):
         """returns a value corresponding to half the word size"""
         if self.arm64:
-            s = self.read_string(addr_or_name, '<q', virtual, cpu)
+            s = self.read_string(addr_or_name, '<q', virtual, cpu, allow_elf)
         else:
-            s = self.read_string(addr_or_name, '<i', virtual, cpu)
+            s = self.read_string(addr_or_name, '<i', virtual, cpu, allow_elf)
         return s[0] if s is not None else None
 
-    def read_ulong(self, addr_or_name, virtual=True, cpu=None):
+    def read_ulong(self, addr_or_name, virtual=True, cpu=None, allow_elf=False):
         """returns a value corresponding to half the word size"""
         if self.arm64:
-            s = self.read_string(addr_or_name, '<Q', virtual, cpu)
+            s = self.read_string(addr_or_name, '<Q', virtual, cpu, allow_elf)
         else:
-            s = self.read_string(addr_or_name, '<I', virtual, cpu)
+            s = self.read_string(addr_or_name, '<I', virtual, cpu, allow_elf)
         return s[0] if s is not None else None
 
-    def read_byte(self, addr_or_name, virtual=True, cpu=None):
+    def read_byte(self, addr_or_name, virtual=True, cpu=None, allow_elf=False):
         """Reads a single byte."""
-        s = self.read_string(addr_or_name, '<B', virtual, cpu)
+        s = self.read_string(addr_or_name, '<B', virtual, cpu, allow_elf)
         return s[0] if s is not None else None
 
-    def read_bool(self, addr_or_name, virtual=True, cpu=None):
+    def read_bool(self, addr_or_name, virtual=True, cpu=None, allow_elf=False):
         """Reads a bool."""
-        s = self.read_string(addr_or_name, '<?', virtual, cpu)
+        s = self.read_string(addr_or_name, '<?', virtual, cpu, allow_elf)
         return s[0] if s is not None else None
 
-    def read_s64(self, addr_or_name, virtual=True, cpu=None):
+    def read_s64(self, addr_or_name, virtual=True, cpu=None, allow_elf=False):
         """returns a value guaranteed to be 64 bits"""
-        s = self.read_string(addr_or_name, '<q', virtual, cpu)
+        s = self.read_string(addr_or_name, '<q', virtual, cpu, allow_elf)
         return s[0] if s is not None else None
 
-    def read_u64(self, addr_or_name, virtual=True, cpu=None):
+    def read_u64(self, addr_or_name, virtual=True, cpu=None, allow_elf=False):
         """returns a value guaranteed to be 64 bits"""
-        s = self.read_string(addr_or_name, '<Q', virtual, cpu)
+        s = self.read_string(addr_or_name, '<Q', virtual, cpu, allow_elf)
         return s[0] if s is not None else None
 
-    def read_s32(self, addr_or_name, virtual=True, cpu=None):
+    def read_s32(self, addr_or_name, virtual=True, cpu=None, allow_elf=False):
         """returns a value guaranteed to be 32 bits"""
-        s = self.read_string(addr_or_name, '<i', virtual, cpu)
+        s = self.read_string(addr_or_name, '<i', virtual, cpu, allow_elf)
         return s[0] if s is not None else None
 
-    def read_u32(self, addr_or_name, virtual=True, cpu=None):
+    def read_u32(self, addr_or_name, virtual=True, cpu=None, allow_elf=False):
         """returns a value guaranteed to be 32 bits"""
-        s = self.read_string(addr_or_name, '<I', virtual, cpu)
+        s = self.read_string(addr_or_name, '<I', virtual, cpu, allow_elf)
         return s[0] if s is not None else None
 
-    def read_int(self, addr_or_name, virtual=True,  cpu=None):
+    def read_int(self, addr_or_name, virtual=True,  cpu=None, allow_elf=False):
         """Alias for :func:`~read_u32`"""
-        return self.read_u32(addr_or_name, virtual, cpu)
+        return self.read_u32(addr_or_name, virtual, cpu, allow_elf)
 
-    def read_u16(self, addr_or_name, virtual=True, cpu=None):
+    def read_u16(self, addr_or_name, virtual=True, cpu=None, allow_elf=False):
         """returns a value guaranteed to be 16 bits"""
-        s = self.read_string(addr_or_name, '<H', virtual, cpu)
+        s = self.read_string(addr_or_name, '<H', virtual, cpu, allow_elf)
         return s[0] if s is not None else None
 
-    def read_pointer(self, addr_or_name, virtual=True, cpu=None):
+    def read_pointer(self, addr_or_name, virtual=True, cpu=None, allow_elf=False):
         """Reads ``addr_or_name`` as a pointer variable.
 
         The read length is either 32-bit or 64-bit depending on the
@@ -2200,35 +2200,43 @@ class RamDump():
         return self.read_cstring(self.read_pointer(cstring_addr), max_length)
 
     def read_cstring(self, addr_or_name, max_length=100, virtual=True,
-                     cpu=None):
+                     cpu=None, allow_elf=False):
         """Reads a C string."""
         addr = addr_or_name
+        s = None
         if virtual:
             if cpu is not None:
                 pcpu_offset = self.per_cpu_offset(cpu)
                 addr_or_name = self.resolve_virt(addr_or_name)
                 addr_or_name += pcpu_offset + self.per_cpu_offset(cpu)
             addr = self.virt_to_phys(addr_or_name)
-        s = self.read_physical(addr, max_length)
+            if allow_elf and addr is None:
+                s = self.gdbmi.read_memory(addr_or_name, '{}+{}'.format(addr_or_name, max_length))
+        if not s:
+            s = self.read_physical(addr, max_length)
         if s is not None:
             a = s.decode('ascii', 'ignore')
             return a.split('\0')[0]
         else:
             return s
 
-    def read_binarystring(self, addr_or_name, length, virtual=True, cpu=None):
+    def read_binarystring(self, addr_or_name, length, virtual=True, cpu=None, allow_elf=False):
         """Reads binary data of specified length from addr_or_name."""
         addr = addr_or_name
+        s = None
         if virtual:
             if cpu is not None:
                 pcpu_offset = self.per_cpu_offset(cpu)
                 addr_or_name = self.resolve_virt(addr_or_name)
                 addr_or_name += pcpu_offset
             addr = self.virt_to_phys(addr_or_name)
-        s = self.read_physical(addr, length)
+            if allow_elf and addr is None:
+                s = self.gdbmi.read_memory(addr_or_name, '{}+{}'.format(addr_or_name, length))
+        if not s:
+            s = self.read_physical(addr, length)
         return s
 
-    def read_string(self, addr_or_name, format_string, virtual=True, cpu=None):
+    def read_string(self, addr_or_name, format_string, virtual=True, cpu=None, allow_elf=False):
         """Reads data using a format string.
 
         Reads data from addr_or_name using format_string (which should be a
@@ -2238,6 +2246,7 @@ class RamDump():
         """
         addr = addr_or_name
         per_cpu_string = ''
+        s = None
         if virtual:
             if cpu is not None:
                 pcpu_offset = self.per_cpu_offset(cpu)
@@ -2245,7 +2254,10 @@ class RamDump():
                 addr_or_name += pcpu_offset
                 per_cpu_string = ' with per-cpu offset of ' + hex(pcpu_offset)
             addr = self.virt_to_phys(addr_or_name)
-        s = self.read_physical(addr, struct.calcsize(format_string))
+            if allow_elf and addr is None:
+                s = self.gdbmi.read_memory(addr_or_name, '{}+{}'.format(addr_or_name, struct.calcsize(format_string)))
+        if not s:
+            s = self.read_physical(addr, struct.calcsize(format_string))
         if (s is None) or (s == ''):
             return None
         return struct.unpack(format_string, s)
