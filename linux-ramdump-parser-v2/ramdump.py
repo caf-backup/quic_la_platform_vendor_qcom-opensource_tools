@@ -895,12 +895,11 @@ class RamDump():
                 '!!! Your vmlinux is probably wrong for these dumps')
             print_out_str('!!! Exiting now')
             sys.exit(1)
-        if not self.minidump:
-            if not self.get_config():
-                print_out_str('!!! Could not get saved configuration')
-                print_out_str(
-                    '!!! This is really bad and probably indicates RAM corruption')
-                print_out_str('!!! Some features may be disabled!')
+        if not self.get_config():
+            print_out_str('!!! Could not get saved configuration')
+            print_out_str(
+                '!!! This is really bad and probably indicates RAM corruption')
+            print_out_str('!!! Some features may be disabled!')
 
         self.unwind = self.Unwinder(self)
         if not self.minidump and self.module_table.sym_paths_exist():
@@ -971,12 +970,12 @@ class RamDump():
 
         zconfig = NamedTemporaryFile(mode='wb', delete=False)
         # kconfig data starts with magic 8 byte string, go past that
-        s = self.read_cstring(kconfig_addr, 8)
+        s = self.read_cstring(kconfig_addr, 8, allow_elf=True)
         if s != 'IKCFG_ST':
             return
         kconfig_addr = kconfig_addr + 8
         for i in range(0, kconfig_size):
-            val = self.read_byte(kconfig_addr + i)
+            val = self.read_byte(kconfig_addr + i, allow_elf=True)
             zconfig.write(struct.pack('<B', val))
 
         zconfig.close()
