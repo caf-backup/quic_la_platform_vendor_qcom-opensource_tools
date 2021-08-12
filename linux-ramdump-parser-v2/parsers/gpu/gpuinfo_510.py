@@ -826,9 +826,9 @@ class GpuParser_510(RamParser):
                                                      'log_stream_enable')
             log_stream_enable = dump.read_bool(log_stream_addr)
         else:
-            gmu_device = 'struct genc_gmu_device'
+            gmu_device = 'struct gen7_gmu_device'
             gmu_dev_addr = dump.sibling_field_addr(self.devp,
-                                                   'struct genc_device',
+                                                   'struct gen7_device',
                                                    'adreno_dev', 'gmu')
 
         flags = dump.read_structure_field(gmu_dev_addr, gmu_device, 'flags')
