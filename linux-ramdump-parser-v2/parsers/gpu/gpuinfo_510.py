@@ -860,9 +860,9 @@ class GpuParser_510(RamParser):
         gmu_logs = dump.read_structure_field(gmu_dev_addr, gmu_device,
                                              'gmu_log')
         hostptr = dump.read_structure_field(gmu_logs,
-                                            'struct gmu_memdesc', 'hostptr')
+                                            'struct kgsl_memdesc', 'hostptr')
         size = dump.read_structure_field(gmu_logs,
-                                         'struct gmu_memdesc', 'size')
+                                         'struct kgsl_memdesc', 'size')
 
         self.writeln('\nTrace Details:')
         self.writeln('\tStart Address: ' + strhex(hostptr))
