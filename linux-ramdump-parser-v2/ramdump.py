@@ -580,6 +580,8 @@ class RamDump():
         self.kaslr_offset = options.kaslr_offset
         self.tz_start = 0
         self.ebi_start = 0
+        self.hyp_diag_addr = None
+        self.rm_debug_addr = None
         self.cpu_type = None
         self.tbi_mask = None
         self.svm_kaslr_offset = None
@@ -1557,6 +1559,14 @@ class RamDump():
         self.hw_id = board.board_num
         self.cpu_type = board.cpu
         self.imem_fname = board.imem_file_name
+        if hasattr(board, 'hyp_diag_addr'):
+            self.hyp_diag_addr = board.hyp_diag_addr
+        else:
+            self.hyp_diag_addr = None
+        if hasattr(board, 'rm_debug_addr'):
+            self.rm_debug_addr = board.rm_debug_addr
+        else:
+            self.rm_debug_addr = None
         if hasattr(board, 'tbi_mask'):
             self.tbi_mask = board.tbi_mask
         if hasattr(board, 'kaslr_addr'):
