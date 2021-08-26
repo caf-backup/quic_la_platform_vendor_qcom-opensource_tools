@@ -21,10 +21,12 @@ from print_out import print_out_str
 # Global Configurations
 ADRENO_DISPATCH_DRAWQUEUE_SIZE = 128
 KGSL_PRIORITY_MAX_RB_LEVELS = 4
-KGSL_MAX_PWRLEVELS = 10
-MAX_CONTEXT_ID = 800
-KGSL_MAX_POOLS = 4
+KGSL_MAX_PWRLEVELS = 16
+KGSL_MAX_POOLS = 6
 PAGE_SIZE = 4096
+
+
+kgsl_ctx_type = ['ANY', 'GL', 'CL', 'C2D', 'RS', 'VK']
 
 
 def strhex(x): return str(hex(x))
@@ -85,6 +87,9 @@ class GpuParser_54(RamParser):
         if self.ramdump.kernel_version >= (5, 4, 0):
             self.parser_list = self.parser_list_54
         elif self.ramdump.kernel_version >= (4, 19, 0):
+            global KGSL_MAX_PWRLEVELS, KGSL_MAX_POOLS
+            KGSL_MAX_PWRLEVELS = 10
+            KGSL_MAX_POOLS = 4
             self.parser_list = self.parser_list_419
 
         for subparser in self.parser_list:
@@ -124,6 +129,10 @@ class GpuParser_54(RamParser):
         comm_offset = dump.field_offset('struct kgsl_process_private', 'comm')
         comm = str(dump.read_cstring(proc_priv + comm_offset))
 
+        ctx_type = dump.read_structure_field(ctx_addr,
+                                             'struct adreno_context', 'type')
+        flags = dump.read_structure_field(ctx_addr,
+                                          'struct kgsl_context', 'flags')
         ktimeline_offset = dump.field_offset('struct kgsl_context',
                                              'ktimeline')
         ktimeline_addr = dump.read_pointer(ctx_addr + ktimeline_offset)
@@ -133,12 +142,14 @@ class GpuParser_54(RamParser):
                 ktimeline_addr, 'struct kgsl_sync_timeline', 'last_timestamp')
 
         self.writeln(format_str.format(context_id, str(upid), comm,
-                     strhex(ctx_addr), ktimeline_name, str(ktimeline_last_ts)))
+                     strhex(ctx_addr), kgsl_ctx_type[ctx_type], strhex(flags),
+                     ktimeline_name, str(ktimeline_last_ts)))
 
     def parse_context_data(self, dump):
-        format_str = '{0:10} {1:10} {2:20} {3:28} {4:36} {5:16}'
+        format_str = '{0:10} {1:10} {2:20} {3:28} {4:12} {5:12} {6:36} {7:16}'
         self.writeln(format_str.format("CTX_ID", "PID", "PROCESS_NAME",
-                                       "ADRENO_DRAWCTX_PTR", "KTIMELINE",
+                                       "ADRENO_DRAWCTX_PTR", "CTX_TYPE",
+                                       "FLAGS", "KTIMELINE",
                                        "TIMELINE_LAST_TS"))
         context_idr = dump.struct_field_addr(self.devp, 'struct kgsl_device',
                                              'context_idr')
@@ -146,9 +157,10 @@ class GpuParser_54(RamParser):
                                  self.print_context_data, format_str)
 
     def parse_active_context_data(self, dump):
-        format_str = '{0:10} {1:10} {2:20} {3:28} {4:36} {5:16}'
+        format_str = '{0:10} {1:10} {2:20} {3:28} {4:12} {5:12} {6:36} {7:16}'
         self.writeln(format_str.format("CTX_ID", "PID", "PROCESS_NAME",
-                                       "ADRENO_DRAWCTX_PTR", "KTIMELINE",
+                                       "ADRENO_DRAWCTX_PTR", "CTX_TYPE",
+                                       "FLAGS", "KTIMELINE",
                                        "TIMELINE_LAST_TS"))
         node_addr = dump.struct_field_addr(self.devp, 'struct adreno_device',
                                            'active_list')
@@ -161,9 +173,9 @@ class GpuParser_54(RamParser):
 
     def parse_open_process_mementry(self, dump):
         self.writeln('WARNING: Some nodes can be corrupted one, Ignore them.')
-        format_str = '{0:20} {1:20} {2:20} {3:30} {4:20} {5:20} {6:20}'
+        format_str = '{0:20} {1:20} {2:12} {3:30} {4:20} {5:20} {6:12} {7:20}'
         self.writeln(format_str.format("PID", "PNAME", "INDEX", "MEMDESC_ADDR",
-                                       "MEMDESC_SIZE", "GPUADDR",
+                                       "MEMDESC_SIZE", "GPUADDR", "FLAGS",
                                        "PENDING_FREE"))
 
         node_addr = dump.read('kgsl_driver.process_list.next')
@@ -183,6 +195,8 @@ class GpuParser_54(RamParser):
 
         comm_offset = dump.field_offset('struct kgsl_process_private', 'comm')
         pname = str(dump.read_cstring(kgsl_private_base_addr + comm_offset))
+        if pname == '' or upid is None:
+            return
 
         mem_idr_offset = dump.field_offset('struct kgsl_process_private',
                                            'mem_idr')
@@ -197,7 +211,7 @@ class GpuParser_54(RamParser):
 
     def __print_mementry_info(self, mementry_addr, pid, pname, print_header):
         dump = self.ramdump
-        format_string = '{0:20} {1:20} {2:20} {3:30} {4:20} {5:20} {6:20}'
+        format_str = '{0:20} {1:20} {2:12} {3:30} {4:20} {5:20} {6:12} {7:20}'
         memdesc_offset = dump.field_offset('struct kgsl_mem_entry', 'memdesc')
         kgsl_memdesc_address = mementry_addr + memdesc_offset
 
@@ -208,20 +222,22 @@ class GpuParser_54(RamParser):
                                             'gpuaddr')
         idr_id = dump.read_structure_field(mementry_addr,
                                            'struct kgsl_mem_entry', 'id')
+        flags = dump.read_structure_field(kgsl_memdesc_address,
+                                          'struct kgsl_memdesc', 'flags')
         pending_free = dump.read_structure_field(mementry_addr,
                                                  'struct kgsl_mem_entry',
                                                  'pending_free')
 
         if print_header[0] is True:
-            self.writeln(format_string.format(
+            self.writeln(format_str.format(
               str(pid), pname, hex(idr_id), hex(kgsl_memdesc_address),
-              str(size), hex(gpuaddr), str(pending_free)))
+              str(size), hex(gpuaddr), strhex(flags), str(pending_free)))
             # Set to False to skip printing pid and pname for the rest
             print_header[0] = False
         else:
-            self.writeln(format_string.format(
+            self.writeln(format_str.format(
               "", "", hex(idr_id), hex(kgsl_memdesc_address), str(size),
-              hex(gpuaddr), str(pending_free)))
+              hex(gpuaddr), strhex(flags), str(pending_free)))
 
     def parse_kgsl_data(self, dump):
         open_count = dump.read('device_3d0.dev.open_count')
@@ -974,7 +990,7 @@ class GpuParser_54(RamParser):
 
         comm_offset = dump.field_offset('struct kgsl_process_private', 'comm')
         pname = dump.read_cstring(kgsl_private_base_addr + comm_offset)
-        if pname == '' or pid is None:
+        if pname == '' or upid is None:
             return
 
         kgsl_pagetable_address = dump.read_structure_field(
