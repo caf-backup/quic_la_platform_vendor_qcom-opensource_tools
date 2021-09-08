@@ -1,4 +1,4 @@
-# Copyright (c) 2012-2015, 2020 The Linux Foundation. All rights reserved.
+# Copyright (c) 2012-2015, 2020-2021, The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -147,8 +147,8 @@ class RTB(RamParser):
         line = self.get_caller(caller)
         timestamp = self.get_timestamp(rtb_ptr)
         cycle_count = self.get_cycle_count(rtb_ptr)
-        rtbout.write('[{0}] [{1}] : {2} interrupt 0x{3:x} handled from addr {4:x} {5} {6}\n'.format(
-            timestamp, cycle_count, logtype, data, caller, func, line))
+        rtbout.write('[{0}] [{1}] : {2} interrupt 0x{3:x} {4} handled from addr {5:x} {6} {7}\n'.format(
+            timestamp, cycle_count, logtype, data, data, caller, func, line))
 
     def next_rtb_entry(self, index, step_size, mask):
         unused_buffer_size = (mask + 1) % step_size
@@ -158,7 +158,11 @@ class RTB(RamParser):
         return (index + step_size) & mask
 
     def parse(self):
-        rtb = self.ramdump.address_of('msm_rtb')
+        rtb_ptr = self.ramdump.address_of('msm_rtb_ptr')
+        if rtb_ptr is None:
+            rtb = self.ramdump.address_of('msm_rtb')
+        else:
+            rtb = self.ramdump.read_pointer(rtb_ptr)
         if rtb is None:
             print_out_str(
                 '[!] RTB was not enabled in this build. No RTB files will be generated')
@@ -176,6 +180,12 @@ class RTB(RamParser):
         step_size = self.ramdump.read_u32(rtb + step_size_offset)
         total_entries = self.ramdump.read_int(rtb + nentries_offset)
         rtb_read_ptr = self.ramdump.read_word(rtb + rtb_entry_offset)
+
+        if rtb_ptr is not None:
+            rtb_idx_array_offset = self.ramdump.field_offset('struct msm_rtb_state', 'msm_rtb_idx')
+            rtb_idx_size = self.ramdump.sizeof('struct rtb_idx')
+            rtb_idx_atomic_offset = self.ramdump.field_offset('struct rtb_idx', 'idx')
+
         if step_size is None or step_size > self.ramdump.get_num_cpus():
             print_out_str('RTB dump looks corrupt! Got step_size=%s' %
                           hex(step_size) if step_size is not None else None)
@@ -185,12 +195,17 @@ class RTB(RamParser):
             gdb_cmd = NamedTemporaryFile(mode='w+t', delete=False)
             gdb_out = NamedTemporaryFile(mode='w+t', delete=False)
             mask = self.ramdump.read_int(rtb + nentries_offset) - 1
-            if step_size == 1:
-                last = self.ramdump.read_int(
-                    self.ramdump.address_of('msm_rtb_idx'))
+            if rtb_ptr is not None:
+                last = self.ramdump.read_int(rtb +
+                                             rtb_idx_array_offset + (i * rtb_idx_size) +
+                                             rtb_idx_atomic_offset)
             else:
-                last = self.ramdump.read_int(self.ramdump.address_of(
-                    'msm_rtb_idx_cpu'), cpu=i )
+                if step_size == 1:
+                    last = self.ramdump.read_int(
+                        self.ramdump.address_of('msm_rtb_idx'))
+                else:
+                    last = self.ramdump.read_int(self.ramdump.address_of(
+                        'msm_rtb_idx_cpu'), cpu=i )
             last = last & mask
             last_ptr = 0
             next_ptr = 0

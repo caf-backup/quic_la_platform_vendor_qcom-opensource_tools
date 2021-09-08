@@ -15,6 +15,7 @@ import traceback
 
 from parser_util import RamParser
 from parsers.gpu.gpu_snapshot import create_snapshot_from_ramdump
+from parsers.gpu.gpu_eventlog import parse_eventlog_buffer
 from print_out import print_out_str
 
 
@@ -56,6 +57,7 @@ class GpuParser_510(RamParser):
             (self.parse_fence_data, "Fences", 'gpu_sync_fences.txt'),
             (self.parse_open_process_mementry, "Open Process Mementries",
              'open_process_mementries.txt'),
+            (self.parse_eventlog_data, "Eventlog Buffer", 'eventlog.txt'),
         ]
 
         self.rtw = linux_radix_tree.RadixTreeWalker(dump)
@@ -81,7 +83,7 @@ class GpuParser_510(RamParser):
     def writeln(self, string=""):
         self.out.write(string + '\n')
 
-    def print_context_data(self, ctx_addr):
+    def print_context_data(self, ctx_addr, format_str):
         dump = self.ramdump
         context_id = str(dump.read_structure_field(
             ctx_addr, 'struct kgsl_context', 'id'))
@@ -96,32 +98,43 @@ class GpuParser_510(RamParser):
         upid_offset = dump.field_offset('struct pid', 'numbers')
         upid = dump.read_int(pid + upid_offset)
 
-        comm_offset = dump.field_offset('struct kgsl_process_private',
-                                        'comm')
+        comm_offset = dump.field_offset('struct kgsl_process_private', 'comm')
         comm = str(dump.read_cstring(proc_priv + comm_offset))
-        ptr = strhex(ctx_addr)
-        format_str = '{0:20} {1:20} {2:20} {3:30}'
-        self.writeln(format_str.format(context_id, str(upid), comm, ptr))
+
+        ktimeline_offset = dump.field_offset('struct kgsl_context',
+                                             'ktimeline')
+        ktimeline_addr = dump.read_pointer(ctx_addr + ktimeline_offset)
+        name_offset = dump.field_offset('struct kgsl_sync_timeline', 'name')
+        ktimeline_name = dump.read_cstring(ktimeline_addr + name_offset)
+        ktimeline_last_ts = dump.read_structure_field(
+                ktimeline_addr, 'struct kgsl_sync_timeline', 'last_timestamp')
+
+        self.writeln(format_str.format(context_id, str(upid), comm,
+                     strhex(ctx_addr), ktimeline_name, str(ktimeline_last_ts)))
 
     def parse_context_data(self, dump):
-        format_str = '{0:20} {1:20} {2:20} {3:30}'
-        self.writeln(format_str.format("CONTEXT ID", "PID", "PROCESS_NAME",
-                                       "ADRENO_DRAW_CONTEXT_PTR"))
+        format_str = '{0:10} {1:10} {2:20} {3:28} {4:36} {5:16}'
+        self.writeln(format_str.format("CTX_ID", "PID", "PROCESS_NAME",
+                                       "ADRENO_DRAWCTX_PTR", "KTIMELINE",
+                                       "TIMELINE_LAST_TS"))
         context_idr = dump.struct_field_addr(self.devp, 'struct kgsl_device',
                                              'context_idr')
-        self.rtw.walk_radix_tree(context_idr, self.print_context_data)
+        self.rtw.walk_radix_tree(context_idr,
+                                 self.print_context_data, format_str)
 
     def parse_active_context_data(self, dump):
-        format_str = '{0:20} {1:20} {2:20} {3:30}'
-        self.writeln(format_str.format("CONTEXT ID", "PID", "PROCESS_NAME",
-                                       "ADRENO_DRAW_CONTEXT_PTR"))
+        format_str = '{0:10} {1:10} {2:20} {3:28} {4:36} {5:16}'
+        self.writeln(format_str.format("CTX_ID", "PID", "PROCESS_NAME",
+                                       "ADRENO_DRAWCTX_PTR", "KTIMELINE",
+                                       "TIMELINE_LAST_TS"))
         node_addr = dump.struct_field_addr(self.devp, 'struct adreno_device',
                                            'active_list')
         list_elem_offset = dump.field_offset('struct adreno_context',
                                              'active_node')
         active_context_list_walker = linux_list.ListWalker(dump, node_addr,
                                                            list_elem_offset)
-        active_context_list_walker.walk(node_addr, self.print_context_data)
+        active_context_list_walker.walk(node_addr,
+                                        self.print_context_data, format_str)
 
     def parse_open_process_mementry(self, dump):
         self.writeln('WARNING: Some nodes can be corrupted one, Ignore them.')
@@ -299,6 +312,9 @@ class GpuParser_510(RamParser):
         for i in range(KGSL_MAX_POOLS):
             self.writeln('\t' + str(pool_order[i]) + ' order pool size: ' +
                          str_convert_to_kb(pool_size[i]*PAGE_SIZE))
+
+    def parse_eventlog_data(self, dump):
+        parse_eventlog_buffer(self.writeln, dump)
 
     def parse_dispatcher_data(self, dump):
         dispatcher_addr = dump.struct_field_addr(self.devp,
@@ -735,10 +751,10 @@ class GpuParser_510(RamParser):
                      + str(kgsl_sync_timeline_kref_counter))
 
     def parse_open_process_data(self, dump):
-        format_str = '{0:10} {1:20} {2:20} {3:30} {4:20}'
+        format_str = '{0:10} {1:20} {2:20} {3:30} {4:20} {5:20}'
         self.writeln(format_str.format("PID", "PNAME", "PROCESS_PRIVATE_PTR",
-                                       "kgsl-pagetable-address",
-                                       "kgsl-cur-memory"))
+                                       "KGSL_PAGETABLE_ADDRESS",
+                                       "KGSL_CUR_MEMORY", "CTX_CNT"))
 
         node_addr = dump.read('kgsl_driver.process_list.next')
         list_elem_offset = dump.field_offset(
@@ -756,6 +772,8 @@ class GpuParser_510(RamParser):
 
         comm_offset = dump.field_offset('struct kgsl_process_private', 'comm')
         pname = dump.read_cstring(kgsl_private_base_addr + comm_offset)
+        if pname == '' or pid is None:
+            return
 
         kgsl_pagetable_address = dump.read_structure_field(
             kgsl_private_base_addr, 'struct kgsl_process_private', 'pagetable')
@@ -766,9 +784,13 @@ class GpuParser_510(RamParser):
 
         val = dump.read_slong(stats_addr)
 
+        ctxt_count = dump.read_structure_field(kgsl_private_base_addr,
+                                               'struct kgsl_process_private',
+                                               'ctxt_count')
         self.writeln(format_str.format(
             str(upid), str(pname), hex(kgsl_private_base_addr),
-            hex(kgsl_pagetable_address), str_convert_to_kb(val)))
+            hex(kgsl_pagetable_address), str_convert_to_kb(val),
+            str(ctxt_count)))
 
     def parse_pagetables(self, dump):
         format_str = '{0:14} {1:16} {2:20}'
@@ -821,9 +843,9 @@ class GpuParser_510(RamParser):
                                                      'log_stream_enable')
             log_stream_enable = dump.read_bool(log_stream_addr)
         else:
-            gmu_device = 'struct genc_gmu_device'
+            gmu_device = 'struct gen7_gmu_device'
             gmu_dev_addr = dump.sibling_field_addr(self.devp,
-                                                   'struct genc_device',
+                                                   'struct gen7_device',
                                                    'adreno_dev', 'gmu')
 
         flags = dump.read_structure_field(gmu_dev_addr, gmu_device, 'flags')
@@ -855,9 +877,9 @@ class GpuParser_510(RamParser):
         gmu_logs = dump.read_structure_field(gmu_dev_addr, gmu_device,
                                              'gmu_log')
         hostptr = dump.read_structure_field(gmu_logs,
-                                            'struct gmu_memdesc', 'hostptr')
+                                            'struct kgsl_memdesc', 'hostptr')
         size = dump.read_structure_field(gmu_logs,
-                                         'struct gmu_memdesc', 'size')
+                                         'struct kgsl_memdesc', 'size')
 
         self.writeln('\nTrace Details:')
         self.writeln('\tStart Address: ' + strhex(hostptr))
