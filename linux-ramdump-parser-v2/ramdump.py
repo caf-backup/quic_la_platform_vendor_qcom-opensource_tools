@@ -2328,8 +2328,8 @@ class RamDump():
         ffffffc000c61108: 6c65 2032 3031 3430 3832 3720 2870 7265  le 20140827 (pre
         ffffffc000c61118: 7265 6c65 6173 6529 2028 4743 4329 2029  release) (GCC) )
         """
-        import StringIO
-        sio = StringIO.StringIO()
+        from io import StringIO
+        sio = StringIO()
         address = self.resolve_virt(addr_or_name)
         parser_util.xxd(
             address,
