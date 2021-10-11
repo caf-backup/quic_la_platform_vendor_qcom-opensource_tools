@@ -777,8 +777,15 @@ class RamDump():
             else:
                 self.kasan_shadow_size = 1 << (va_bits - 3)
 
-            self.kimage_vaddr = self.page_end + self.kasan_shadow_size + modules_vsize + \
-                                bpf_jit_vsize
+            self.kimage_vaddr = self.page_end + modules_vsize + bpf_jit_vsize
+            # new since v5.11: https://lore.kernel.org/all/20201008153602.9467-3-ardb@kernel.org/
+            # The KASAN shadow region is reconfigured so that it ends at the start of
+            # the vmalloc region, and grows downwards. That way, the arrangement of
+            # the vmalloc space (which contains kernel mappings, modules, BPF region,
+            # the vmemmap array etc) is identical between non-KASAN and KASAN builds,
+            # which aids debugging.
+            if self.get_kernel_version() < (5, 11, 0):
+                self.kimage_vaddr += self.kasan_shadow_size
         else:
             va_bits = 39
             modules_vsize = 0x08000000
