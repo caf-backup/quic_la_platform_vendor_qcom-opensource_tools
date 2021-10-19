@@ -277,16 +277,19 @@ def print_cma_areas(ramdump):
     str1 = "name : {0}\n\n"
     cma = [0] * cma_area_count
     cma_name = [None] * cma_area_count
-
     while cma_index < cma_area_count:
-        cma_area = cma_area_base_addr + cma_index*size_of_cma_area
+        cma_area = cma_area_base_addr + cma_index * size_of_cma_area
         base_pfn = ramdump.read_structure_field(
-                                cma_area, 'struct cma', 'base_pfn')
+            cma_area, 'struct cma', 'base_pfn')
         cma_size = ramdump.read_structure_field(
-                                cma_area, 'struct cma', 'count')
-        name_addr = ramdump.read_structure_field(
-                                cma_area, 'struct cma', 'name')
-        name = ramdump.read_cstring(name_addr, 48)
+            cma_area, 'struct cma', 'count')
+        if (ramdump.kernel_version >= (5, 10, 0)):
+            name_addr_offset = ramdump.field_offset('struct cma', 'name')
+            name_addr = (cma_area + name_addr_offset)
+            name = ramdump.read_cstring(name_addr, 64)
+        else:
+            name_addr = ramdump.read_structure_field(cma_area, 'struct cma', 'name')
+            name = ramdump.read_cstring(name_addr, 48)
         if name == "linux,cma":
             name = "dma_contiguous_default_area"
         cma[cma_index] = cma_area
