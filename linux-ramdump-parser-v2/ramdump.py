@@ -1644,22 +1644,65 @@ class RamDump():
 
         if self.kernel_version > (4, 9, 0):
             module_core_offset = self.field_offset('struct module', 'core_layout.base')
+            sect_name_offset = self.field_offset('struct module_sect_attr', 'battr') + self.field_offset('struct bin_attribute', 'attr') + self.field_offset('struct attribute', 'name')
         else:
             module_core_offset = self.field_offset('struct module', 'module_core')
+            sect_name_offset = self.field_offset('struct module_sect_attr', 'name')
 
         kallsyms_offset = self.field_offset('struct module', 'kallsyms')
+        sect_addr_offset = self.field_offset('struct module_sect_attr', 'address')
+        nsections_offset = self.field_offset('struct module_sect_attrs', 'nsections')
+        section_attrs_offset = self.field_offset('struct module_sect_attrs', 'attrs')
+        section_attr_size = self.sizeof('struct module_sect_attr')
+        mod_sect_attrs_offset = self.field_offset('struct module', 'sect_attrs')
+        mod_state_offset = self.field_offset('struct module', 'state')
+        mod_attr_grp_name_offest = self.field_offset('struct module_sect_attrs', 'grp') + self.field_offset('struct attribute_group', 'name')
+        module_states = self.gdbmi.get_enum_lookup_table('module_state', 5)
 
         next_list_ent = self.read_pointer(mod_list + next_offset)
         while next_list_ent and next_list_ent != mod_list:
-            mod_tbl_ent = module_table.module_table_entry()
             module = next_list_ent - list_offset
-            name_ptr = module + name_offset
-            mod_tbl_ent.name = self.read_cstring(name_ptr)
+
+            mod_tbl_ent = module_table.module_table_entry()
+            mod_tbl_ent.name = self.read_cstring(module + name_offset)
+            state = self.read_u32(module + mod_state_offset)
+            if mod_tbl_ent.name is None or state is None or state > len(module_states) or module_states[state] not in ['MODULE_STATE_LIVE']:
+                msg = 'module state @{:x}'.format(module)
+                if mod_tbl_ent.name:
+                    msg += ' [{}]'.format(mod_tbl_ent.name)
+                msg += ' is {}'.format(state)
+                if state is not None and state < len(module_states):
+                    msg += '({})'.format(module_states[state])
+                print_out_str(msg)
+                next_list_ent = self.read_pointer(next_list_ent + next_offset)
+                continue
             mod_tbl_ent.module_offset = self.read_pointer(module + module_core_offset)
             if mod_tbl_ent.module_offset is None:
                 mod_tbl_ent.module_offset = 0
             mod_tbl_ent.kallsyms_addr = self.read_pointer(module + kallsyms_offset)
+            # Loop through sect_attrs
+            mod_tbl_ent.section_offsets = {}
+            mod_sect_attrs = self.read_pointer(module + mod_sect_attrs_offset)  # module.sect_attrs
+            if self.read_cstring(self.read_pointer(mod_sect_attrs + mod_attr_grp_name_offest))  != 'sections':
+                # Observed some ramdumps did not have proper attribute set up yet when module is being loaded.
+                # "LIVE" state check not good enough, so add one more sanity check
+                print_out_str('Unexpected variation in module section group name, skipping loading sections for {}'.format(mod_tbl_ent.name))
+                next_list_ent = self.read_pointer(next_list_ent + next_offset)
+                continue
+            for i in range(0, self.read_u32(mod_sect_attrs + nsections_offset)):
+                # attr_ptr = module.sect_attrs.attrs[i]
+                attr_ptr = mod_sect_attrs + section_attrs_offset + (i * section_attr_size)
+                # sect_name = attr_ptr.battr.attr.name (for 5.4+)
+                sect_name = self.read_cstring(self.read_pointer(attr_ptr + sect_name_offset))
+                # sect_addr = attr_ptr.address
+                sect_addr = self.read_word(attr_ptr + sect_addr_offset)
+                # https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/scripts/gdb/linux/symbols.py?h=v5.14#n102
+                if sect_name not in ['.data', '.data..read_mostly', '.rodata', '.bss',
+                                     '.text', '.text.bss', '.text.hot', '.text.unlikely']:
+                    continue
+                mod_tbl_ent.section_offsets[sect_name] = sect_addr
             self.module_table.add_entry(mod_tbl_ent)
+
             next_list_ent = self.read_pointer(next_list_ent + next_offset)
 
     def retrieve_minidump_modules(self):
@@ -1688,56 +1731,6 @@ class RamDump():
             ko_file_list[mod_tbl_ent.name] = temp_data
         if not mod_tbl_ent.set_sym_path(ko_file_list[mod_tbl_ent.name]):
             return
-
-        try:
-            mod = import_module('elftools.elf.elffile')
-            ELFFile = mod.ELFFile
-            mod = import_module('elftools.elf.constants')
-            SHF = mod.SH_FLAGS
-            ARCH_SHF_SMALL = 0  # 0 for arm and arm64
-            SHF_RO_AFTER_INIT = 0x00200000  # custom for Linux
-            with open(mod_tbl_ent.get_sym_path(), 'rb') as fd:
-                elf = ELFFile(fd)
-                # This logic mirrors kernel/module.c:layout_sections and layout_and_allocate
-                # https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/kernel/module.c?h=v5.13#n2425
-                masks = [
-                    (SHF.SHF_EXECINSTR | SHF.SHF_ALLOC, ARCH_SHF_SMALL),
-                    (SHF.SHF_ALLOC, SHF.SHF_WRITE | ARCH_SHF_SMALL),
-                    (SHF_RO_AFTER_INIT | SHF.SHF_ALLOC, ARCH_SHF_SMALL),
-                    (SHF.SHF_WRITE | SHF.SHF_ALLOC, ARCH_SHF_SMALL),
-                    (ARCH_SHF_SMALL | SHF.SHF_ALLOC, 0)
-                ]
-                size = 0
-                mod_tbl_ent.section_offsets = {}
-                for mask in masks:
-                    for s in elf.iter_sections():
-                        sh_flags = s['sh_flags']
-                        # https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/kernel/module.c?h=v5.13#n3524
-                        if s.name == '.data..ro_after_init':
-                            sh_flags |= SHF_RO_AFTER_INIT
-                        if s.name == '__jump_table':
-                            sh_flags |= SHF_RO_AFTER_INIT
-                        # https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/kernel/module.c?h=v5.13#n2442
-                        if (sh_flags & mask[0]) != mask[0] \
-                            or (sh_flags & mask[1]) \
-                            or s.name in mod_tbl_ent.section_offsets.keys() \
-                            or s.name.startswith('.init') or s.name.startswith('.ARM.extab.init') or s.name.startswith('.ARM.exidx.init'):
-                            continue
-                        # this is internals of get_offset -- arch_mod_section_prepend not defined for arm or arm64 so far
-                        # https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/kernel/module.c?h=v5.13#n2397
-                        if s['sh_addralign']:
-                            size = (size + s['sh_addralign'] - 1) & ~(s['sh_addralign'] - 1)
-
-                        if s.name:
-                            # Add to section_offsets table!
-                            mod_tbl_ent.section_offsets[s.name] = size + mod_tbl_ent.module_offset
-                        size += s['sh_size']
-                    # This is the internals of debug_align
-                    # https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/kernel/module.c?h=v5.13#n2456
-                    if self.is_config_defined('CONFIG_ARCH_HAS_STRICT_MODULE_RWX'):
-                        size = (size + (self.get_page_size() - 1)) & ~(self.get_page_size() - 1)
-        except ImportError:
-            pass
 
         args = [self.nm_path, '-n', mod_tbl_ent.get_sym_path()]
         p = subprocess.run(args, stdout=subprocess.PIPE)
@@ -2335,8 +2328,8 @@ class RamDump():
         ffffffc000c61108: 6c65 2032 3031 3430 3832 3720 2870 7265  le 20140827 (pre
         ffffffc000c61118: 7265 6c65 6173 6529 2028 4743 4329 2029  release) (GCC) )
         """
-        import StringIO
-        sio = StringIO.StringIO()
+        from io import StringIO
+        sio = StringIO()
         address = self.resolve_virt(addr_or_name)
         parser_util.xxd(
             address,
