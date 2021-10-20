@@ -615,6 +615,17 @@ class MDPinfo(RamParser):
         sde_dbg_evtlog_log_["data"] = tmp
         self.default_parse(sde_dbg_evtlog_log_, output_fd)
 
+    def crtc_dest_scaler_setup(self, sde_dbg_evtlog_log_, output_fd):
+        xlog_data = str(sde_dbg_evtlog_log_["data"])
+        data_arr = xlog_data.split(" ")
+        tmp = xlog_data
+        tmp  = tmp + ((50 - len(str(sde_dbg_evtlog_log_["data"]))) * " ")
+        if(data_arr[4] != '0'):
+            tmp = tmp + "==> "
+            tmp = tmp + "DEST_SCALAR_ENABLED"
+        sde_dbg_evtlog_log_["data"] = tmp
+        self.default_parse(sde_dbg_evtlog_log_, output_fd)
+
     def crtc_handle_power_event(self, sde_dbg_evtlog_log_, output_fd):
         xlog_data = str(sde_dbg_evtlog_log_["data"])
         data_arr = xlog_data.split(" ")
@@ -1397,6 +1408,8 @@ class MDPinfo(RamParser):
                     self.crtc_handle_power_event(sde_dbg_evtlog_log[i], output_fd)
                 elif "_sde_rm_print_rsvps" in sde_dbg_evtlog_log[i]["fun_name"]:
                     self.rm_print_rsvps(sde_dbg_evtlog_log[i], output_fd)
+                elif "_sde_crtc_dest_scaler_setup" in sde_dbg_evtlog_log[i]["fun_name"]:
+                    self.crtc_dest_scaler_setup(sde_dbg_evtlog_log[i], output_fd)
                 elif "---------------" in sde_dbg_evtlog_log[i]["fun_name"]:
                     self.commit_printing(sde_dbg_evtlog_log[i],output_fd)
                 else:
