@@ -850,7 +850,10 @@ class RamDump():
             self.mmu = Armv8MMU(self)
         elif pg_dir_size == 0x4000:
             print_out_str('Using non-LPAE MMU')
-            self.mmu = Armv7MMU(self)
+            if self.minidump:
+                self.mmu = None
+            else:
+                self.mmu = Armv7MMU(self)
         elif pg_dir_size == 0x5000:
             print_out_str('Using LPAE MMU')
             text_offset = 0x8000
