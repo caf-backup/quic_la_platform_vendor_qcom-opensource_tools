@@ -39,6 +39,8 @@ def parse_held_locks(ramdump, task, my_task_out):
     for i in range (0, task_lockdep_depth):
         held_lock_indx = held_locks + (i * sizeof_held_lock)
         hl_prev_chain_key = ramdump.read_structure_field(held_lock_indx, 'struct held_lock', 'prev_chain_key')
+        if not hl_prev_chain_key:
+            break
         hl_acquire_ip = ramdump.read_structure_field(held_lock_indx, 'struct held_lock','acquire_ip')
         hl_acquire_ip_caller = ramdump.read_structure_field(held_lock_indx, 'struct held_lock','acquire_ip_caller')
         if hl_acquire_ip_caller is None:
@@ -60,6 +62,29 @@ def parse_held_locks(ramdump, task, my_task_out):
         hl_irq_context = (hl_class_idx_full & 0x00006000) >> 13
         hl_trylock = (hl_class_idx_full & 0x00008000) >> 15
         hl_read = (hl_class_idx_full & 0x00030000) >> 16
+        if hl_read:
+            # Handling read write semaphores, lockdep doesn't do anything for down_reads
+            # This leads to no way of differentiating if this task is waiting on read_lock
+            # find the waiter from that lock to update accordingly
+            try:
+                lock_type = ramdump.type_of(hl_name)
+                my_task_out.write("\n lock type is {}".format(lock_type))
+                if "semaphore" in lock_type or "sem" in lock_type:
+                    lock_struct = ramdump.container_of(hl_instance, lock_type, 'dep_map')
+                    my_task_out.write("\n lock struct : {:x}".format(lock_struct))
+                    rw_writer = ramdump.read_structure_field(lock_struct, lock_type, 'writer')
+                    my_task_out.write("\n writer : {:x}".format(rw_writer))
+                    writer_task = ramdump.read_structure_field(rw_writer, 'struct rcuwait', 'task')
+                    my_task_out.write("\n writer task : {:x}, task : {:x}".format(writer_task, task))
+                    if writer_task and (writer_task != task):
+                        # Reader is blocked and change timestamp only if task is not the writer
+                        if (ramdump.is_config_defined('CONFIG_LOCK_STAT')):
+                            hl_waittime_stamp = hl_holdtime_stamp
+            except Exception as err:
+                my_task_out.write("\nError encountered while resolving read lock ownership")
+                my_task_out.write("\n{}\n".format(err))
+                pass
+
         hl_check = (hl_class_idx_full & 0x00040000) >> 18
         hl_hardirqs_off = (hl_class_idx_full & 0x00080000) >> 19
         hl_references = (hl_class_idx_full & 0xFFF00000) >> 20
