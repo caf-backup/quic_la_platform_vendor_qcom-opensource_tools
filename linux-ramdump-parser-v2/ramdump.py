@@ -777,8 +777,15 @@ class RamDump():
             else:
                 self.kasan_shadow_size = 1 << (va_bits - 3)
 
-            self.kimage_vaddr = self.page_end + self.kasan_shadow_size + modules_vsize + \
-                                bpf_jit_vsize
+            self.kimage_vaddr = self.page_end + modules_vsize + bpf_jit_vsize
+            # new since v5.11: https://lore.kernel.org/all/20201008153602.9467-3-ardb@kernel.org/
+            # The KASAN shadow region is reconfigured so that it ends at the start of
+            # the vmalloc region, and grows downwards. That way, the arrangement of
+            # the vmalloc space (which contains kernel mappings, modules, BPF region,
+            # the vmemmap array etc) is identical between non-KASAN and KASAN builds,
+            # which aids debugging.
+            if self.get_kernel_version() < (5, 11, 0):
+                self.kimage_vaddr += self.kasan_shadow_size
         else:
             va_bits = 39
             modules_vsize = 0x08000000
@@ -850,7 +857,10 @@ class RamDump():
             self.mmu = Armv8MMU(self)
         elif pg_dir_size == 0x4000:
             print_out_str('Using non-LPAE MMU')
-            self.mmu = Armv7MMU(self)
+            if self.minidump:
+                self.mmu = None
+            else:
+                self.mmu = Armv7MMU(self)
         elif pg_dir_size == 0x5000:
             print_out_str('Using LPAE MMU')
             text_offset = 0x8000
@@ -1644,9 +1654,12 @@ class RamDump():
 
         if self.kernel_version > (4, 9, 0):
             module_core_offset = self.field_offset('struct module', 'core_layout.base')
-            sect_name_offset = self.field_offset('struct module_sect_attr', 'battr') + self.field_offset('struct bin_attribute', 'attr') + self.field_offset('struct attribute', 'name')
         else:
             module_core_offset = self.field_offset('struct module', 'module_core')
+
+        if self.kernel_version > (4, 18, 0):
+            sect_name_offset = self.field_offset('struct module_sect_attr', 'battr') + self.field_offset('struct bin_attribute', 'attr') + self.field_offset('struct attribute', 'name')
+        else:
             sect_name_offset = self.field_offset('struct module_sect_attr', 'name')
 
         kallsyms_offset = self.field_offset('struct module', 'kallsyms')
@@ -1655,6 +1668,9 @@ class RamDump():
         section_attrs_offset = self.field_offset('struct module_sect_attrs', 'attrs')
         section_attr_size = self.sizeof('struct module_sect_attr')
         mod_sect_attrs_offset = self.field_offset('struct module', 'sect_attrs')
+        mod_state_offset = self.field_offset('struct module', 'state')
+        mod_attr_grp_name_offest = self.field_offset('struct module_sect_attrs', 'grp') + self.field_offset('struct attribute_group', 'name')
+        module_states = self.gdbmi.get_enum_lookup_table('module_state', 5)
 
         next_list_ent = self.read_pointer(mod_list + next_offset)
         while next_list_ent and next_list_ent != mod_list:
@@ -1662,6 +1678,17 @@ class RamDump():
 
             mod_tbl_ent = module_table.module_table_entry()
             mod_tbl_ent.name = self.read_cstring(module + name_offset)
+            state = self.read_u32(module + mod_state_offset)
+            if mod_tbl_ent.name is None or state is None or state > len(module_states) or module_states[state] not in ['MODULE_STATE_LIVE']:
+                msg = 'module state @{:x}'.format(module)
+                if mod_tbl_ent.name:
+                    msg += ' [{}]'.format(mod_tbl_ent.name)
+                msg += ' is {}'.format(state)
+                if state is not None and state < len(module_states):
+                    msg += '({})'.format(module_states[state])
+                print_out_str(msg)
+                next_list_ent = self.read_pointer(next_list_ent + next_offset)
+                continue
             mod_tbl_ent.module_offset = self.read_pointer(module + module_core_offset)
             if mod_tbl_ent.module_offset is None:
                 mod_tbl_ent.module_offset = 0
@@ -1669,6 +1696,12 @@ class RamDump():
             # Loop through sect_attrs
             mod_tbl_ent.section_offsets = {}
             mod_sect_attrs = self.read_pointer(module + mod_sect_attrs_offset)  # module.sect_attrs
+            if self.read_cstring(self.read_pointer(mod_sect_attrs + mod_attr_grp_name_offest))  != 'sections':
+                # Observed some ramdumps did not have proper attribute set up yet when module is being loaded.
+                # "LIVE" state check not good enough, so add one more sanity check
+                print_out_str('Unexpected variation in module section group name, skipping loading sections for {}'.format(mod_tbl_ent.name))
+                next_list_ent = self.read_pointer(next_list_ent + next_offset)
+                continue
             for i in range(0, self.read_u32(mod_sect_attrs + nsections_offset)):
                 # attr_ptr = module.sect_attrs.attrs[i]
                 attr_ptr = mod_sect_attrs + section_attrs_offset + (i * section_attr_size)
@@ -2308,8 +2341,8 @@ class RamDump():
         ffffffc000c61108: 6c65 2032 3031 3430 3832 3720 2870 7265  le 20140827 (pre
         ffffffc000c61118: 7265 6c65 6173 6529 2028 4743 4329 2029  release) (GCC) )
         """
-        import StringIO
-        sio = StringIO.StringIO()
+        from io import StringIO
+        sio = StringIO()
         address = self.resolve_virt(addr_or_name)
         parser_util.xxd(
             address,
