@@ -256,10 +256,7 @@ class RunQueues(RamParser):
             else:
                 stack_addr = stack_addr & 0xFFFFFFFF
 
-            if self.ramdump.kernel_version >= (5, 10, 0) and self.ramdump.minidump:
-                stack_addr = stack_addr
-            else:
-                stack_addr = self.ramdump.read_u64(stack_addr)
+            stack_addr = self.ramdump.read_u64(stack_addr)
 
             if self.ramdump.arm64:
                 stack_align = 8
