@@ -777,8 +777,15 @@ class RamDump():
             else:
                 self.kasan_shadow_size = 1 << (va_bits - 3)
 
-            self.kimage_vaddr = self.page_end + self.kasan_shadow_size + modules_vsize + \
-                                bpf_jit_vsize
+            self.kimage_vaddr = self.page_end + modules_vsize + bpf_jit_vsize
+            # new since v5.11: https://lore.kernel.org/all/20201008153602.9467-3-ardb@kernel.org/
+            # The KASAN shadow region is reconfigured so that it ends at the start of
+            # the vmalloc region, and grows downwards. That way, the arrangement of
+            # the vmalloc space (which contains kernel mappings, modules, BPF region,
+            # the vmemmap array etc) is identical between non-KASAN and KASAN builds,
+            # which aids debugging.
+            if self.get_kernel_version() < (5, 11, 0):
+                self.kimage_vaddr += self.kasan_shadow_size
         else:
             va_bits = 39
             modules_vsize = 0x08000000
@@ -850,7 +857,10 @@ class RamDump():
             self.mmu = Armv8MMU(self)
         elif pg_dir_size == 0x4000:
             print_out_str('Using non-LPAE MMU')
-            self.mmu = Armv7MMU(self)
+            if self.minidump:
+                self.mmu = None
+            else:
+                self.mmu = Armv7MMU(self)
         elif pg_dir_size == 0x5000:
             print_out_str('Using LPAE MMU')
             text_offset = 0x8000
@@ -1644,9 +1654,12 @@ class RamDump():
 
         if self.kernel_version > (4, 9, 0):
             module_core_offset = self.field_offset('struct module', 'core_layout.base')
-            sect_name_offset = self.field_offset('struct module_sect_attr', 'battr') + self.field_offset('struct bin_attribute', 'attr') + self.field_offset('struct attribute', 'name')
         else:
             module_core_offset = self.field_offset('struct module', 'module_core')
+
+        if self.kernel_version > (4, 18, 0):
+            sect_name_offset = self.field_offset('struct module_sect_attr', 'battr') + self.field_offset('struct bin_attribute', 'attr') + self.field_offset('struct attribute', 'name')
+        else:
             sect_name_offset = self.field_offset('struct module_sect_attr', 'name')
 
         kallsyms_offset = self.field_offset('struct module', 'kallsyms')
