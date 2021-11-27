@@ -182,6 +182,7 @@ if __name__ == '__main__':
         default_list.append("Slabinfo")
         default_list.append("RunQueues")
         default_list.append("PStore")
+        default_list.append("Kconfig")
 
     if options.outdir:
         if not os.path.exists(options.outdir):
@@ -383,9 +384,12 @@ if __name__ == '__main__':
             sys.exit(1)
 
     if options.minidump:
-        if not dump.print_socinfo_minidump():
-            print_out_str('!!! No serial number information '
-                          'available for this minidump.')
+        try:
+            if not dump.print_socinfo_minidump():
+                print_out_str('!!! No serial number information '
+                              'available for this minidump.')
+        except Exception as err:
+            print_out_str('Unable to extract serial number information')
     else:
         if not dump.print_socinfo():
             print_out_str('!!! No serial number information available.')
@@ -424,13 +428,14 @@ if __name__ == '__main__':
             sys.stderr.write("\n")
         if options.minidump:
             if p.cls.__name__ not in default_list:
-                sys.stderr.write("    [%d/%d] %s ... not supported in minidump \n" %
+                print("    [%d/%d] %s ... not supported in minidump \n" %
                                  (i + 1, len(parsers_to_run), p.longopt))
                 continue
 
 
-        sys.stderr.write("    [%d/%d] %s ... " %
-                         (i + 1, len(parsers_to_run), p.longopt))
+
+        print("    [%d/%d] %s ... " %
+                         (i + 1, len(parsers_to_run), p.longopt), end='')
         before = time.time()
         with print_out_section(p.cls.__name__):
             try:
@@ -446,11 +451,10 @@ if __name__ == '__main__':
                 if not options.debug:
                     print_out_str('!!! Exception while running {0}'.format(p.cls.__name__))
                     print_out_exception()
-                    sys.stderr.write("FAILED! ")
+                    print("FAILED! ")
                 else:
                     raise
-        sys.stderr.write("%fs\n" % (time.time() - before))
-        sys.stderr.flush()
+        print("%fs" % (time.time() - before))
         flush_outfile()
 
     sys.stderr.write("\n")
