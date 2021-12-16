@@ -92,7 +92,7 @@ class GpuParser_54(RamParser):
         self.devp = self.ramdump.read_pointer('kgsl_driver.devp')
         if self.ramdump.kernel_version >= (5, 4, 0):
             self.parser_list = self.parser_list_54
-        elif self.ramdump.kernel_version >= (4, 19, 0):
+        elif self.ramdump.kernel_version >= (4, 9, 0):
             global KGSL_MAX_PWRLEVELS, KGSL_MAX_POOLS
             KGSL_MAX_PWRLEVELS = 10
             KGSL_MAX_POOLS = 4
