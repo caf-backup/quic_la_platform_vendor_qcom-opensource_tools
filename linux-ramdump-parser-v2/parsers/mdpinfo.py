@@ -52,6 +52,10 @@ class SdeDbgBase(Struct):
             'panic_on_err' : Struct.get_u32,
             'dbgbus_sde': Struct.get_address,
             'dbgbus_vbif_rt': Struct.get_address,
+            'dbgbus_dsi': Struct.get_address,
+            'dbgbus_rsc': Struct.get_address,
+            'dbgbus_lutdma': Struct.get_address,
+            'dbgbus_dp': Struct.get_address,
         }
 
 class RangeDumpFbNode(Struct):
@@ -611,6 +615,17 @@ class MDPinfo(RamParser):
         sde_dbg_evtlog_log_["data"] = tmp
         self.default_parse(sde_dbg_evtlog_log_, output_fd)
 
+    def crtc_dest_scaler_setup(self, sde_dbg_evtlog_log_, output_fd):
+        xlog_data = str(sde_dbg_evtlog_log_["data"])
+        data_arr = xlog_data.split(" ")
+        tmp = xlog_data
+        tmp  = tmp + ((50 - len(str(sde_dbg_evtlog_log_["data"]))) * " ")
+        if(data_arr[4] != '0'):
+            tmp = tmp + "==> "
+            tmp = tmp + "DEST_SCALAR_ENABLED"
+        sde_dbg_evtlog_log_["data"] = tmp
+        self.default_parse(sde_dbg_evtlog_log_, output_fd)
+
     def crtc_handle_power_event(self, sde_dbg_evtlog_log_, output_fd):
         xlog_data = str(sde_dbg_evtlog_log_["data"])
         data_arr = xlog_data.split(" ")
@@ -1035,14 +1050,14 @@ class MDPinfo(RamParser):
         line_new =sde_dbg_evtlog_log_["fun_name"]
         self.outfile.write(line_new)
 
-    def sec_only(enum_value):
+    def sec_only(self, enum_value):
         if(enum_value==1):
             return "SEC_ONLY"
         elif(enum_value==0):
             return "SEC_NON_SEC"
         return "INVALID"
 
-    def dir_trans(enum_value):
+    def dir_trans(self, enum_value):
         if (enum_value==0):
             return "FB_NON_SEC"
         elif(enum_value==1):
@@ -1053,7 +1068,7 @@ class MDPinfo(RamParser):
             return "FB_SEC_DIR_TRANS"
         return "INVALID"
 
-    def state(enum_value):
+    def state(self, enum_value):
         if (enum_value==0):
             return "ATTACHED"
         elif(enum_value==1):
@@ -1070,7 +1085,7 @@ class MDPinfo(RamParser):
             return "ATTACH_SEC_REQ"
         return "INVALID"
 
-    def trans_type(enum_value):
+    def trans_type(self, enum_value):
         if (enum_value==0):
             return "NONE"
         elif(enum_value==1):
@@ -1086,15 +1101,15 @@ class MDPinfo(RamParser):
         tmp  = tmp + ((50 - len(str(sde_dbg_evtlog_log_["data"]))) * " ")
         if(len(data_arr)>=6):
             tmp = tmp + "==> "
-            tmp=tmp+"sec_lvl: "+sec_only(int(data_arr[1], 16))+" "
-            tmp=tmp+"trans_mode: "+dir_trans(int(data_arr[2],16))+" "
-            tmp=tmp+"smmu_state->state: "+state(int(data_arr[3],16))+" "
-            tmp=tmp+"smmu_state->trans_type: "+trans_type(int(data_arr[4],16))+" "
-            tmp=tmp+"smmu_state->sec_lvl: "+sec_only(int(data_arr[5], 16))
+            tmp=tmp+"sec_lvl: "+self.sec_only(int(data_arr[1], 16))+" "
+            tmp=tmp+"trans_mode: "+self.dir_trans(int(data_arr[2],16))+" "
+            tmp=tmp+"smmu_state->state: "+self.state(int(data_arr[3],16))+" "
+            tmp=tmp+"smmu_state->trans_type: "+self.trans_type(int(data_arr[4],16))+" "
+            tmp=tmp+"smmu_state->sec_lvl: "+self.sec_only(int(data_arr[5], 16))
         sde_dbg_evtlog_log_["data"] = tmp
         self.default_parse(sde_dbg_evtlog_log_, output_fd)
 
-    def sde_kms_sui_misr_state(enum_value):
+    def sde_kms_sui_misr_state(self, enum_value):
         if (enum_value==0):
             return "SUI_MISR_NONE"
         elif(enum_value==1):
@@ -1110,26 +1125,26 @@ class MDPinfo(RamParser):
         tmp  = tmp + ((50 - len(str(sde_dbg_evtlog_log_["data"]))) * " ")
         if(len(data_arr)==10):
             tmp = tmp + "==> "
-            tmp=tmp+"smmu_state->state: "+state(int(data_arr[1],16))+" "
-            tmp=tmp+"smmu_state->prev_state: "+state(int(data_arr[2],16))+" "
-            tmp=tmp+"smmu_state->trans_type: "+trans_type(int(data_arr[3],16))+" "
+            tmp=tmp+"smmu_state->state: "+self.state(int(data_arr[1],16))+" "
+            tmp=tmp+"smmu_state->prev_state: "+self.state(int(data_arr[2],16))+" "
+            tmp=tmp+"smmu_state->trans_type: "+self.trans_type(int(data_arr[3],16))+" "
             if int(data_arr[4],16)==0:
                 tmp=tmp+"smmu_state->transition_error: "+"false"+" "
             else:
                 tmp=tmp+"smmu_state->transition_error: "+"true"+" "
-            tmp=tmp+"smmu_state->sec_lvl: "+sec_only(int(data_arr[5], 16))+" "
-            tmp=tmp+"smmu_state->prev_sec_lvl: "+sec_only(int(data_arr[6], 16))+" "
-            tmp=tmp+"smmu_state->sui_misr_state: "+sde_kms_sui_misr_state(int(data_arr[7], 16))
+            tmp=tmp+"smmu_state->sec_lvl: "+self.sec_only(int(data_arr[5], 16))+" "
+            tmp=tmp+"smmu_state->prev_sec_lvl: "+self.sec_only(int(data_arr[6], 16))+" "
+            tmp=tmp+"smmu_state->sui_misr_state: "+self.sde_kms_sui_misr_state(int(data_arr[7], 16))
         if(len(data_arr)==7):
             tmp = tmp + "==> "
-            tmp=tmp+"smmu_state->state: "+state(int(data_arr[1],16))+" "
-            tmp=tmp+"smmu_state->trans_type: "+trans_type(int(data_arr[2],16))+" "
-            tmp=tmp+"smmu_state->sui_misr_state: "+sde_kms_sui_misr_state(int(data_arr[4], 16))+" "
-            tmp=tmp+"smmu_state->sec_lvl: "+sec_only(int(data_arr[5], 16))
+            tmp=tmp+"smmu_state->state: "+self.state(int(data_arr[1],16))+" "
+            tmp=tmp+"smmu_state->trans_type: "+self.trans_type(int(data_arr[2],16))+" "
+            tmp=tmp+"smmu_state->sui_misr_state: "+self.sde_kms_sui_misr_state(int(data_arr[4], 16))+" "
+            tmp=tmp+"smmu_state->sec_lvl: "+self.sec_only(int(data_arr[5], 16))
         sde_dbg_evtlog_log_["data"] = tmp
         self.default_parse(sde_dbg_evtlog_log_, output_fd)
 
-    def vmid(enum_value):
+    def vmid(self, enum_value):
         if (enum_value=="3"):
             return "VMID_HLOS"
         elif(enum_value=="8"):
@@ -1181,7 +1196,7 @@ class MDPinfo(RamParser):
         tmp  = tmp + ((50 - len(str(sde_dbg_evtlog_log_["data"]))) * " ")
         if(len(data_arr)==7):
             tmp = tmp + "==> "
-            tmp=tmp+"vmid: "+vmid((data_arr[3]).upper())
+            tmp=tmp+"vmid: "+self.vmid((data_arr[3]).upper())
         sde_dbg_evtlog_log_["data"] = tmp
         self.default_parse(sde_dbg_evtlog_log_, output_fd)
 
@@ -1393,6 +1408,8 @@ class MDPinfo(RamParser):
                     self.crtc_handle_power_event(sde_dbg_evtlog_log[i], output_fd)
                 elif "_sde_rm_print_rsvps" in sde_dbg_evtlog_log[i]["fun_name"]:
                     self.rm_print_rsvps(sde_dbg_evtlog_log[i], output_fd)
+                elif "_sde_crtc_dest_scaler_setup" in sde_dbg_evtlog_log[i]["fun_name"]:
+                    self.crtc_dest_scaler_setup(sde_dbg_evtlog_log[i], output_fd)
                 elif "---------------" in sde_dbg_evtlog_log[i]["fun_name"]:
                     self.commit_printing(sde_dbg_evtlog_log[i],output_fd)
                 else:
@@ -2726,26 +2743,102 @@ class MDPinfo(RamParser):
                             fields={'dumped_content': Struct.get_pointer,
                                     'content_size': Struct.get_u32})
 
-            self.outfile = self.ramdump.open_file('sde_dbgbus.txt', 'w')
-            i = 0
+            dbgbus_dsi = Struct(self.ramdump, mdss_dbg.dbgbus_dsi,
+                            struct_name="struct sde_dbg_sde_debug_bus",
+                            fields={'cmn': Struct.get_address})
+            dbgbus_dsi_cmn = Struct(self.ramdump, dbgbus_dsi.cmn,
+                            struct_name="struct sde_dbg_debug_bus_common",
+                            fields={'dumped_content': Struct.get_pointer,
+                                    'content_size': Struct.get_u32})
 
-            self.outfile.write('=================================sde debug bus points=================================\n\n')
-            self.outfile.write('{:<12}{:<12}{:<12}{:<15}'.format("wr_addr", "block_id", "test_id", "val"))
-            self.outfile.write('\n\n')
+            dbgbus_rsc = Struct(self.ramdump, mdss_dbg.dbgbus_rsc,
+                            struct_name="struct sde_dbg_sde_debug_bus",
+                            fields={'cmn': Struct.get_address})
+            dbgbus_rsc_cmn = Struct(self.ramdump, dbgbus_rsc.cmn,
+                            struct_name="struct sde_dbg_debug_bus_common",
+                            fields={'dumped_content': Struct.get_pointer,
+                                    'content_size': Struct.get_u32})
+
+            dbgbus_lutdma = Struct(self.ramdump, mdss_dbg.dbgbus_lutdma,
+                            struct_name="struct sde_dbg_sde_debug_bus",
+                            fields={'cmn': Struct.get_address})
+            dbgbus_lutdma_cmn = Struct(self.ramdump, dbgbus_lutdma.cmn,
+                            struct_name="struct sde_dbg_debug_bus_common",
+                            fields={'dumped_content': Struct.get_pointer,
+                                    'content_size': Struct.get_u32})
+
+            dbgbus_dp = Struct(self.ramdump, mdss_dbg.dbgbus_dp,
+                            struct_name="struct sde_dbg_sde_debug_bus",
+                            fields={'cmn': Struct.get_address})
+            dbgbus_dp_cmn = Struct(self.ramdump, dbgbus_dp.cmn,
+                            struct_name="struct sde_dbg_debug_bus_common",
+                            fields={'dumped_content': Struct.get_pointer,
+                                    'content_size': Struct.get_u32})
+
+            self.outfile = self.ramdump.open_file('sde_dbgbus.txt', 'w')
+
+            i = 0
+            self.outfile.write('---------------------------------\n[dbgbus_sde]\n---------------------------------\n')
             while (i < dbgbus_sde_cmn.content_size):
                 j = 0
+                self.outfile.write("0x%-.8x| " % (i))
                 while (j < 16):
-                    self.outfile.write('%-10.8x ' % (self.ramdump.read_u32(dbgbus_sde_cmn.dumped_content + (i*4) + j)))
+                    self.outfile.write('%-.8x ' % (self.ramdump.read_u32(dbgbus_sde_cmn.dumped_content + (i*4) + j)))
                     j = j + 4
                 self.outfile.write('\n')
                 i = i + 4
 
             i = 0
-            self.outfile.write('\n\n=================================vbif debug bus points=================================\n\n')
+            self.outfile.write('\n---------------------------------\n[dbgbus_vbif_rt]\n---------------------------------\n')
             while (i < dbgbus_vbif_cmn.content_size):
                 j = 0
+                self.outfile.write("0x%-.8x| " % (i))
                 while (j < 16):
-                    self.outfile.write('%-10.8x ' % (self.ramdump.read_u32(dbgbus_vbif_cmn.dumped_content + (i*4) + j)))
+                    self.outfile.write('%-.8x ' % (self.ramdump.read_u32(dbgbus_vbif_cmn.dumped_content + (i*4) + j)))
+                    j = j + 4
+                self.outfile.write('\n')
+                i = i + 4
+
+            i = 0
+            self.outfile.write('\n---------------------------------\n[dbgbus_dsi]\n---------------------------------\n')
+            while (i < dbgbus_dsi_cmn.content_size):
+                j = 0
+                self.outfile.write("0x%-.8x| " % (i))
+                while (j < 16):
+                    self.outfile.write('%-.8x ' % (self.ramdump.read_u32(dbgbus_dsi_cmn.dumped_content + (i*4) + j)))
+                    j = j + 4
+                self.outfile.write('\n')
+                i = i + 4
+
+            i = 0
+            self.outfile.write('\n---------------------------------\n[dbgbus_rsc]\n---------------------------------\n')
+            while (i < dbgbus_rsc_cmn.content_size):
+                j = 0
+                self.outfile.write("0x%-.8x| " % (i))
+                while (j < 16):
+                    self.outfile.write('%-.8x ' % (self.ramdump.read_u32(dbgbus_rsc_cmn.dumped_content + (i*4) + j)))
+                    j = j + 4
+                self.outfile.write('\n')
+                i = i + 4
+
+            i = 0
+            self.outfile.write('\n---------------------------------\n[dbgbus_lutdma]\n---------------------------------\n')
+            while (i < dbgbus_lutdma_cmn.content_size):
+                j = 0
+                self.outfile.write("0x%-.8x| " % (i))
+                while (j < 16):
+                    self.outfile.write('%-.8x ' % (self.ramdump.read_u32(dbgbus_lutdma_cmn.dumped_content + (i*4) + j)))
+                    j = j + 4
+                self.outfile.write('\n')
+                i = i + 4
+
+            i = 0
+            self.outfile.write('\n---------------------------------\n[dbgbus_dp]\n---------------------------------\n')
+            while (i < dbgbus_dp_cmn.content_size):
+                j = 0
+                self.outfile.write("0x%-.8x| " % (i))
+                while (j < 16):
+                    self.outfile.write('%-.8x ' % (self.ramdump.read_u32(dbgbus_dp_cmn.dumped_content + (i*4) + j)))
                     j = j + 4
                 self.outfile.write('\n')
                 i = i + 4

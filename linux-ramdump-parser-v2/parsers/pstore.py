@@ -1,4 +1,4 @@
-# Copyright (c) 2018, 2020 The Linux Foundation. All rights reserved.
+# Copyright (c) 2018, 2020-2021 The Linux Foundation. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2 and
@@ -17,6 +17,9 @@ import datetime
 import re
 import collections
 
+#PERSISTENT_RAM_SIG /* DBGC */
+PERSISTENT_RAM_SIG_SIZE = 4
+
 @register_parser('--pstore', 'Extract event logs from pstore')
 class PStore(RamParser):
 
@@ -25,9 +28,9 @@ class PStore(RamParser):
             event_zone_addr = self.ramdump.read_u64(base_addr +
                               self.ramdump.field_offset('struct ramoops_context', 'eprzs'))
             event_zone_addr = self.ramdump.read_u64(event_zone_addr)
-            start_addr = self.ramdump.read_u32(event_zone_addr +
+            start_addr = self.ramdump.read_u64(event_zone_addr +
                          self.ramdump.field_offset('struct persistent_ram_zone', 'paddr'))
-            percpu_size = self.ramdump.read_u32(event_zone_addr +
+            percpu_size = self.ramdump.read_u64(event_zone_addr +
                           self.ramdump.field_offset('struct persistent_ram_zone', 'size'))
         except:
             return None, None
@@ -86,11 +89,14 @@ class PStore(RamParser):
     def calculate_console_size(self, base_addr):
         console_zone_addr = self.ramdump.read_u64(base_addr +
                             self.ramdump.field_offset('struct ramoops_context', 'cprz'))
-        start_addr = self.ramdump.read_u32(console_zone_addr +
+        start_addr = self.ramdump.read_u64(console_zone_addr +
                      self.ramdump.field_offset('struct persistent_ram_zone', 'paddr'))
-        console_size = self.ramdump.read_u32(console_zone_addr +
+        console_buf = self.ramdump.read_u64(console_zone_addr +
+                      self.ramdump.field_offset('struct persistent_ram_zone', 'buffer'))
+        console_size = self.ramdump.read_u32(console_buf +
                        self.ramdump.field_offset('struct persistent_ram_zone', 'size'))
-        return start_addr, console_size
+        header = self.ramdump.sizeof('((struct persistent_ram_zone *)0x0)->paddr')
+        return start_addr + PERSISTENT_RAM_SIG_SIZE, console_size + header
 
     def extract_console_logs(self, base_addr):
         '''
@@ -194,9 +200,9 @@ class PStore(RamParser):
     def extract_pmsg_logs_fd(self, base_addr):
         pmsg_zone_addr = self.ramdump.read_u64(base_addr +
                     self.ramdump.field_offset('struct ramoops_context', 'mprz'))
-        start_addr = self.ramdump.read_u32(pmsg_zone_addr +
+        start_addr = self.ramdump.read_u64(pmsg_zone_addr +
                     self.ramdump.field_offset('struct persistent_ram_zone', 'paddr'))
-        pmsg_size = self.ramdump.read_u32(pmsg_zone_addr +
+        pmsg_size = self.ramdump.read_u64(pmsg_zone_addr +
                     self.ramdump.field_offset('struct persistent_ram_zone', 'size'))
         pmsg = self.ramdump.read_physical(start_addr, pmsg_size)
         self.extract_pmsg_logs(pmsg, pmsg_size)
