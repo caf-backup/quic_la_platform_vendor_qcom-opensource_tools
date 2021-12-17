@@ -1119,27 +1119,42 @@ class RamDump():
         return False
 
     def print_socinfo(self):
-        try:
-            if self.read_pointer('socinfo') is None:
-              return None
-            content_socinfo = hex(self.read_pointer('socinfo'))
-            content_socinfo = content_socinfo.strip('L')
+        if self.kernel_version < (5, 4, 0):
+            try:
+                if self.read_pointer('socinfo') is None:
+                  return None
+                content_socinfo = hex(self.read_pointer('socinfo'))
+                content_socinfo = content_socinfo.strip('L')
 
-            sernum_offset = self.field_offset('struct socinfo_v10', 'serial_number')
-            if sernum_offset is None:
-                sernum_offset = self.field_offset('struct socinfo_v0_10', 'serial_number')
+                sernum_offset = self.field_offset('struct socinfo_v10', 'serial_number')
                 if sernum_offset is None:
-                    print_out_str("No serial number information available")
-                    return False
-            addr_of_sernum = hex(int(content_socinfo, 16) + sernum_offset)
-            addr_of_sernum = addr_of_sernum.strip('L')
-            serial_number = self.read_u32(int(addr_of_sernum, 16))
-            if serial_number is not None:
-                print_out_str('Serial number %s' % hex(serial_number))
-                return True
-        except:
-            pass
-        return False
+                    sernum_offset = self.field_offset('struct socinfo_v0_10', 'serial_number')
+                    if sernum_offset is None:
+                        print_out_str("No serial number information available")
+                        return False
+                addr_of_sernum = hex(int(content_socinfo, 16) + sernum_offset)
+                addr_of_sernum = addr_of_sernum.strip('L')
+                serial_number = self.read_u32(int(addr_of_sernum, 16))
+                if serial_number is not None:
+                    print_out_str('Serial number %s' % hex(serial_number))
+                    return True
+            except:
+                pass
+            return False
+        else:
+            socinfo = self.address_of('socinfo')
+            if socinfo is None:
+                return None
+            socinfo = self.read_pointer(socinfo)
+            if socinfo is None:
+                return None
+            ver = self.read_structure_field(socinfo, 'struct socinfo', 'ver')
+            chip_ver_major = (ver & 0xFFFF0000) >> 16
+            chip_ver_minor = (ver & 0x0000FFFF)
+            print_out_str("Chip Version: v{0}.{1}".format(chip_ver_major, chip_ver_minor))
+            serial_num = self.read_structure_field(socinfo, 'struct socinfo', 'serial_num')
+            print_out_str("Chip Serial Number 0x{0:x}".format(serial_num))
+            return True
 
     def auto_parse(self, file_path, minidump):
         for cls in sorted(AutoDumpInfo.__subclasses__(),
