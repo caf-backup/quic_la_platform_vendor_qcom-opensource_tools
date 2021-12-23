@@ -398,6 +398,11 @@ class Logcat_vma(Logcat_base):
         self.bin_file = bin_file
         self.HEAD_SIZE = 32
         self.vmas = []
+        if int(ramdump.get_config_val("CONFIG_BASE_SMALL")) == 0:
+            self.PID_MAX = 0x8000
+        else:
+            self.PID_MAX = 0x1000
+        print_out_str("max pid = " + str(self.PID_MAX))
 
     def read_bytes(self, addr, len):
         addr = addr & 0x0000ffffffffffff
@@ -459,6 +464,51 @@ class Logcat_vma(Logcat_base):
                 self.vmas.append(vma)
                 pos = pos + self.HEAD_SIZE + vma_size
 
+    def has_valid_log(self, main_chunklist_addr):
+        end_node_addr = self.read_bytes(main_chunklist_addr, self.addr_length)
+        current_node = end_node_addr + self.addr_length * 2 #-->SerializedLogChunk
+        _data_addr = self.read_bytes(current_node, self.addr_length)
+        _data_size = self.read_bytes(current_node + self.addr_length, self.addr_length)
+        if _data_size <= self.SIZEOF_LOG_ENTRY:
+            return False
+
+        valid = self.has_valid_LogEntrys(_data_addr, _data_size, 10)
+        if valid is False: ## retry
+            extra_log_entry_offset = 4
+            valid = self.has_valid_LogEntrys(_data_addr, _data_size, 10, extra_log_entry_offset)
+            if valid:
+                self.extra_offset = extra_log_entry_offset
+        return valid
+
+    def has_valid_LogEntrys(self, _addr, _data_size, valid_count, extra_offset=0):
+        i = 0
+        valid = False
+        offset = 0
+        while i < valid_count:
+            valid, length = self.is_valid_LogEntry(_addr+offset)
+            if not valid:
+                return False
+            offset = offset + length + extra_offset
+            if offset > _data_size:
+                return True
+            i = i + 1
+        return True
+
+    def is_valid_LogEntry(self, _addr):
+        uid = self.read_bytes(_addr, 4)
+        pid = self.read_bytes(_addr + 0x4, 4)
+        tid = self.read_bytes(_addr + 0x8, 4)
+        sequence = self.read_bytes(_addr + 0xc, 8)
+        tv_sec = self.read_bytes(_addr + 0x14, 4)
+        tv_nsec = self.read_bytes(_addr + 0x18, 4)
+        msg_len = self.read_bytes(_addr + 0x1c, 2)
+        priority = self.read_bytes(_addr + self.SIZEOF_LOG_ENTRY, 1)
+        if pid <= self.PID_MAX and uid <= self.PID_MAX and priority \
+            <= self.ANDROID_LOG_SILENT and priority >= self.ANDROID_LOG_VERBOSE:
+            if  msg_len >=1 and  msg_len <= 4068: #max_payload
+                return True, 30 + msg_len
+        return False, 0
+
     def parse(self):
         startTime = datetime.datetime.now()
         self.get_all_vmas()
@@ -472,6 +522,13 @@ class Logcat_vma(Logcat_base):
         if chunklist_addr == 0:
             return False
         # start parsing
+        is_valid_chunklist = self.has_valid_log(chunklist_addr + self.LOG_ID_MAIN * 0x18)
+        if not is_valid_chunklist:
+            print_out_str("There is no valid log in logbuf_addr = 0x%x" %(chunklist_addr-0x60))
+            return False
+        # start parsing
+        print("LogBuffer address",hex(chunklist_addr-0x60))
+        self.process_chunklist_and_save(chunklist_addr)
         print_out_str("logbuf_addr = 0x%x" %(chunklist_addr-0x60))
         self.process_chunklist_and_save(chunklist_addr)
         print("logcat_vma parse logcat cost "+str((datetime.datetime.now()-startTime).total_seconds())+" s")
