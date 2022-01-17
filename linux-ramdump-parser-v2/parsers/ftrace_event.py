@@ -83,19 +83,13 @@ class FtraceParser_Event(object):
         atomic64_t_counter_offset = self.ramdump.field_offset(
             'struct atomic64_t', 'counter')"""
 
-
-
         #local_t_commita = self.ramdump.read_u64(buffer_data_page_commit + local_t_commita_offset)
         #commit = self.ramdump.read_u64(local_t_commita + atomic64_t_counter_offset)
         commit = buffer_data_page_commit
         
         if commit and commit > 0:
             buffer_data_page_end = buffer_data_page + commit
-            if self.ramdump.arm64:
-                timestamp = self.ramdump.read_u64(buffer_data_page + buffer_data_page_time_stamp_offset)
-            else:
-                timestamp = self.ramdump.read_u32(buffer_data_page + buffer_data_page_time_stamp_offset)
-
+            timestamp = self.ramdump.read_u64(buffer_data_page + buffer_data_page_time_stamp_offset)
             rb_event = buffer_data_page + buffer_data_page_data_offset
             #print "buffer_data_page_end = {0}".format(hex(buffer_data_page_end))
             #print "rb_event = {0}".format(hex(rb_event))
@@ -607,7 +601,7 @@ class FtraceParser_Event(object):
                     elif 'char' in type_str:
                         v = self.ramdump.read_byte(ftrace_raw_entry + offset)
                         fmt_name_value_map[item] = v
-                    elif 'unsigned long' in type_str or 'u64' in type_str or 'void *' in type_str:
+                    elif 'unsigned long' in type_str or 'u64' in type_str or '*' in type_str:
                         if self.ramdump.arm64:
                             v = self.ramdump.read_u64(ftrace_raw_entry + offset)
                         else:
