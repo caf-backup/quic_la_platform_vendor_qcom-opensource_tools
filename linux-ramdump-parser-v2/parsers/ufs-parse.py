@@ -12,6 +12,7 @@
 # GNU General Public License for more details.
 
 import os
+import csv
 
 from parser_util import register_parser, RamParser
 from parsers.irqstate import IrqParse
@@ -22,6 +23,7 @@ from linux_list import ListWalker
 # Refer to the Header before changing this
 VERSION = "1.0"
 
+F_UFSIPC = "ipc_logging/ufs-qcom.txt"
 F_UFSDEBUG = "ufsreport.txt"
 UFS_HEADER = "__UFS_Dumps__"
 
@@ -755,6 +757,56 @@ class UfsQcHost():
         hba_offset = self.ramdump.field_offset('struct ufs_qcom_host', 'hba')
         return self.ramdump.read_pointer(self.ufs_qc_host_addr + hba_offset)
 
+class UfsIpc():
+    phase_l = ['PRE ', 'POST ']
+    state_l = ['CLK_OFF ', 'CLK_ON ']
+    pmop_l = ['RT_PM ', 'SYS_PM', 'SHUTDOWN_PM ']
+    link_l = ['OFF ', 'ACTIVE', 'HIBERN8 ', 'BROKEN ']
+    pwrmod_l = ['NONE ', 'ACTIVE ', 'SLEEP ', 'PWRDOWN ', 'DPSLEEP ']
+
+    def __init__(self, ramdump, ufs_ipc_file):
+        self.ramdump = ramdump
+        self.ipc_file = ufs_ipc_file
+
+    def ufsipcdict(self, line2, line):
+        return{
+            '<': lambda: ' [Send cmd] ' + str(line[3]) + ' tag:' + str(line[4]) + ' DBR:' + str(line[5]) + ' size=' + str(line[6]),
+            '>': lambda: ' [Done cmd] ' + str(line[3]) + ' tag:' + str(line[4]) + ' DBR:' + str(line[5]) + ' size=' + str(line[6]),
+            '(': lambda: ' [Send uic] ' + str(line[3]) + ' arg1=' + str(line[4]) + ' arg2=' + str(line[5]) + ' arg3=' + str(line[6]),
+            ')': lambda: ' [Done uic] ' +str(line[3]) + ' arg1=' + str(line[4]) + ' arg2=' + str(line[5]) + ' arg3=' + str(line[6]),
+            '#': lambda: ' [CLK GATE] ' + self.phase_l[int(line[3])] + self.state_l[int(line[4])] + 'err=' + str(line[5]),
+            '^': lambda: ' [CLK SCALE UP] ' + self.phase_l[int(line[3])] + 'err=' + str(line[4]),
+            'v': lambda: ' [CLK SCALE DOWN] ' + self.phase_l[int(line[3])] + 'err =' + str(line[4]),
+            '@': lambda: ' [PWR CHANGE] ' + self.phase_l[int(line[3])] + 'GEAR' + str(line[4]) + ' cur_dev_pwr_mode=' + str(line[5]) + ' rate=' + str(line[6]) + ' err=' + str(line[7]),
+            '&': lambda: ' [SUSPEND] ' + self.pmop_l[int(line[3])] + 'rpm_lvl=' + str(line[4]) + ' spm_lvl=' + str(line[5]) + ' link_state: ' + self.link_l[int(line[6])]
+                                                + 'cur_dev_pwr_mode: ' + self.pwrmod_l[int(line[7])] + 'err=' + str(line[8]),
+            '$': lambda: ' [RESUME] ' +  self.pmop_l[int(line[3])] + 'rpm_lvl=' + str(line[4]) + ' spm_lvl=' + str(line[5]) + ' link_state: ' + self.link_l[int(line[6])]
+                                                + 'cur_dev_pwr_mode: ' + self.pwrmod_l[int(line[7])] + 'err = ' + str(line[8]),
+            '-': lambda: ' [HCE] ' + self.phase_l[int(line[3])] + 'err= ' + str(line[4]),
+            '*': lambda: ' [LSS] ' + self.phase_l[int(line[3])] + 'err= ' + str(line[4]),
+            '_': lambda: ' [ERROR] ' + ' hba_err=' + str(line[3]) + ' uic_err=' + str(line[4]),
+            '0xdead': lambda: ' [SHUTDOWN] ',
+        }.get(line2, None)()
+
+    def parse_ufs_ipc(self):
+        print_out_ufs('\n\n==================Parsed UFS IPC Log===========================')
+        file_path = os.path.join(self.ramdump.outdir, self.ipc_file)
+        if not os.path.exists(file_path):
+            print_out_ufs("\tThe file %s dose not exist!!!" %file_path)
+            return
+        with open(file_path) as csv_file:
+            csv_reader = csv.reader(csv_file)
+            for line in csv_reader:
+                if len(line) < 3:
+                    continue
+                try:
+                    result = str(line[0]) + ' cpu' + str(line[1])
+                    result += self.ufsipcdict(line[2], line)
+                except:
+                    print_out_ufs("\texception occurred during parsing '%s'" %str(line))
+                    continue
+                print_out_ufs("\t%s" %result)
+
 @register_parser('--ufs-parser', 'Generate UFS diagnose report', optional=True)
 
 class UfsParser(RamParser):
@@ -777,6 +829,10 @@ class UfsParser(RamParser):
         # struct ufs_hba dump
         ufs_hba_0 = UfsHba(self.ramdump, ufsqc_0.get_ufs_hba())
         ufs_hba_0.dump_ufs_hba_params()
+
+        # ufs ipc log parser
+        ufs_ipc_0 = UfsIpc(self.ramdump, F_UFSIPC)
+        ufs_ipc_0.parse_ufs_ipc()
 
         return
 
